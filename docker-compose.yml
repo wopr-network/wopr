@@ -4,31 +4,12 @@ services:
     container_name: wopr
     restart: unless-stopped
     volumes:
-      # Persistent data (identity, sessions, plugins, etc.)
       - wopr-data:/data
-      # Optional: mount local skills
-      - ./skills:/app/skills:ro
     environment:
       - WOPR_HOME=/data
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    # Expose P2P port for peer connections
     ports:
       - "49737:49737/udp"
-    # For interactive use, override with: docker compose run --rm wopr node dist/cli.js <command>
-
-  # Discord plugin (optional - uncomment to enable)
-  # wopr-discord:
-  #   build: .
-  #   container_name: wopr-discord
-  #   restart: unless-stopped
-  #   volumes:
-  #     - wopr-data:/data
-  #   environment:
-  #     - WOPR_HOME=/data
-  #     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-  #   depends_on:
-  #     - wopr
-  #   command: ["node", "dist/cli.js", "daemon", "start", "--foreground"]
 
 volumes:
   wopr-data:

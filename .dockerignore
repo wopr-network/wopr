@@ -8,6 +8,9 @@ peers.json
 sessions.json
 crons.json
 sessions/
+skills/
+registry/
+registries.json
 examples/
 docs/
 *.md
