@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.git/
+.cache/
+*.log
+identity.json
+peers.json
+sessions.json
+crons.json
+sessions/
+examples/
+docs/
+*.md
