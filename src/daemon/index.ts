@@ -38,6 +38,11 @@ import { shortKey } from "../identity.js";
 import type { StreamCallback, Peer } from "../types.js";
 import { sendP2PInject } from "../p2p.js";
 
+// Provider registry imports
+import { providerRegistry } from "../core/providers.js";
+import { anthropicProvider } from "../providers/anthropic.js";
+import { codexProvider } from "../providers/openai.js";
+
 const DEFAULT_PORT = 7437;
 const DEFAULT_HOST = "127.0.0.1";
 
@@ -88,6 +93,27 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // Write PID file
   writeFileSync(PID_FILE, process.pid.toString());
   daemonLog(`Daemon started (PID ${process.pid})`);
+
+  // Initialize provider registry
+  daemonLog("Initializing provider registry...");
+  try {
+    // Load credentials from disk
+    await providerRegistry.loadCredentials();
+    daemonLog("Provider credentials loaded");
+
+    // Register providers
+    providerRegistry.register(anthropicProvider);
+    providerRegistry.register(codexProvider);
+    daemonLog("Providers registered: anthropic, codex");
+
+    // Check provider health
+    await providerRegistry.checkHealth();
+    const providers = providerRegistry.listProviders();
+    const available = providers.filter(p => p.available).map(p => p.id).join(", ");
+    daemonLog(`Provider health check complete. Available: ${available || "none"}`);
+  } catch (err) {
+    daemonLog(`Warning: Provider registry initialization failed: ${err}`);
+  }
 
   // Create Hono app
   const app = createApp();

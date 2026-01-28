@@ -4,6 +4,7 @@
  * Supports:
  * - Claude Max/Pro OAuth (subscription-based, no per-token cost)
  * - API Key (pay-per-use)
+ * - Multi-provider credentials via ProviderRegistry
  */
 
 import { randomBytes, createHash } from "crypto";
@@ -11,6 +12,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { AUTH_FILE } from "./paths.js";
+import { providerRegistry } from "./core/providers.js";
 
 // Claude Code credentials location
 const CLAUDE_CODE_CREDENTIALS = join(homedir(), ".claude", ".credentials.json");
@@ -173,6 +175,30 @@ export function loadAuth(): AuthState | null {
   }
 }
 
+// Initialize registry credentials on auth load
+export async function loadAuthWithRegistry(): Promise<AuthState | null> {
+  // Load provider credentials from registry
+  try {
+    await providerRegistry.loadCredentials();
+  } catch (error) {
+    console.error("Failed to load provider credentials:", error);
+  }
+
+  // Load standard auth
+  const auth = loadAuth();
+
+  // Load Anthropic credentials into registry if present
+  if (auth?.type === "api_key" && auth.apiKey) {
+    try {
+      await storeProviderCredential("anthropic", auth.apiKey);
+    } catch (error) {
+      // Silently fail - registry may not be fully initialized yet
+    }
+  }
+
+  return auth;
+}
+
 // Save auth state to disk
 export function saveAuth(auth: AuthState): void {
   writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2));
@@ -269,4 +295,47 @@ export function saveApiKey(apiKey: string): void {
     updatedAt: Date.now(),
   };
   saveAuth(auth);
+}
+
+/**
+ * Store a credential for a specific provider in the registry
+ * @param providerId - The provider ID (e.g., "anthropic", "openai", "google")
+ * @param credential - The credential string (API key, token, etc.)
+ * @throws Error if provider is not registered or credential is invalid
+ */
+export async function storeProviderCredential(
+  providerId: string,
+  credential: string
+): Promise<void> {
+  try {
+    await providerRegistry.setCredential(providerId, credential);
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    console.error(
+      `Failed to store credential for provider ${providerId}: ${errorMessage}`
+    );
+    throw error;
+  }
+}
+
+/**
+ * Retrieve a credential for a specific provider from the registry
+ * @param providerId - The provider ID (e.g., "anthropic", "openai", "google")
+ * @returns The credential string, or undefined if not found
+ */
+export async function getProviderCredential(
+  providerId: string
+): Promise<string | undefined> {
+  try {
+    const creds = providerRegistry.getCredential(providerId);
+    return creds?.credential;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : String(error);
+    console.error(
+      `Failed to retrieve credential for provider ${providerId}: ${errorMessage}`
+    );
+    return undefined;
+  }
 }

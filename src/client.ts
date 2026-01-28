@@ -426,6 +426,39 @@ export class WoprClient {
       body: JSON.stringify(content),
     });
   }
+
+  // Providers
+  async getProviders(): Promise<any[]> {
+    const data = await this.request<{ providers: any[] }>("/providers");
+    return data.providers;
+  }
+
+  async addProviderCredential(providerId: string, credential: string): Promise<void> {
+    await this.request("/providers", {
+      method: "POST",
+      body: JSON.stringify({ providerId, credential }),
+    });
+  }
+
+  async removeProviderCredential(providerId: string): Promise<void> {
+    await this.request(`/providers/${encodeURIComponent(providerId)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async checkProvidersHealth(): Promise<any> {
+    return this.request("/providers/health", {
+      method: "POST",
+    });
+  }
+
+  // Session provider management
+  async setSessionProvider(sessionName: string, providerId: string, fallback?: string[]): Promise<void> {
+    await this.request(`/sessions/${encodeURIComponent(sessionName)}/provider`, {
+      method: "PUT",
+      body: JSON.stringify({ providerId, fallback }),
+    });
+  }
 }
 
 // Default singleton

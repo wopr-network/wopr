@@ -9,3 +9,4 @@ crons.json
 sessions/
 *.local
 .env
+web/node_modules/

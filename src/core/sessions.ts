@@ -1,5 +1,5 @@
 /**
- * Core session management and injection
+ * Core session management and injection with provider routing
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -7,8 +7,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, appendF
 import { join } from "path";
 import { SESSIONS_DIR, SESSIONS_FILE } from "../paths.js";
 import type { StreamCallback, StreamMessage, ConversationEntry } from "../types.js";
+import type { ProviderConfig } from "../types/provider.js";
 import { emitInjection, emitStream, getContextProvider } from "../plugins.js";
 import { discoverSkills, formatSkillsXml } from "./skills.js";
+import { providerRegistry } from "./providers.js";
 
 // Ensure directories exist
 if (!existsSync(SESSIONS_DIR)) {
@@ -20,6 +22,7 @@ export interface Session {
   id?: string;
   context?: string;
   created: number;
+  provider?: ProviderConfig;
 }
 
 export function getSessions(): Record<string, string> {
@@ -48,10 +51,22 @@ export function setSessionContext(name: string, context: string): void {
   writeFileSync(contextFile, context);
 }
 
+export function getSessionProvider(name: string): ProviderConfig | undefined {
+  const providerFile = join(SESSIONS_DIR, `${name}.provider.json`);
+  return existsSync(providerFile) ? JSON.parse(readFileSync(providerFile, "utf-8")) : undefined;
+}
+
+export function setSessionProvider(name: string, provider: ProviderConfig): void {
+  const providerFile = join(SESSIONS_DIR, `${name}.provider.json`);
+  writeFileSync(providerFile, JSON.stringify(provider, null, 2));
+}
+
 export function deleteSession(name: string): void {
   deleteSessionId(name);
   const contextFile = join(SESSIONS_DIR, `${name}.md`);
   if (existsSync(contextFile)) unlinkSync(contextFile);
+  const providerFile = join(SESSIONS_DIR, `${name}.provider.json`);
+  if (existsSync(providerFile)) unlinkSync(providerFile);
 }
 
 export function listSessions(): Session[] {
@@ -164,15 +179,53 @@ export async function inject(
   const baseContext = context || `You are WOPR session "${name}".`;
   const fullContext = skillsXml ? `${baseContext}\n${skillsXml}` : baseContext;
 
-  const q = query({
-    prompt: fullMessage,
-    options: {
-      resume: existingSessionId,
+  // Load provider config from session or use defaults
+  let providerConfig = getSessionProvider(name);
+  if (!providerConfig) {
+    // Default: anthropic with fallback to codex
+    providerConfig = {
+      name: "anthropic",
+      fallback: ["codex"],
+    };
+  }
+
+  let resolvedProvider: any = null;
+  let providerUsed = "unknown";
+
+  try {
+    // Resolve provider with fallback chain
+    resolvedProvider = await providerRegistry.resolveProvider(providerConfig);
+    providerUsed = resolvedProvider.name;
+    if (!silent) console.log(`[wopr] Using provider: ${providerUsed}`);
+  } catch (err) {
+    // If provider resolution fails, try fallback to Anthropic SDK directly
+    if (!silent) console.error(`[wopr] Provider resolution failed: ${err}`);
+    if (!silent) console.log(`[wopr] Falling back to direct Anthropic query`);
+    resolvedProvider = null;
+  }
+
+  // Execute query using resolved provider or fallback to direct query
+  let q: any;
+  if (resolvedProvider) {
+    // Use provider registry to execute query
+    q = resolvedProvider.client.query({
+      prompt: fullMessage,
       systemPrompt: fullContext,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-    }
-  });
+      resume: existingSessionId,
+      model: resolvedProvider.provider.defaultModel,
+    });
+  } else {
+    // Fallback: use hardcoded Anthropic query
+    q = query({
+      prompt: fullMessage,
+      options: {
+        resume: existingSessionId,
+        systemPrompt: fullContext,
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+      }
+    });
+  }
 
   for await (const msg of q) {
     switch (msg.type) {
@@ -202,7 +255,7 @@ export async function inject(
       case "result":
         if (msg.subtype === "success") {
           cost = msg.total_cost_usd;
-          if (!silent) console.log(`\n[wopr] Complete. Cost: $${cost.toFixed(4)}`);
+          if (!silent) console.log(`\n[wopr] Complete (${providerUsed}). Cost: $${cost.toFixed(4)}`);
           const streamMsg: StreamMessage = { type: "complete", content: `Cost: $${cost.toFixed(4)}` };
           if (onStream) onStream(streamMsg);
           emitStream(name, from, streamMsg);
@@ -233,3 +286,4 @@ export async function inject(
 
   return { response, sessionId, cost };
 }
+

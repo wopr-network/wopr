@@ -7,6 +7,12 @@ export interface Session {
   name: string;
   context?: string;
   created: number;
+  provider?: {
+    name: string;              // "anthropic" | "openai" | etc.
+    model?: string;            // optional model override
+    fallback?: string[];       // fallback provider chain
+    options?: Record<string, unknown>;  // provider-specific options
+  };
 }
 
 // Conversation log types

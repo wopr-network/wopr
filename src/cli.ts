@@ -21,6 +21,7 @@ import {
   generatePKCE, buildAuthUrl, exchangeCode, saveOAuthTokens, saveApiKey,
   loadAuth, clearAuth, loadClaudeCodeCredentials
 } from "./auth.js";
+import { providerRegistry } from "./core/providers.js";
 
 // Ensure directories exist
 [WOPR_HOME, SESSIONS_DIR, SKILLS_DIR].forEach(dir => {
@@ -64,10 +65,12 @@ Usage:
   wopr init                              Interactive setup wizard
 
   wopr session create <name> [context]   Create a session with optional context
+  wopr session create <name> --provider <id> [--fallback chain]  Create with provider
   wopr session inject <name> <message>   Inject a message into a session
   wopr session list                      List all sessions
   wopr session show <name> [--limit N]   Show session details and conversation history
   wopr session delete <name>             Delete a session
+  wopr session set-provider <name> <id> [--fallback chain]  Update session provider
 
   wopr skill list                        List installed skills
   wopr skill install <url|slug> [name]   Install skill from URL or registry
@@ -135,9 +138,19 @@ Usage:
   wopr plugin registry add <name> <url>      Add a plugin registry
   wopr plugin registry remove <name>         Remove a plugin registry
 
+  wopr providers list                        List all providers and status
+  wopr providers add <id> [credential]       Add/update provider credential
+  wopr providers remove <id>                 Remove provider credential
+  wopr providers health-check                Check health of all providers
+
 Environment:
   WOPR_HOME                              Base directory (default: ~/wopr)
-  ANTHROPIC_API_KEY                      API key for Claude
+  ANTHROPIC_API_KEY                      API key for Claude (Anthropic)
+  OPENAI_API_KEY                         API key for Codex (OpenAI)
+
+Supported Providers:
+  anthropic                              Claude models via Agent SDK
+  codex                                  OpenAI Codex agent for coding tasks
 
 P2P messages are end-to-end encrypted using X25519 ECDH + AES-256-GCM.
 Tokens are bound to the recipient's public key - they cannot be forwarded.
@@ -149,18 +162,207 @@ Discovery is ephemeral - you see peers only while both are online in the same to
 
 const [,, command, subcommand, ...args] = process.argv;
 
+// Helper to parse flags
+function parseFlags(args: string[]): { flags: Record<string, string | boolean>; positional: string[] } {
+  const flags: Record<string, string | boolean> = {};
+  const positional: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith("--")) {
+      const key = args[i].slice(2);
+      if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+        flags[key] = args[++i];
+      } else {
+        flags[key] = true;
+      }
+    } else {
+      positional.push(args[i]);
+    }
+  }
+
+  return { flags, positional };
+}
+
 (async () => {
-  if (command === "session") {
+  if (command === "providers") {
+    await requireDaemon();
+    await providerRegistry.loadCredentials();
+
+    switch (subcommand) {
+      case "list": {
+        const providers = providerRegistry.listProviders();
+        if (providers.length === 0) {
+          console.log("No providers registered.");
+        } else {
+          console.log("Registered providers:");
+          console.log("ID              | Name              | Available");
+          console.log("----------------|-------------------|----------");
+          for (const p of providers) {
+            const id = p.id.padEnd(15);
+            const name = (p.name || "N/A").padEnd(19);
+            const status = p.available ? "Yes" : "No";
+            console.log(`${id}| ${name}| ${status}`);
+          }
+        }
+        break;
+      }
+
+      case "add": {
+        if (!args[0]) {
+          console.error("Usage: wopr providers add <provider-id> [credential]");
+          process.exit(1);
+        }
+
+        const providerId = args[0];
+        let credential = args[1];
+
+        // If no credential provided, prompt for it
+        if (!credential) {
+          const readline = await import("readline/promises");
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+          });
+
+          credential = await rl.question(`Enter credential for ${providerId}: `);
+          rl.close();
+
+          if (!credential) {
+            console.error("Credential required");
+            process.exit(1);
+          }
+        }
+
+        try {
+          await providerRegistry.setCredential(providerId, credential);
+          console.log(`Credential added for provider: ${providerId}`);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error(`Failed to add credential: ${msg}`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "remove": {
+        if (!args[0]) {
+          console.error("Usage: wopr providers remove <provider-id>");
+          process.exit(1);
+        }
+
+        const providerId = args[0];
+        try {
+          await providerRegistry.removeCredential(providerId);
+          console.log(`Removed credential for provider: ${providerId}`);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error(`Failed to remove credential: ${msg}`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      case "health-check": {
+        console.log("Checking provider health...");
+        await providerRegistry.checkHealth();
+
+        const providers = providerRegistry.listProviders();
+        const healthy = providers.filter(p => p.available);
+        const unhealthy = providers.filter(p => !p.available);
+
+        if (healthy.length > 0) {
+          console.log("\nHealthy:");
+          for (const p of healthy) {
+            console.log(`  ${p.id}: OK`);
+          }
+        }
+
+        if (unhealthy.length > 0) {
+          console.log("\nUnhealthy:");
+          for (const p of unhealthy) {
+            console.log(`  ${p.id}: Not available`);
+          }
+        }
+
+        if (providers.length === 0) {
+          console.log("No providers registered.");
+        }
+        break;
+      }
+
+      default:
+        help();
+    }
+  } else if (command === "session") {
     await requireDaemon();
     switch (subcommand) {
       case "create": {
         if (!args[0]) {
-          console.error("Usage: wopr session create <name> [context]");
+          console.error("Usage: wopr session create <name> [context] [--provider <id>] [--fallback chain]");
           process.exit(1);
         }
-        const context = args.slice(1).join(" ") || undefined;
-        await client.createSession(args[0], context);
-        console.log(`Created session "${args[0]}"`);
+
+        const { flags, positional } = parseFlags(args.slice(1));
+        const name = args[0];
+        const context = positional.length > 0 ? positional.join(" ") : undefined;
+
+        // Create session via daemon
+        await client.createSession(name, context);
+
+        // Store provider config if specified
+        if (flags.provider) {
+          const providerConfig = {
+            name: flags.provider as string,
+            fallback: flags.fallback ? (flags.fallback as string).split(",").map(s => s.trim()) : undefined,
+          };
+          const { SESSIONS_DIR } = await import("./paths.js");
+          const providerFile = (await import("path")).join(SESSIONS_DIR, `${name}.provider.json`);
+          (await import("fs/promises")).writeFile(providerFile, JSON.stringify(providerConfig, null, 2));
+
+          console.log(
+            `Created session "${name}" with provider: ${flags.provider}${
+              flags.fallback ? ` (fallback: ${flags.fallback})` : ""
+            }`
+          );
+        } else {
+          console.log(`Created session "${name}"`);
+        }
+        break;
+      }
+
+      case "set-provider": {
+        if (!args[0] || !args[1]) {
+          console.error("Usage: wopr session set-provider <name> <provider-id> [--fallback chain]");
+          process.exit(1);
+        }
+
+        const { flags } = parseFlags(args.slice(2));
+        const sessionName = args[0];
+        const providerId = args[1];
+
+        // Verify session exists
+        try {
+          await client.getSession(sessionName);
+        } catch (error) {
+          console.error(`Session not found: ${sessionName}`);
+          process.exit(1);
+        }
+
+        const providerConfig = {
+          name: providerId,
+          fallback: flags.fallback ? (flags.fallback as string).split(",").map(s => s.trim()) : undefined,
+        };
+
+        // Save provider config
+        const { SESSIONS_DIR } = await import("./paths.js");
+        const providerFile = (await import("path")).join(SESSIONS_DIR, `${sessionName}.provider.json`);
+        await (await import("fs/promises")).writeFile(providerFile, JSON.stringify(providerConfig, null, 2));
+
+        console.log(
+          `Updated session "${sessionName}" provider to: ${providerId}${
+            flags.fallback ? ` (fallback: ${flags.fallback})` : ""
+          }`
+        );
         break;
       }
       case "inject":

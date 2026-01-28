@@ -1,0 +1,19 @@
+{
+  "daemon": {
+    "port": 7437,
+    "host": "127.0.0.1",
+    "autoStart": false
+  },
+  "anthropic": {},
+  "oauth": {},
+  "discovery": {
+    "topics": [],
+    "autoJoin": false
+  },
+  "plugins": {
+    "autoLoad": true,
+    "directories": [
+      "/home/tsavo/wopr/plugins"
+    ]
+  }
+}
