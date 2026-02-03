@@ -1,85 +1,70 @@
-// MemoryIndexManager - adapted from OpenClaw for WOPR
+// MemoryIndexManager - FTS5 keyword search only
+// Vector/semantic search available via wopr-plugin-memory-semantic
 import type { DatabaseSync } from "node:sqlite";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
-import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
 import { WOPR_HOME } from "../paths.js";
 import {
-  createEmbeddingProvider,
-  type EmbeddingProvider,
-  type EmbeddingProviderResult,
-  type GeminiEmbeddingClient,
-  type OpenAiEmbeddingClient,
-} from "./embeddings.js";
-import { bm25RankToScore, buildFtsQuery, mergeHybridResults } from "./hybrid.js";
-import {
   buildFileEntry,
   chunkMarkdown,
   ensureDir,
   hashText,
   listMemoryFiles,
-  type MemoryChunk,
   type MemoryFileEntry,
 } from "./internal.js";
-import { searchKeyword, searchVector } from "./search.js";
 import { ensureMemoryIndexSchema } from "./schema.js";
-import { loadSqliteVecExtension } from "./sqlite-vec.js";
 import { syncSessionFiles } from "./sync-sessions.js";
 import { type SessionFileEntry } from "./session-files.js";
 import { type MemoryConfig, type MemorySearchResult, type MemorySource, DEFAULT_MEMORY_CONFIG } from "./types.js";
 
 const META_KEY = "memory_index_meta_v1";
 const SNIPPET_MAX_CHARS = 700;
-const VECTOR_TABLE = "chunks_vec";
 const FTS_TABLE = "chunks_fts";
-const EMBEDDING_CACHE_TABLE = "embedding_cache";
-const VECTOR_LOAD_TIMEOUT_MS = 30_000;
-const EMBEDDING_QUERY_TIMEOUT_MS = 60_000;
-const EMBEDDING_INDEX_CONCURRENCY = 4;
-
-const vectorToBlob = (embedding: number[]): Buffer =>
-  Buffer.from(new Float32Array(embedding).buffer);
+const INDEX_CONCURRENCY = 4;
 
 type MemoryIndexMeta = {
-  model: string;
-  provider: string;
-  providerKey?: string;
   chunkTokens: number;
   chunkOverlap: number;
-  vectorDims?: number;
 };
+
+/**
+ * Build FTS5 query from raw search string
+ */
+function buildFtsQuery(raw: string): string | null {
+  const tokens = raw
+    .match(/[A-Za-z0-9_]+/g)
+    ?.map((t) => t.trim())
+    .filter(Boolean) ?? [];
+  if (tokens.length === 0) {
+    return null;
+  }
+  const quoted = tokens.map((t) => `"${t.replaceAll('"', "")}"`);
+  return quoted.join(" AND ");
+}
+
+/**
+ * Convert BM25 rank to normalized score (0-1)
+ */
+function bm25RankToScore(rank: number): number {
+  const normalized = Number.isFinite(rank) ? Math.max(0, rank) : 999;
+  return 1 / (1 + normalized);
+}
 
 export class MemoryIndexManager {
   private readonly globalDir: string;
   private readonly sessionDir: string;
   private readonly config: MemoryConfig;
-  private provider: EmbeddingProvider;
-  private readonly requestedProvider: "openai" | "local" | "gemini" | "auto";
-  private fallbackFrom?: "openai" | "local" | "gemini";
-  private fallbackReason?: string;
-  private openAi?: OpenAiEmbeddingClient;
-  private gemini?: GeminiEmbeddingClient;
   private db: DatabaseSync;
   private readonly sources: Set<MemorySource>;
-  private providerKey: string;
-  private readonly cache: { enabled: boolean; maxEntries?: number };
-  private readonly vector: {
-    enabled: boolean;
-    available: boolean | null;
-    extensionPath?: string;
-    loadError?: string;
-    dims?: number;
-  };
   private readonly fts: {
     enabled: boolean;
     available: boolean;
     loadError?: string;
   };
-  private vectorReady: Promise<boolean> | null = null;
   private closed = false;
   private dirty = false;
   private syncing: Promise<void> | null = null;
@@ -96,19 +81,10 @@ export class MemoryIndexManager {
       config.store.path = path.join(WOPR_HOME, "memory", "index.sqlite");
     }
 
-    const providerResult = await createEmbeddingProvider({
-      provider: config.provider,
-      remote: config.remote,
-      model: config.model,
-      fallback: config.fallback,
-      local: config.local,
-    });
-
     return new MemoryIndexManager({
       globalDir: params.globalDir,
       sessionDir: params.sessionDir,
       config,
-      providerResult,
     });
   }
 
@@ -116,35 +92,14 @@ export class MemoryIndexManager {
     globalDir: string;
     sessionDir: string;
     config: MemoryConfig;
-    providerResult: EmbeddingProviderResult;
   }) {
     this.globalDir = params.globalDir;
     this.sessionDir = params.sessionDir;
     this.config = params.config;
-    this.provider = params.providerResult.provider;
-    this.requestedProvider = params.providerResult.requestedProvider;
-    this.fallbackFrom = params.providerResult.fallbackFrom;
-    this.fallbackReason = params.providerResult.fallbackReason;
-    this.openAi = params.providerResult.openAi;
-    this.gemini = params.providerResult.gemini;
     this.sources = new Set(["global", "session", "sessions"] as MemorySource[]);
     this.db = this.openDatabase();
-    this.providerKey = this.computeProviderKey();
-    this.cache = {
-      enabled: params.config.cache.enabled,
-      maxEntries: params.config.cache.maxEntries,
-    };
-    this.fts = { enabled: params.config.hybrid.enabled, available: false };
+    this.fts = { enabled: true, available: false };
     this.ensureSchema();
-    this.vector = {
-      enabled: params.config.store.vector.enabled,
-      available: null,
-      extensionPath: params.config.store.vector.extensionPath,
-    };
-    const meta = this.readMeta();
-    if (meta?.vectorDims) {
-      this.vector.dims = meta.vectorDims;
-    }
     this.dirty = true;
   }
 
@@ -166,105 +121,66 @@ export class MemoryIndexManager {
     }
     const minScore = opts?.minScore ?? this.config.query.minScore;
     const maxResults = opts?.maxResults ?? this.config.query.maxResults;
-    const hybrid = this.config.hybrid;
-    const candidates = Math.min(
-      200,
-      Math.max(1, Math.floor(maxResults * hybrid.candidateMultiplier)),
-    );
 
-    const keywordResults = hybrid.enabled
-      ? await this.searchKeyword(cleaned, candidates).catch(() => [])
-      : [];
-
-    const queryVec = await this.embedQueryWithTimeout(cleaned);
-    const hasVector = queryVec.some((v) => v !== 0);
-    const vectorResults = hasVector
-      ? await this.searchVector(queryVec, candidates).catch(() => [])
-      : [];
-
-    if (!hybrid.enabled) {
-      return vectorResults.filter((entry) => entry.score >= minScore).slice(0, maxResults);
-    }
-
-    const merged = this.mergeHybridResults({
-      vector: vectorResults,
-      keyword: keywordResults,
-      vectorWeight: hybrid.vectorWeight,
-      textWeight: hybrid.textWeight,
-    });
-
-    return merged.filter((entry) => entry.score >= minScore).slice(0, maxResults);
-  }
-
-  private async searchVector(
-    queryVec: number[],
-    limit: number,
-  ): Promise<Array<MemorySearchResult & { id: string }>> {
-    const results = await searchVector({
-      db: this.db,
-      vectorTable: VECTOR_TABLE,
-      providerModel: this.provider.model,
-      queryVec,
-      limit,
-      snippetMaxChars: SNIPPET_MAX_CHARS,
-      ensureVectorReady: async (dimensions) => await this.ensureVectorReady(dimensions),
-      sourceFilterVec: this.buildSourceFilter("c"),
-      sourceFilterChunks: this.buildSourceFilter(),
-    });
-    return results.map((entry) => entry as MemorySearchResult & { id: string });
+    const results = await this.searchKeyword(cleaned, maxResults * 2);
+    return results
+      .filter((entry) => entry.score >= minScore)
+      .slice(0, maxResults);
   }
 
   private async searchKeyword(
     query: string,
     limit: number,
-  ): Promise<Array<MemorySearchResult & { id: string; textScore: number }>> {
-    if (!this.fts.enabled || !this.fts.available) {
+  ): Promise<MemorySearchResult[]> {
+    if (!this.fts.available) {
       return [];
     }
-    const sourceFilter = this.buildSourceFilter();
-    const results = await searchKeyword({
-      db: this.db,
-      ftsTable: FTS_TABLE,
-      providerModel: this.provider.model,
-      query,
-      limit,
-      snippetMaxChars: SNIPPET_MAX_CHARS,
-      sourceFilter,
-      buildFtsQuery: (raw) => buildFtsQuery(raw),
-      bm25RankToScore,
-    });
-    return results.map((entry) => entry as MemorySearchResult & { id: string; textScore: number });
-  }
 
-  private mergeHybridResults(params: {
-    vector: Array<MemorySearchResult & { id: string }>;
-    keyword: Array<MemorySearchResult & { id: string; textScore: number }>;
-    vectorWeight: number;
-    textWeight: number;
-  }): MemorySearchResult[] {
-    const merged = mergeHybridResults({
-      vector: params.vector.map((r) => ({
-        id: r.id,
-        path: r.path,
-        startLine: r.startLine,
-        endLine: r.endLine,
-        source: r.source,
-        snippet: r.snippet,
-        vectorScore: r.score,
-      })),
-      keyword: params.keyword.map((r) => ({
-        id: r.id,
-        path: r.path,
-        startLine: r.startLine,
-        endLine: r.endLine,
-        source: r.source,
-        snippet: r.snippet,
-        textScore: r.textScore,
-      })),
-      vectorWeight: params.vectorWeight,
-      textWeight: params.textWeight,
-    });
-    return merged.map((entry) => entry as MemorySearchResult);
+    const ftsQuery = buildFtsQuery(query);
+    if (!ftsQuery) {
+      return [];
+    }
+
+    const sourceFilter = this.buildSourceFilter();
+    const sql = `
+      SELECT
+        f.id,
+        f.path,
+        f.source,
+        f.start_line,
+        f.end_line,
+        snippet(${FTS_TABLE}, 0, '', '', '...', 64) AS snippet,
+        bm25(${FTS_TABLE}) AS rank
+      FROM ${FTS_TABLE} f
+      WHERE ${FTS_TABLE} MATCH ?
+        ${sourceFilter.sql}
+      ORDER BY rank
+      LIMIT ?
+    `;
+
+    try {
+      const rows = this.db.prepare(sql).all(ftsQuery, ...sourceFilter.params, limit) as Array<{
+        id: string;
+        path: string;
+        source: MemorySource;
+        start_line: number;
+        end_line: number;
+        snippet: string;
+        rank: number;
+      }>;
+
+      return rows.map((row) => ({
+        path: row.path,
+        startLine: row.start_line,
+        endLine: row.end_line,
+        score: bm25RankToScore(row.rank),
+        snippet: row.snippet?.substring(0, SNIPPET_MAX_CHARS) ?? "",
+        source: row.source,
+      }));
+    } catch (err) {
+      console.warn(`FTS search failed: ${err instanceof Error ? err.message : String(err)}`);
+      return [];
+    }
   }
 
   async sync(params?: { force?: boolean }): Promise<void> {
@@ -307,15 +223,15 @@ export class MemoryIndexManager {
     await syncSessionFiles({
       db: this.db,
       needsFullReindex,
-      vectorTable: VECTOR_TABLE,
+      vectorTable: "", // Not used - no vector support
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
       ftsAvailable: this.fts.available,
-      model: this.provider.model,
-      dirtyFiles: new Set(), // TODO: track dirty session files
+      model: "fts5", // Placeholder - no embedding model
+      dirtyFiles: new Set(),
       runWithConcurrency: (tasks, concurrency) => this.runWithConcurrency(tasks, concurrency),
       indexSessionFile: (entry) => this.indexSessionFile(entry),
-      concurrency: EMBEDDING_INDEX_CONCURRENCY,
+      concurrency: INDEX_CONCURRENCY,
     });
   }
 
@@ -323,32 +239,21 @@ export class MemoryIndexManager {
     const chunks = chunkMarkdown(entry.content, this.config.chunking);
 
     // Delete existing chunks for this file
-    try {
-      this.db
-        .prepare(
-          `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
-        )
-        .run(entry.path, "sessions");
-    } catch {}
     this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(entry.path, "sessions");
-    if (this.fts.enabled && this.fts.available) {
+    if (this.fts.available) {
       try {
         this.db
-          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-          .run(entry.path, "sessions", this.provider.model);
+          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
+          .run(entry.path, "sessions");
       } catch {}
     }
-
-    // Generate embeddings for chunks
-    const texts = chunks.map((chunk) => chunk.text);
-    const embeddings = texts.length > 0 ? await this.embedBatch(texts) : [];
 
     // Insert chunks
     const insertChunk = this.db.prepare(
       `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-    const insertFts = this.fts.enabled && this.fts.available
+    const insertFts = this.fts.available
       ? this.db.prepare(
           `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -357,9 +262,7 @@ export class MemoryIndexManager {
 
     this.db.exec("BEGIN");
     try {
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const embedding = embeddings[i] ?? [];
+      for (const chunk of chunks) {
         const id = randomUUID();
         const now = Date.now();
 
@@ -370,9 +273,9 @@ export class MemoryIndexManager {
           chunk.startLine,
           chunk.endLine,
           chunk.hash,
-          this.provider.model,
+          "fts5",
           chunk.text,
-          JSON.stringify(embedding),
+          "[]", // No embedding
           now,
         );
 
@@ -382,20 +285,10 @@ export class MemoryIndexManager {
             id,
             entry.path,
             "sessions",
-            this.provider.model,
+            "fts5",
             chunk.startLine,
             chunk.endLine,
           );
-        }
-
-        // Insert into vector table if available
-        if (this.vector.available && embedding.length > 0) {
-          await this.ensureVectorReady(embedding.length);
-          try {
-            this.db
-              .prepare(`INSERT INTO ${VECTOR_TABLE} (id, embedding) VALUES (?, ?)`)
-              .run(id, vectorToBlob(embedding));
-          } catch {}
         }
       }
 
@@ -434,7 +327,7 @@ export class MemoryIndexManager {
       }
       await this.indexFile(entry, { source: params.source });
     });
-    await this.runWithConcurrency(tasks, EMBEDDING_INDEX_CONCURRENCY);
+    await this.runWithConcurrency(tasks, INDEX_CONCURRENCY);
 
     // Remove stale entries
     const staleRows = this.db
@@ -445,19 +338,12 @@ export class MemoryIndexManager {
         continue;
       }
       this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, params.source);
-      try {
-        this.db
-          .prepare(
-            `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
-          )
-          .run(stale.path, params.source);
-      } catch {}
       this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, params.source);
-      if (this.fts.enabled && this.fts.available) {
+      if (this.fts.available) {
         try {
           this.db
-            .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-            .run(stale.path, params.source, this.provider.model);
+            .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
+            .run(stale.path, params.source);
         } catch {}
       }
     }
@@ -468,32 +354,21 @@ export class MemoryIndexManager {
     const chunks = chunkMarkdown(content, this.config.chunking);
 
     // Delete existing chunks for this file
-    try {
-      this.db
-        .prepare(
-          `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
-        )
-        .run(entry.path, params.source);
-    } catch {}
     this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(entry.path, params.source);
-    if (this.fts.enabled && this.fts.available) {
+    if (this.fts.available) {
       try {
         this.db
-          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-          .run(entry.path, params.source, this.provider.model);
+          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
+          .run(entry.path, params.source);
       } catch {}
     }
-
-    // Generate embeddings for chunks
-    const texts = chunks.map((chunk) => chunk.text);
-    const embeddings = texts.length > 0 ? await this.embedBatch(texts) : [];
 
     // Insert chunks
     const insertChunk = this.db.prepare(
       `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
-    const insertFts = this.fts.enabled && this.fts.available
+    const insertFts = this.fts.available
       ? this.db.prepare(
           `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -502,9 +377,7 @@ export class MemoryIndexManager {
 
     this.db.exec("BEGIN");
     try {
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const embedding = embeddings[i] ?? [];
+      for (const chunk of chunks) {
         const id = randomUUID();
         const now = Date.now();
 
@@ -515,9 +388,9 @@ export class MemoryIndexManager {
           chunk.startLine,
           chunk.endLine,
           chunk.hash,
-          this.provider.model,
+          "fts5",
           chunk.text,
-          JSON.stringify(embedding),
+          "[]", // No embedding
           now,
         );
 
@@ -527,20 +400,10 @@ export class MemoryIndexManager {
             id,
             entry.path,
             params.source,
-            this.provider.model,
+            "fts5",
             chunk.startLine,
             chunk.endLine,
           );
-        }
-
-        // Insert into vector table if available
-        if (this.vector.available && embedding.length > 0) {
-          await this.ensureVectorReady(embedding.length);
-          try {
-            this.db
-              .prepare(`INSERT INTO ${VECTOR_TABLE} (id, embedding) VALUES (?, ?)`)
-              .run(id, vectorToBlob(embedding));
-          } catch {}
         }
       }
 
@@ -559,111 +422,9 @@ export class MemoryIndexManager {
     }
   }
 
-  private async embedQueryWithTimeout(text: string): Promise<number[]> {
-    return this.withTimeout(
-      this.provider.embedQuery(text),
-      EMBEDDING_QUERY_TIMEOUT_MS,
-      `embedding query timed out`,
-    );
-  }
-
-  private async embedBatch(texts: string[]): Promise<number[][]> {
-    if (texts.length === 0) {
-      return [];
-    }
-    // Check cache first
-    const results: number[][] = new Array(texts.length);
-    const uncachedIndices: number[] = [];
-    const uncachedTexts: string[] = [];
-
-    if (this.cache.enabled) {
-      for (let i = 0; i < texts.length; i++) {
-        const text = texts[i];
-        const hash = hashText(text);
-        const cached = this.getCachedEmbedding(hash);
-        if (cached) {
-          results[i] = cached;
-        } else {
-          uncachedIndices.push(i);
-          uncachedTexts.push(text);
-        }
-      }
-    } else {
-      for (let i = 0; i < texts.length; i++) {
-        uncachedIndices.push(i);
-        uncachedTexts.push(texts[i]);
-      }
-    }
-
-    if (uncachedTexts.length > 0) {
-      const embeddings = await this.provider.embedBatch(uncachedTexts);
-      for (let j = 0; j < uncachedIndices.length; j++) {
-        const i = uncachedIndices[j];
-        const embedding = embeddings[j] ?? [];
-        results[i] = embedding;
-
-        if (this.cache.enabled && embedding.length > 0) {
-          const hash = hashText(uncachedTexts[j]);
-          this.setCachedEmbedding(hash, embedding);
-        }
-      }
-    }
-
-    return results;
-  }
-
-  private getCachedEmbedding(hash: string): number[] | null {
-    if (!this.cache.enabled) {
-      return null;
-    }
-    const row = this.db
-      .prepare(
-        `SELECT embedding FROM ${EMBEDDING_CACHE_TABLE}
-         WHERE provider = ? AND model = ? AND provider_key = ? AND hash = ?`,
-      )
-      .get(this.provider.id, this.provider.model, this.providerKey, hash) as
-      | { embedding: string }
-      | undefined;
-    if (!row?.embedding) {
-      return null;
-    }
-    try {
-      return JSON.parse(row.embedding);
-    } catch {
-      return null;
-    }
-  }
-
-  private setCachedEmbedding(hash: string, embedding: number[]): void {
-    if (!this.cache.enabled) {
-      return;
-    }
-    this.db
-      .prepare(
-        `INSERT OR REPLACE INTO ${EMBEDDING_CACHE_TABLE}
-         (provider, model, provider_key, hash, embedding, dims, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        this.provider.id,
-        this.provider.model,
-        this.providerKey,
-        hash,
-        JSON.stringify(embedding),
-        embedding.length,
-        Date.now(),
-      );
-  }
-
   private async checkNeedsFullReindex(): Promise<boolean> {
     const meta = this.readMeta();
     if (!meta) {
-      return true;
-    }
-    if (meta.model !== this.provider.model) {
-      return true;
-    }
-    if (meta.provider !== this.provider.id) {
       return true;
     }
     if (meta.chunkTokens !== this.config.chunking.tokens) {
@@ -691,26 +452,12 @@ export class MemoryIndexManager {
 
   private writeMeta(): void {
     const meta: MemoryIndexMeta = {
-      model: this.provider.model,
-      provider: this.provider.id,
-      providerKey: this.providerKey,
       chunkTokens: this.config.chunking.tokens,
       chunkOverlap: this.config.chunking.overlap,
-      vectorDims: this.vector.dims,
     };
     this.db
       .prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)`)
       .run(META_KEY, JSON.stringify(meta));
-  }
-
-  private computeProviderKey(): string {
-    if (this.openAi) {
-      return `${this.openAi.baseUrl}:${this.openAi.model}`;
-    }
-    if (this.gemini) {
-      return `${this.gemini.baseUrl}:${this.gemini.model}`;
-    }
-    return `local:${this.provider.model}`;
   }
 
   private buildSourceFilter(alias?: string): { sql: string; params: MemorySource[] } {
@@ -728,13 +475,13 @@ export class MemoryIndexManager {
     const dir = path.dirname(dbPath);
     ensureDir(dir);
     const { DatabaseSync } = require("node:sqlite");
-    return new DatabaseSync(dbPath, { allowExtension: this.config.store.vector.enabled });
+    return new DatabaseSync(dbPath);
   }
 
   private ensureSchema() {
     const result = ensureMemoryIndexSchema({
       db: this.db,
-      embeddingCacheTable: EMBEDDING_CACHE_TABLE,
+      embeddingCacheTable: "", // Not used
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
     });
@@ -742,96 +489,6 @@ export class MemoryIndexManager {
     if (result.ftsError) {
       this.fts.loadError = result.ftsError;
       console.warn(`fts unavailable: ${result.ftsError}`);
-    }
-  }
-
-  private async ensureVectorReady(dimensions?: number): Promise<boolean> {
-    if (!this.vector.enabled) {
-      return false;
-    }
-    if (!this.vectorReady) {
-      this.vectorReady = this.withTimeout(
-        this.loadVectorExtension(),
-        VECTOR_LOAD_TIMEOUT_MS,
-        `sqlite-vec load timed out`,
-      );
-    }
-    let ready = false;
-    try {
-      ready = await this.vectorReady;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.vector.available = false;
-      this.vector.loadError = message;
-      this.vectorReady = null;
-      console.warn(`sqlite-vec unavailable: ${message}`);
-      return false;
-    }
-    if (ready && typeof dimensions === "number" && dimensions > 0) {
-      this.ensureVectorTable(dimensions);
-    }
-    return ready;
-  }
-
-  private async loadVectorExtension(): Promise<boolean> {
-    if (this.vector.available !== null) {
-      return this.vector.available;
-    }
-    if (!this.vector.enabled) {
-      this.vector.available = false;
-      return false;
-    }
-    try {
-      const loaded = await loadSqliteVecExtension({
-        db: this.db,
-        extensionPath: this.vector.extensionPath,
-      });
-      if (!loaded.ok) {
-        throw new Error(loaded.error ?? "unknown sqlite-vec load error");
-      }
-      this.vector.extensionPath = loaded.extensionPath;
-      this.vector.available = true;
-      return true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.vector.available = false;
-      this.vector.loadError = message;
-      console.warn(`sqlite-vec unavailable: ${message}`);
-      return false;
-    }
-  }
-
-  private ensureVectorTable(dimensions: number): void {
-    if (this.vector.dims === dimensions) {
-      return;
-    }
-    if (this.vector.dims && this.vector.dims !== dimensions) {
-      this.dropVectorTable();
-    }
-    this.db.exec(
-      `CREATE VIRTUAL TABLE IF NOT EXISTS ${VECTOR_TABLE} USING vec0(\n` +
-        `  id TEXT PRIMARY KEY,\n` +
-        `  embedding FLOAT[${dimensions}]\n` +
-        `)`,
-    );
-    this.vector.dims = dimensions;
-  }
-
-  private dropVectorTable(): void {
-    try {
-      this.db.exec(`DROP TABLE IF EXISTS ${VECTOR_TABLE}`);
-    } catch {}
-  }
-
-  private async withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-    let timeoutId: NodeJS.Timeout;
-    const timeout = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(message)), ms);
-    });
-    try {
-      return await Promise.race([promise, timeout]);
-    } finally {
-      clearTimeout(timeoutId!);
     }
   }
 
@@ -865,10 +522,7 @@ export class MemoryIndexManager {
     files: number;
     chunks: number;
     dirty: boolean;
-    provider: string;
-    model: string;
     fts: { enabled: boolean; available: boolean };
-    vector: { enabled: boolean; available: boolean | null };
   } {
     const files = this.db.prepare(`SELECT COUNT(*) as c FROM files`).get() as { c: number };
     const chunks = this.db.prepare(`SELECT COUNT(*) as c FROM chunks`).get() as { c: number };
@@ -876,10 +530,7 @@ export class MemoryIndexManager {
       files: files?.c ?? 0,
       chunks: chunks?.c ?? 0,
       dirty: this.dirty,
-      provider: this.provider.id,
-      model: this.provider.model,
       fts: { enabled: this.fts.enabled, available: this.fts.available },
-      vector: { enabled: this.vector.enabled, available: this.vector.available },
     };
   }
 

@@ -693,12 +693,8 @@ export function getA2AMcpServer(sessionName: string): any {
         globalDir: GLOBAL_IDENTITY_DIR,
         sessionDir: sessionDir,
         config: {
-          provider: memoryConfig.provider || "auto",
-          model: memoryConfig.model || "text-embedding-3-small",
-          remote: memoryConfig.remote,
           store: {
             path: join(WOPR_HOME, "memory", "index.sqlite"),
-            vector: { enabled: memoryConfig.vector?.enabled ?? false },
           },
         },
       });
@@ -711,7 +707,7 @@ export function getA2AMcpServer(sessionName: string): any {
       "memory_search",
       "Search memory files using keyword search (FTS5). Install wopr-plugin-memory-semantic for vector/semantic search. Searches both global identity and session-specific files.",
       {
-        query: z.string().describe("Search query - uses semantic similarity to find relevant content"),
+        query: z.string().describe("Search query - uses FTS5 keyword matching"),
         maxResults: z.number().optional().describe("Maximum results (default: 10)"),
         minScore: z.number().optional().describe("Minimum relevance score 0-1 (default: 0.35)")
       },
