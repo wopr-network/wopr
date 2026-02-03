@@ -448,6 +448,19 @@ export interface PluginInjectOptions {
    * P2P and external channels should always provide this for proper sandboxing.
    */
   source?: _InjectionSource;
+  /**
+   * Control which context providers to use.
+   */
+  contextProviders?: string[];
+  /**
+   * If true, allow V2 injection into active streams (default: true).
+   * Set to false if the plugin handles V2 injection itself.
+   */
+  allowV2Inject?: boolean;
+  /**
+   * Priority level (higher = processed first within queue)
+   */
+  priority?: number;
 }
 
 // ============================================================================

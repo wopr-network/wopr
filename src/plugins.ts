@@ -36,7 +36,7 @@ import {
 } from "./core/channels.js";
 import { registerA2ATool } from "./core/a2a-mcp.js";
 import { z } from "zod";
-import { logMessage as logMessageToSession, cancelInject as cancelSessionInject, getSessionProvider } from "./core/sessions.js";
+import { logMessage as logMessageToSession, cancelInject as cancelSessionInject, getSessionProvider, setQueueV2Injector } from "./core/sessions.js";
 import {
   registerContextProvider as registerCtxProvider,
   unregisterContextProvider as unregisterCtxProvider,
@@ -513,6 +513,22 @@ async function injectIntoActiveSessionImpl(
   logger.info(`[plugins] Injecting into active V2 session: ${sessionKey} from: ${options?.from || 'unknown'}`);
   await client.sendToActiveSession(sessionKey, message);
 }
+
+// Wire up the queue's V2 injector path (deferred to avoid circular import issues)
+// This allows the core queue to automatically try V2 injection for active sessions
+process.nextTick(() => {
+  setQueueV2Injector(async (sessionKey: string, message: string | { text: string; images?: string[] }) => {
+    // Check if there's an active session first
+    const hasActive = await hasActiveSessionForKey(sessionKey);
+    if (!hasActive) {
+      throw new Error(`No active V2 session for key: ${sessionKey}`);
+    }
+    // Extract text from multimodal message if needed
+    const messageText = typeof message === 'string' ? message : message.text;
+    await injectIntoActiveSessionImpl(sessionKey, messageText);
+  });
+  logger.info("[plugins] Queue V2 injector wired up");
+});
 
 // ============================================================================
 // Plugin Context Creation
