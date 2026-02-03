@@ -6,7 +6,9 @@ export {
   type MemoryConfig,
   type MemorySearchResult,
   type MemorySource,
+  type TemporalFilter,
   DEFAULT_MEMORY_CONFIG,
+  parseTemporalFilter,
 } from "./types.js";
 export { type EmbeddingProvider } from "./embeddings.js";
 export { saveSessionToMemory, createSessionDestroyHandler } from "./session-hook.js";

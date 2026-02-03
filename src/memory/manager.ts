@@ -25,12 +25,12 @@ import {
   type MemoryChunk,
   type MemoryFileEntry,
 } from "./internal.js";
-import { searchKeyword, searchVector } from "./search.js";
+import { searchKeyword, searchVector, buildTemporalFilter } from "./search.js";
 import { ensureMemoryIndexSchema } from "./schema.js";
 import { loadSqliteVecExtension } from "./sqlite-vec.js";
 import { syncSessionFiles } from "./sync-sessions.js";
 import { type SessionFileEntry } from "./session-files.js";
-import { type MemoryConfig, type MemorySearchResult, type MemorySource, DEFAULT_MEMORY_CONFIG } from "./types.js";
+import { type MemoryConfig, type MemorySearchResult, type MemorySource, type TemporalFilter, DEFAULT_MEMORY_CONFIG } from "./types.js";
 
 const META_KEY = "memory_index_meta_v1";
 const SNIPPET_MAX_CHARS = 700;
@@ -153,6 +153,7 @@ export class MemoryIndexManager {
     opts?: {
       maxResults?: number;
       minScore?: number;
+      temporal?: TemporalFilter;
     },
   ): Promise<MemorySearchResult[]> {
     if (this.config.sync.onSearch && this.dirty) {
@@ -166,6 +167,7 @@ export class MemoryIndexManager {
     }
     const minScore = opts?.minScore ?? this.config.query.minScore;
     const maxResults = opts?.maxResults ?? this.config.query.maxResults;
+    const temporal = opts?.temporal;
     const hybrid = this.config.hybrid;
     const candidates = Math.min(
       200,
@@ -173,13 +175,13 @@ export class MemoryIndexManager {
     );
 
     const keywordResults = hybrid.enabled
-      ? await this.searchKeyword(cleaned, candidates).catch(() => [])
+      ? await this.searchKeyword(cleaned, candidates, temporal).catch(() => [])
       : [];
 
     const queryVec = await this.embedQueryWithTimeout(cleaned);
     const hasVector = queryVec.some((v) => v !== 0);
     const vectorResults = hasVector
-      ? await this.searchVector(queryVec, candidates).catch(() => [])
+      ? await this.searchVector(queryVec, candidates, temporal).catch(() => [])
       : [];
 
     if (!hybrid.enabled) {
@@ -199,7 +201,9 @@ export class MemoryIndexManager {
   private async searchVector(
     queryVec: number[],
     limit: number,
+    temporal?: TemporalFilter,
   ): Promise<Array<MemorySearchResult & { id: string }>> {
+    const temporalFilter = buildTemporalFilter(temporal, "c");
     const results = await searchVector({
       db: this.db,
       vectorTable: VECTOR_TABLE,
@@ -210,6 +214,7 @@ export class MemoryIndexManager {
       ensureVectorReady: async (dimensions) => await this.ensureVectorReady(dimensions),
       sourceFilterVec: this.buildSourceFilter("c"),
       sourceFilterChunks: this.buildSourceFilter(),
+      temporalFilter,
     });
     return results.map((entry) => entry as MemorySearchResult & { id: string });
   }
@@ -217,11 +222,13 @@ export class MemoryIndexManager {
   private async searchKeyword(
     query: string,
     limit: number,
+    temporal?: TemporalFilter,
   ): Promise<Array<MemorySearchResult & { id: string; textScore: number }>> {
     if (!this.fts.enabled || !this.fts.available) {
       return [];
     }
     const sourceFilter = this.buildSourceFilter();
+    const temporalFilter = buildTemporalFilter(temporal);
     const results = await searchKeyword({
       db: this.db,
       ftsTable: FTS_TABLE,
@@ -232,6 +239,7 @@ export class MemoryIndexManager {
       sourceFilter,
       buildFtsQuery: (raw) => buildFtsQuery(raw),
       bm25RankToScore,
+      temporalFilter,
     });
     return results.map((entry) => entry as MemorySearchResult & { id: string; textScore: number });
   }
