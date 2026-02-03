@@ -829,6 +829,31 @@ export interface WOPRPluginContext {
 
   // Access to plugin directory
   getPluginDir(): string;
+
+  // =========================================================================
+  // V2 Session API - for injecting into active sessions without queuing
+  // =========================================================================
+
+  /**
+   * Check if a session has an active V2 streaming response in progress.
+   * When true, injectIntoActiveSession() can be used to inject messages
+   * without waiting for the current response to complete.
+   *
+   * Note: This is async to ensure provider cache is populated before checking.
+   */
+  hasActiveSession?(session: string): Promise<boolean>;
+
+  /**
+   * Inject a message into an actively streaming session.
+   * The message is sent via session.send() and responses flow through
+   * the existing stream - no new stream is created.
+   *
+   * @throws Error if no active session exists (use hasActiveSession() first)
+   */
+  injectIntoActiveSession?(session: string, message: string, options?: {
+    from?: string;
+    channel?: ChannelRef;
+  }): Promise<void>;
 }
 
 export type InjectionHandler = (

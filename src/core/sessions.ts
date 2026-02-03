@@ -517,15 +517,28 @@ async function executeInject(
   const mcpServers = a2aMcpServer ? { "wopr-a2a": a2aMcpServer } : undefined;
 
   // Helper to create query with optional session resume
+  // Uses V2 API when available for active session injection support
   const createQuery = (resumeSessionId?: string) => {
-    return resolvedProvider.client.query({
+    const queryOpts = {
       prompt: fullMessage,
       systemPrompt: fullContext,
       resume: resumeSessionId,
       model: providerConfig?.model || resolvedProvider.provider.defaultModel,
       images: messageImages.length > 0 ? messageImages : undefined,
       mcpServers,
-    });
+    };
+
+    // Check if provider supports V2 session API (for active session injection)
+    if (resolvedProvider.client.queryV2) {
+      logger.info(`[wopr] Using V2 session API for: ${name}`);
+      return resolvedProvider.client.queryV2({
+        ...queryOpts,
+        sessionKey: name,  // WOPR's session identifier
+      });
+    }
+
+    // Fall back to V1 query
+    return resolvedProvider.client.query(queryOpts);
   };
 
   let q: any = createQuery(existingSessionId);
