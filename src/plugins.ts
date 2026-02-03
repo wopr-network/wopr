@@ -36,7 +36,7 @@ import {
 } from "./core/channels.js";
 import { registerA2ATool } from "./core/a2a-mcp.js";
 import { z } from "zod";
-import { logMessage as logMessageToSession, cancelInject as cancelSessionInject } from "./core/sessions.js";
+import { logMessage as logMessageToSession, cancelInject as cancelSessionInject, getSessionProvider } from "./core/sessions.js";
 import {
   registerContextProvider as registerCtxProvider,
   unregisterContextProvider as unregisterCtxProvider,
@@ -427,6 +427,94 @@ function addInstalledPlugin(plugin: InstalledPlugin): void {
 }
 
 // ============================================================================
+// V2 Session API Helpers
+// ============================================================================
+
+// Cache of resolved providers by session key (to avoid repeated resolution)
+const resolvedProviderCache = new Map<string, { client: any; resolvedAt: number }>();
+const PROVIDER_CACHE_TTL = 60000; // 1 minute
+
+async function getProviderClientForSession(sessionKey: string): Promise<any | null> {
+  // Check cache first
+  const cached = resolvedProviderCache.get(sessionKey);
+  if (cached && Date.now() - cached.resolvedAt < PROVIDER_CACHE_TTL) {
+    return cached.client;
+  }
+
+  // Get provider config for this session
+  const providerConfig = getSessionProvider(sessionKey);
+  if (!providerConfig) {
+    return null;
+  }
+
+  try {
+    const resolved = await providerRegistry.resolveProvider(providerConfig);
+    resolvedProviderCache.set(sessionKey, { client: resolved.client, resolvedAt: Date.now() });
+    return resolved.client;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a session has an active V2 streaming response in progress.
+ * Returns true only if the provider supports V2 AND has an active session.
+ *
+ * Note: This is async to ensure cache is populated before checking.
+ * First call for a session may be slower, but ensures accurate results.
+ */
+async function hasActiveSessionForKey(sessionKey: string): Promise<boolean> {
+  // Try cache first for performance
+  const cached = resolvedProviderCache.get(sessionKey);
+  if (cached && Date.now() - cached.resolvedAt < PROVIDER_CACHE_TTL) {
+    const client = cached.client;
+    if (client?.hasActiveSession) {
+      return client.hasActiveSession(sessionKey);
+    }
+    return false;
+  }
+
+  // Cache miss or expired - resolve and populate cache
+  try {
+    const client = await getProviderClientForSession(sessionKey);
+    if (client?.hasActiveSession) {
+      return client.hasActiveSession(sessionKey);
+    }
+  } catch {
+    // Provider resolution failed - no active session
+  }
+  return false;
+}
+
+/**
+ * Inject a message into an actively streaming V2 session.
+ * The message is sent via session.send() and responses flow through
+ * the existing stream.
+ */
+async function injectIntoActiveSessionImpl(
+  sessionKey: string,
+  message: string,
+  options?: { from?: string; channel?: ChannelRef }
+): Promise<void> {
+  const client = await getProviderClientForSession(sessionKey);
+
+  if (!client) {
+    throw new Error(`No provider found for session: ${sessionKey}`);
+  }
+
+  if (!client.sendToActiveSession) {
+    throw new Error(`Provider does not support V2 sendToActiveSession for session: ${sessionKey}`);
+  }
+
+  if (!client.hasActiveSession?.(sessionKey)) {
+    throw new Error(`No active V2 session for key: ${sessionKey}`);
+  }
+
+  logger.info(`[plugins] Injecting into active V2 session: ${sessionKey} from: ${options?.from || 'unknown'}`);
+  await client.sendToActiveSession(sessionKey, message);
+}
+
+// ============================================================================
 // Plugin Context Creation
 // ============================================================================
 
@@ -446,6 +534,12 @@ function createPluginContext(
       logMessageToSession(session, message, options),
     getSessions: injectors.getSessions,
     cancelInject: (session: string) => cancelSessionInject(session),
+
+    // V2 Session API - for injecting into active sessions without queuing
+    hasActiveSession: (session: string) => hasActiveSessionForKey(session),
+    injectIntoActiveSession: async (session: string, message: string, options?: { from?: string; channel?: ChannelRef }) => {
+      return injectIntoActiveSessionImpl(session, message, options);
+    },
 
     on(event: "injection" | "stream", handler: InjectionHandler | StreamHandler) {
       pluginEvents.on(event, handler);

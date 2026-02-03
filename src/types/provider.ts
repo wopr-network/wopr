@@ -177,6 +177,90 @@ export interface ModelClient {
    * Health check - verify provider is accessible
    */
   healthCheck(): Promise<boolean>;
+
+  // =========================================================================
+  // V2 Session API - Optional methods for active session injection
+  //
+  // When supported, allows sending messages into an already-streaming session.
+  // Implementations that support this API are responsible for:
+  //   1) Tracking which sessions are active using the provided `sessionKey`
+  //   2) Deciding whether to inject into an existing session or start a new one
+  //   3) Managing the lifecycle (creation, reuse, and closure) of these sessions
+  //
+  // The interface does not enforce any particular session storage or strategy.
+  //
+  // These methods are part of the public V2 contract for providers that
+  // support long-lived / multiplexed streaming sessions. The core
+  // orchestration currently only relies on `queryV2` for session-aware
+  // requests; the helper methods below are intended for provider
+  // implementations and external consumers (like Discord plugin) that need
+  // finer-grained control over active sessions.
+  //
+  // Implementers MAY choose not to support these if their underlying
+  // transport does not expose session handles; in that case the methods
+  // should simply be omitted.
+  // =========================================================================
+
+  /**
+   * V2: Execute a query with session key tracking.
+   *
+   * If a session for the given sessionKey is already active, providers
+   * SHOULD inject the message into that session instead of creating a new
+   * stream. If no session exists, a new streaming session MAY be created
+   * and associated with this sessionKey.
+   *
+   * Note: `sessionKey` is WOPR's session identifier used for tracking active
+   * V2 streaming sessions (e.g., mapping to an in-progress conversation).
+   * If the underlying provider has its own notion of resumable conversations,
+   * use the `resume` field from `ModelQueryOptions` to pass the provider-
+   * specific session/conversation ID, and use `sessionKey` only for mapping
+   * back to WOPR's active session tracking.
+   *
+   * This is the only V2 method currently invoked by the core orchestration;
+   * the remaining V2 methods are available for plugin integrations.
+   *
+   * @param options Query options combining `ModelQueryOptions` (including any
+   *   `resume` provider session ID) with a WOPR-level `sessionKey` for V2
+   *   active session tracking.
+   */
+  queryV2?(options: ModelQueryOptions & { sessionKey: string }): AsyncGenerator<any>;
+
+  /**
+   * V2: Check if there's an active streaming session for this key.
+   *
+   * This is not called by the core orchestration, but is used by plugins
+   * (e.g., Discord) to check if they should inject into an existing session
+   * vs queue a new message.
+   */
+  hasActiveSession?(sessionKey: string): boolean;
+
+  /**
+   * V2: Send a message to an active session (inject into running conversation).
+   *
+   * This is intended for plugins that want to push additional input into an
+   * existing streaming interaction without going through the full query flow.
+   * The injected message will be processed by the active session's stream.
+   */
+  sendToActiveSession?(sessionKey: string, message: string): Promise<void>;
+
+  /**
+   * V2: Get the stream generator for an active session.
+   *
+   * If the sessionKey is unknown or the session has completed, implementations
+   * SHOULD return null.
+   */
+  getActiveSessionStream?(sessionKey: string): AsyncGenerator<any> | null;
+
+  /**
+   * V2: Close an active session.
+   *
+   * This allows external consumers to explicitly tear down server-side or
+   * long-lived streaming sessions and release any associated resources.
+   * The core orchestration does not currently invoke this directly, but
+   * providers SHOULD implement it when they maintain internal session
+   * state that may otherwise outlive the caller.
+   */
+  closeSession?(sessionKey: string): void;
 }
 
 /**
