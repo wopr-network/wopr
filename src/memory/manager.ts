@@ -19,7 +19,7 @@ import {
 import { ensureMemoryIndexSchema } from "./schema.js";
 import { syncSessionFiles } from "./sync-sessions.js";
 import { type SessionFileEntry } from "./session-files.js";
-import { type MemoryConfig, type MemorySearchResult, type MemorySource, DEFAULT_MEMORY_CONFIG } from "./types.js";
+import { type MemoryConfig, type MemorySearchResult, type MemorySource, type TemporalFilter, DEFAULT_MEMORY_CONFIG } from "./types.js";
 
 const META_KEY = "memory_index_meta_v1";
 const SNIPPET_MAX_CHARS = 700;
@@ -52,6 +52,39 @@ function buildFtsQuery(raw: string): string | null {
 function bm25RankToScore(rank: number): number {
   const normalized = Number.isFinite(rank) ? Math.max(0, rank) : 999;
   return 1 / (1 + normalized);
+}
+
+/**
+ * Build SQL WHERE clause for temporal filtering
+ * Uses the chunks.updated_at column (ms since epoch)
+ */
+function buildTemporalFilter(
+  temporal: TemporalFilter | undefined,
+  alias?: string
+): { sql: string; params: number[] } {
+  if (!temporal) {
+    return { sql: "", params: [] };
+  }
+
+  const column = alias ? `${alias}.updated_at` : "updated_at";
+  const clauses: string[] = [];
+  const params: number[] = [];
+
+  if (temporal.after !== undefined) {
+    clauses.push(`${column} >= ?`);
+    params.push(temporal.after);
+  }
+
+  if (temporal.before !== undefined) {
+    clauses.push(`${column} <= ?`);
+    params.push(temporal.before);
+  }
+
+  if (clauses.length === 0) {
+    return { sql: "", params: [] };
+  }
+
+  return { sql: ` AND ${clauses.join(" AND ")}`, params };
 }
 
 export class MemoryIndexManager {
@@ -108,6 +141,7 @@ export class MemoryIndexManager {
     opts?: {
       maxResults?: number;
       minScore?: number;
+      temporal?: TemporalFilter;
     },
   ): Promise<MemorySearchResult[]> {
     if (this.config.sync.onSearch && this.dirty) {
@@ -121,8 +155,9 @@ export class MemoryIndexManager {
     }
     const minScore = opts?.minScore ?? this.config.query.minScore;
     const maxResults = opts?.maxResults ?? this.config.query.maxResults;
+    const temporal = opts?.temporal;
 
-    const results = await this.searchKeyword(cleaned, maxResults * 2);
+    const results = await this.searchKeyword(cleaned, maxResults * 2, temporal);
     return results
       .filter((entry) => entry.score >= minScore)
       .slice(0, maxResults);
@@ -131,6 +166,7 @@ export class MemoryIndexManager {
   private async searchKeyword(
     query: string,
     limit: number,
+    temporal?: TemporalFilter,
   ): Promise<MemorySearchResult[]> {
     if (!this.fts.available) {
       return [];
@@ -142,24 +178,54 @@ export class MemoryIndexManager {
     }
 
     const sourceFilter = this.buildSourceFilter();
-    const sql = `
-      SELECT
-        f.id,
-        f.path,
-        f.source,
-        f.start_line,
-        f.end_line,
-        snippet(${FTS_TABLE}, 0, '', '', '...', 64) AS snippet,
-        bm25(${FTS_TABLE}) AS rank
-      FROM ${FTS_TABLE} f
-      WHERE ${FTS_TABLE} MATCH ?
-        ${sourceFilter.sql}
-      ORDER BY rank
-      LIMIT ?
-    `;
+    const temporalFilter = buildTemporalFilter(temporal, "c");
+    const hasTemporal = temporalFilter.sql.length > 0;
+
+    // If temporal filter is set, join with chunks table to get updated_at
+    // FTS5 virtual tables don't have the updated_at column
+    let sql: string;
+    let params: (string | number)[];
+
+    if (hasTemporal) {
+      sql = `
+        SELECT
+          f.id,
+          f.path,
+          f.source,
+          f.start_line,
+          f.end_line,
+          snippet(${FTS_TABLE}, 0, '', '', '...', 64) AS snippet,
+          bm25(${FTS_TABLE}) AS rank
+        FROM ${FTS_TABLE} f
+        JOIN chunks c ON c.id = f.id
+        WHERE ${FTS_TABLE} MATCH ?
+          ${sourceFilter.sql}
+          ${temporalFilter.sql}
+        ORDER BY rank
+        LIMIT ?
+      `;
+      params = [ftsQuery, ...sourceFilter.params, ...temporalFilter.params, limit];
+    } else {
+      sql = `
+        SELECT
+          f.id,
+          f.path,
+          f.source,
+          f.start_line,
+          f.end_line,
+          snippet(${FTS_TABLE}, 0, '', '', '...', 64) AS snippet,
+          bm25(${FTS_TABLE}) AS rank
+        FROM ${FTS_TABLE} f
+        WHERE ${FTS_TABLE} MATCH ?
+          ${sourceFilter.sql}
+        ORDER BY rank
+        LIMIT ?
+      `;
+      params = [ftsQuery, ...sourceFilter.params, limit];
+    }
 
     try {
-      const rows = this.db.prepare(sql).all(ftsQuery, ...sourceFilter.params, limit) as Array<{
+      const rows = this.db.prepare(sql).all(...params) as Array<{
         id: string;
         path: string;
         source: MemorySource;
