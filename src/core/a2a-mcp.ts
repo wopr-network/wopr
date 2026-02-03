@@ -705,9 +705,9 @@ export function getA2AMcpServer(sessionName: string): any {
   tools.push(
     tool(
       "memory_search",
-      "Search memory files using keyword search (FTS5). Install wopr-plugin-memory-semantic for vector/semantic search. Searches both global identity and session-specific files.",
+      "Search memory files. Uses FTS5 keyword search by default; semantic/vector search available via wopr-plugin-memory-semantic.",
       {
-        query: z.string().describe("Search query - uses FTS5 keyword matching"),
+        query: z.string().describe("Search query"),
         maxResults: z.number().optional().describe("Maximum results (default: 10)"),
         minScore: z.number().optional().describe("Minimum relevance score 0-1 (default: 0.35)")
       },
@@ -715,8 +715,23 @@ export function getA2AMcpServer(sessionName: string): any {
         const { query, maxResults = 10, minScore = 0.35 } = args;
 
         try {
-          const manager = await getMemoryManager();
-          let results = await manager.search(query, { maxResults: maxResults * 2, minScore });
+          // Allow plugins to provide results via hook
+          const hookPayload = {
+            query,
+            maxResults,
+            minScore,
+            sessionName,
+            results: null as any[] | null,
+          };
+
+          // Emit hook - plugins can set results
+          await eventBus.emit("memory:search", hookPayload);
+
+          // Use plugin results if provided, otherwise fall back to core FTS5
+          let results = hookPayload.results ?? await (async () => {
+            const manager = await getMemoryManager();
+            return manager.search(query, { maxResults: maxResults * 2, minScore });
+          })();
 
           // Filter session transcript results based on indexable permissions
           const ctx = getContext(sessionName);
@@ -724,7 +739,7 @@ export function getA2AMcpServer(sessionName: string): any {
           const secConfig = getSecurityConfig();
           const indexablePatterns = getSessionIndexable(secConfig, sessionName, trustLevel);
 
-          results = results.filter((r) => {
+          results = results.filter((r: any) => {
             // Non-session sources are always visible
             if (r.source !== "sessions") {
               return true;

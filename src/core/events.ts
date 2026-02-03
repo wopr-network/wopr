@@ -87,6 +87,15 @@ export interface SystemShutdownEvent {
   code?: number;
 }
 
+// Memory events
+export interface MemorySearchEvent {
+  query: string;
+  maxResults: number;
+  minScore: number;
+  sessionName: string;
+  results: any[] | null;
+}
+
 // ============================================================================
 // Event Map - defines all core events and their payloads
 // ============================================================================
@@ -113,6 +122,9 @@ export interface WOPREventMap {
 
   // System events
   "system:shutdown": SystemShutdownEvent;
+
+  // Memory events (for plugin enhancement)
+  "memory:search": MemorySearchEvent;
 
   // Wildcard - catch all
   "*": WOPREvent;
