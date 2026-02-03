@@ -28,13 +28,19 @@ export async function createOpenAiEmbeddingProvider(
   const url = `${client.baseUrl.replace(/\/$/, "")}/embeddings`;
 
   const embed = async (input: string[]): Promise<number[][]> => {
-    if (input.length === 0) {
-      return [];
+    // Filter out empty/whitespace-only strings - OpenAI API rejects them
+    const validInput = input.filter((s) => s && s.trim().length > 0);
+    if (validInput.length === 0) {
+      return input.map(() => []); // Return empty embeddings for all inputs
     }
+
+    // Track which indices had valid input for result mapping
+    const validIndices = input.map((s, i) => (s && s.trim().length > 0 ? i : -1)).filter((i) => i >= 0);
+
     const res = await fetch(url, {
       method: "POST",
       headers: client.headers,
-      body: JSON.stringify({ model: client.model, input }),
+      body: JSON.stringify({ model: client.model, input: validInput }),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -44,7 +50,17 @@ export async function createOpenAiEmbeddingProvider(
       data?: Array<{ embedding?: number[] }>;
     };
     const data = payload.data ?? [];
-    return data.map((entry) => entry.embedding ?? []);
+    const embeddings = data.map((entry) => entry.embedding ?? []);
+
+    // Map embeddings back to original input positions
+    const result: number[][] = input.map(() => []);
+    for (let i = 0; i < validIndices.length; i++) {
+      const originalIdx = validIndices[i];
+      if (originalIdx !== undefined && originalIdx >= 0) {
+        result[originalIdx] = embeddings[i] ?? [];
+      }
+    }
+    return result;
   };
 
   return {
