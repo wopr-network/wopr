@@ -78,7 +78,7 @@ export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
   store: {
     path: "", // Will be set dynamically
     vector: {
-      enabled: true,
+      enabled: false, // Disabled by default - use wopr-plugin-memory-semantic for vector search
     },
   },
   cache: {
