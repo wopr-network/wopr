@@ -66,8 +66,8 @@ import {
   formatMissingRequirements,
 } from "./plugins/requirements.js";
 
-import { WOPR_HOME } from "./paths.js";
-
+import { homedir } from "os";
+const WOPR_HOME = process.env.WOPR_HOME || join(homedir(), "wopr");
 const PLUGINS_DIR = join(WOPR_HOME, "plugins");
 const PLUGINS_FILE = join(WOPR_HOME, "plugins.json");
 const REGISTRIES_FILE = join(WOPR_HOME, "plugin-registries.json");
@@ -255,11 +255,6 @@ export interface InstallResult {
 
 export async function installPlugin(source: string): Promise<InstalledPlugin> {
   mkdirSync(PLUGINS_DIR, { recursive: true });
-
-  // Normalize GitHub URLs to github: format
-  if (source.startsWith("https://github.com/")) {
-    source = "github:" + source.replace("https://github.com/", "").replace(/\.git$/, "");
-  }
 
   // Determine source type
   if (source.startsWith("github:")) {
@@ -956,8 +951,10 @@ export async function loadPlugin(
   
   let module: any;
   try {
-    // Dynamic import (tsx handles both JS and TS)
-    module = await import(entryPoint);
+    // Dynamic import with cache-busting query param for reloads
+    // ESM caches by URL, so adding timestamp forces fresh import
+    const cacheBuster = `?t=${Date.now()}`;
+    module = await import(entryPoint + cacheBuster);
   } finally {
     process.chdir(originalCwd);
   }
