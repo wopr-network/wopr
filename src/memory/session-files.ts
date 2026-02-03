@@ -81,28 +81,42 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
       } catch {
         continue;
       }
+      if (!record || typeof record !== "object") {
+        continue;
+      }
+      const entry = record as {
+        type?: unknown;
+        from?: unknown;
+        content?: unknown;
+        message?: { role?: unknown; content?: unknown };
+      };
+
+      // WOPR format: type="message"|"response", from="Username"|"WOPR", content="..."
       if (
-        !record ||
-        typeof record !== "object" ||
-        (record as { type?: unknown }).type !== "message"
+        (entry.type === "message" || entry.type === "response") &&
+        typeof entry.from === "string" &&
+        typeof entry.content === "string"
       ) {
+        const text = extractSessionText(entry.content);
+        if (text) {
+          // Determine if this is user or assistant based on type
+          const label = entry.type === "response" ? "Assistant" : "User";
+          collected.push(`${label}: ${text}`);
+        }
         continue;
       }
-      const message = (record as { message?: unknown }).message as
-        | { role?: unknown; content?: unknown }
-        | undefined;
-      if (!message || typeof message.role !== "string") {
-        continue;
+
+      // OpenClaw/Claude format: type="message", message={role, content}
+      if (entry.type === "message" && entry.message) {
+        const msg = entry.message;
+        if (typeof msg.role === "string" && (msg.role === "user" || msg.role === "assistant")) {
+          const text = extractSessionText(msg.content);
+          if (text) {
+            const label = msg.role === "user" ? "User" : "Assistant";
+            collected.push(`${label}: ${text}`);
+          }
+        }
       }
-      if (message.role !== "user" && message.role !== "assistant") {
-        continue;
-      }
-      const text = extractSessionText(message.content);
-      if (!text) {
-        continue;
-      }
-      const label = message.role === "user" ? "User" : "Assistant";
-      collected.push(`${label}: ${text}`);
     }
     const content = collected.join("\n");
     return {
@@ -133,6 +147,22 @@ export async function getRecentSessionContent(
     for (const line of lines) {
       try {
         const entry = JSON.parse(line);
+
+        // WOPR format: type="message"|"response", from="Username"|"WOPR", content="..."
+        if (
+          (entry.type === "message" || entry.type === "response") &&
+          typeof entry.from === "string" &&
+          typeof entry.content === "string"
+        ) {
+          const text = entry.content;
+          if (text && !text.startsWith("/")) {
+            const role = entry.type === "response" ? "assistant" : "user";
+            allMessages.push(`${role}: ${text}`);
+          }
+          continue;
+        }
+
+        // OpenClaw/Claude format: type="message", message={role, content}
         if (entry.type === "message" && entry.message) {
           const msg = entry.message;
           const role = msg.role;
