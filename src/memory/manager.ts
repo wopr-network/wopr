@@ -1,9 +1,12 @@
 // MemoryIndexManager - adapted from OpenClaw for WOPR
 import type { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+
+const require = createRequire(import.meta.url);
 import { WOPR_HOME } from "../paths.js";
 import {
   createEmbeddingProvider,
