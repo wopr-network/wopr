@@ -73,69 +73,71 @@ if (!existsSync(SESSIONS_DIR)) {
 }
 
 // ============================================================================
-// Serialized Inject Queue per Session
+// Session Queue - FIFO Promise Chain (no timeout-cancel!)
 // ============================================================================
 
-interface PendingInject {
-  promise: Promise<InjectResult>;
-  abortController: AbortController;
-  startTime: number;
+import { queueManager, type InjectOptions, type InjectResult, type MultimodalMessage } from "./queue/index.js";
+
+// Flag to track if queue executor has been initialized
+let queueInitialized = false;
+
+/**
+ * Initialize the queue system with the inject executor
+ * Called lazily on first inject to avoid circular imports
+ */
+function initQueue(): void {
+  if (queueInitialized) return;
+  queueInitialized = true;
+
+  queueManager.setExecutor(executeInjectInternal);
+
+  // Subscribe to queue events for logging
+  queueManager.on((event) => {
+    if (event.type === "error" || event.type === "cancel") {
+      logger.warn({
+        msg: `[queue] ${event.type}`,
+        sessionKey: event.sessionKey,
+        injectId: event.injectId,
+        data: event.data,
+      });
+    }
+  });
+
+  logger.info("[sessions] Queue system initialized");
 }
 
-// Track pending injects per session for serialization
-const pendingInjects: Map<string, PendingInject> = new Map();
+/**
+ * Set the V2 injector for active session injection
+ * Called by plugins.ts after initialization to avoid circular imports
+ */
+export function setQueueV2Injector(
+  injector: (sessionKey: string, message: string | MultimodalMessage) => Promise<void>
+): void {
+  queueManager.setV2Injector(injector);
+}
 
 /**
  * Cancel any running inject for a session
  */
 export function cancelInject(session: string): boolean {
-  const pending = pendingInjects.get(session);
-  if (pending) {
-    pending.abortController.abort();
-    pendingInjects.delete(session);
-    logger.info(`[sessions] Cancelled inject for session: ${session}`);
-    return true;
-  }
-  return false;
+  return queueManager.cancelActive(session);
 }
 
 /**
- * Check if a session has a pending inject
+ * Check if a session has a pending inject (active or queued)
  */
 export function hasPendingInject(session: string): boolean {
-  return pendingInjects.has(session);
+  return queueManager.hasPending(session);
 }
 
 /**
- * Wait for pending inject to complete (for serialization)
- * Has a 60 second timeout to prevent deadlocks
+ * Get queue statistics for monitoring
  */
-async function waitForPendingInject(session: string): Promise<void> {
-  const pending = pendingInjects.get(session);
-  if (pending) {
-    const waitTime = Date.now() - pending.startTime;
-    logger.info(`[sessions] Waiting for pending inject on ${session} (running for ${Math.round(waitTime / 1000)}s)`);
-
-    // Create a timeout promise to prevent infinite waits (60 seconds)
-    const timeoutPromise = new Promise<void>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error(`Timeout waiting for pending inject on ${session} after 60s`));
-      }, 60000);
-    });
-
-    try {
-      await Promise.race([pending.promise, timeoutPromise]);
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      if (errMsg.includes('Timeout')) {
-        logger.warn(`[sessions] ${errMsg} - proceeding with new inject`);
-        // Cancel the stuck inject and proceed
-        pending.abortController.abort();
-        pendingInjects.delete(session);
-      }
-      // Ignore other errors from previous inject
-    }
+export function getQueueStats(session?: string) {
+  if (session) {
+    return queueManager.getStats(session);
   }
+  return queueManager.getAllStats();
 }
 
 export interface Session {
@@ -272,79 +274,30 @@ export function readConversationLog(name: string, limit?: number): ConversationE
   return entries;
 }
 
-export interface InjectOptions {
-  silent?: boolean;
-  onStream?: StreamCallback;
-  from?: string;
-  channel?: ChannelRef;
-  images?: string[];  // URLs of images to include in the message
-  /**
-   * Security source for this injection.
-   * If not provided, defaults to CLI source (owner trust level).
-   * Plugins and P2P should always provide this for proper security enforcement.
-   */
-  source?: InjectionSource;
-  /**
-   * Control which context providers to use.
-   * - undefined: use all enabled providers (default)
-   * - string[]: only use these named providers (e.g., ['skills', 'bootstrap_files'])
-   *
-   * Tip: Use ['skills', 'bootstrap_files', 'session_system'] to get system context
-   * but skip conversation_history and channel_history (when plugin handles its own context).
-   */
-  contextProviders?: string[];
-}
-
-export interface InjectResult {
-  response: string;
-  sessionId: string;
-  cost: number;
-}
-
-export interface MultimodalMessage {
-  text: string;
-  images?: string[];  // URLs of images
-}
+// Re-export types from queue module for backwards compatibility
+export type { InjectOptions, InjectResult, MultimodalMessage } from "./queue/types.js";
 
 export async function inject(
   name: string,
   message: string | MultimodalMessage,
   options?: InjectOptions
 ): Promise<InjectResult> {
-  // SERIALIZATION: Wait for any pending inject on this session to complete
-  await waitForPendingInject(name);
-  
-  // Create abort controller for cancellation
-  const abortController = new AbortController();
-  const abortSignal = abortController.signal;
-  
-  // Create the inject promise
-  const injectPromise = executeInject(name, message, options, abortSignal);
-  
-  // Track this pending inject
-  pendingInjects.set(name, {
-    promise: injectPromise,
-    abortController,
-    startTime: Date.now(),
-  });
-  
-  try {
-    const result = await injectPromise;
-    return result;
-  } finally {
-    // Clean up pending inject
-    pendingInjects.delete(name);
-  }
+  // Initialize queue system on first inject
+  initQueue();
+
+  // Queue handles everything: FIFO ordering, V2 injection, cancellation
+  return queueManager.inject(name, message, options);
 }
 
 /**
- * Internal inject execution
+ * Internal inject execution - called by queue manager
+ * @internal
  */
-async function executeInject(
+async function executeInjectInternal(
   name: string,
   message: string | MultimodalMessage,
-  options?: InjectOptions,
-  abortSignal?: AbortSignal
+  options: InjectOptions | undefined,
+  abortSignal: AbortSignal
 ): Promise<InjectResult> {
   const sessions = getSessions();
   const existingSessionId = sessions[name];
@@ -544,8 +497,35 @@ async function executeInject(
   let q: any = createQuery(existingSessionId);
   let sessionResumeRetried = false;
 
+  // Idle timeout - if no message received for 10 minutes, abort
+  const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+
+  // Helper to iterate with idle timeout
+  async function* withIdleTimeout<T>(iter: AsyncIterable<T>, timeoutMs: number, signal?: AbortSignal): AsyncGenerator<T> {
+    const iterator = iter[Symbol.asyncIterator]();
+    while (true) {
+      if (signal?.aborted) {
+        throw new Error("Inject cancelled");
+      }
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Idle timeout: no message received for ${timeoutMs / 1000}s`)), timeoutMs);
+      });
+
+      try {
+        const result = await Promise.race([iterator.next(), timeoutPromise]);
+        if (result.done) break;
+        yield result.value;
+      } catch (e) {
+        // Try to clean up the iterator
+        iterator.return?.();
+        throw e;
+      }
+    }
+  }
+
   try {
-  for await (const msg of q) {
+  for await (const msg of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal) as AsyncGenerator<any>) {
     // Check for cancellation
     if (abortSignal?.aborted) {
       logger.info(`[wopr] Inject cancelled mid-stream for session: ${name}`);
@@ -632,8 +612,8 @@ async function executeInject(
       // Create new query without resume
       q = createQuery(undefined);
 
-      // Re-iterate with new query
-      for await (const msg of q) {
+      // Re-iterate with new query (also with idle timeout)
+      for await (const msg of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal) as AsyncGenerator<any>) {
         if (abortSignal?.aborted) {
           throw new Error("Inject cancelled");
         }
