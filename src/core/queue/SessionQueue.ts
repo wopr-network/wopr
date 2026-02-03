@@ -206,6 +206,9 @@ export class SessionQueue {
       });
 
       try {
+        // No hard timeout here - the executor has its own idle timeout
+        // that resets on each message. This allows long-running injects
+        // as long as they're making progress.
         const result = await this.executeInject(
           this.sessionKey,
           item.message,

@@ -497,8 +497,35 @@ async function executeInjectInternal(
   let q: any = createQuery(existingSessionId);
   let sessionResumeRetried = false;
 
+  // Idle timeout - if no message received for 10 minutes, abort
+  const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+
+  // Helper to iterate with idle timeout
+  async function* withIdleTimeout<T>(iter: AsyncIterable<T>, timeoutMs: number, signal?: AbortSignal): AsyncGenerator<T> {
+    const iterator = iter[Symbol.asyncIterator]();
+    while (true) {
+      if (signal?.aborted) {
+        throw new Error("Inject cancelled");
+      }
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Idle timeout: no message received for ${timeoutMs / 1000}s`)), timeoutMs);
+      });
+
+      try {
+        const result = await Promise.race([iterator.next(), timeoutPromise]);
+        if (result.done) break;
+        yield result.value;
+      } catch (e) {
+        // Try to clean up the iterator
+        iterator.return?.();
+        throw e;
+      }
+    }
+  }
+
   try {
-  for await (const msg of q) {
+  for await (const msg of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal) as AsyncGenerator<any>) {
     // Check for cancellation
     if (abortSignal?.aborted) {
       logger.info(`[wopr] Inject cancelled mid-stream for session: ${name}`);
@@ -585,8 +612,8 @@ async function executeInjectInternal(
       // Create new query without resume
       q = createQuery(undefined);
 
-      // Re-iterate with new query
-      for await (const msg of q) {
+      // Re-iterate with new query (also with idle timeout)
+      for await (const msg of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal) as AsyncGenerator<any>) {
         if (abortSignal?.aborted) {
           throw new Error("Inject cancelled");
         }
