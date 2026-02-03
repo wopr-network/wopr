@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { exec } from "child_process";
 import { promisify } from "util";
 import { SESSIONS_DIR, GLOBAL_IDENTITY_DIR, WOPR_HOME } from "../paths.js";
-import { MemoryIndexManager } from "../memory/index.js";
+import { MemoryIndexManager, parseTemporalFilter } from "../memory/index.js";
 import { config as centralConfig } from "./config.js";
 import {
   getCrons,
@@ -693,12 +693,8 @@ export function getA2AMcpServer(sessionName: string): any {
         globalDir: GLOBAL_IDENTITY_DIR,
         sessionDir: sessionDir,
         config: {
-          provider: memoryConfig.provider || "auto",
-          model: memoryConfig.model || "text-embedding-3-small",
-          remote: memoryConfig.remote,
           store: {
             path: join(WOPR_HOME, "memory", "index.sqlite"),
-            vector: { enabled: true },
           },
         },
       });
@@ -709,18 +705,42 @@ export function getA2AMcpServer(sessionName: string): any {
   tools.push(
     tool(
       "memory_search",
-      "Semantically search memory files using vector embeddings and hybrid BM25 keyword search. Searches both global identity and session-specific files.",
+      "Search memory files. Uses FTS5 keyword search by default; semantic/vector search available via wopr-plugin-memory-semantic. Supports temporal filtering.",
       {
-        query: z.string().describe("Search query - uses semantic similarity to find relevant content"),
+        query: z.string().describe("Search query"),
         maxResults: z.number().optional().describe("Maximum results (default: 10)"),
-        minScore: z.number().optional().describe("Minimum relevance score 0-1 (default: 0.35)")
+        minScore: z.number().optional().describe("Minimum relevance score 0-1 (default: 0.35)"),
+        temporal: z.string().optional().describe("Time filter: relative (\"24h\", \"7d\", \"2w\", \"1m\", \"last 3 days\") or date range (\"2026-01-01\", \"2026-01-01 to 2026-01-05\")")
       },
       async (args) => {
-        const { query, maxResults = 10, minScore = 0.35 } = args;
+        const { query, maxResults = 10, minScore = 0.35, temporal: temporalExpr } = args;
+
+        // Parse temporal filter if provided
+        const parsedTemporal = temporalExpr ? parseTemporalFilter(temporalExpr) : null;
+        if (temporalExpr && !parsedTemporal) {
+          return { content: [{ type: "text", text: `Invalid temporal filter "${temporalExpr}". Examples: "24h", "7d", "last 3 days", "2026-01-01", "2026-01-01 to 2026-01-05"` }] };
+        }
+        const temporal = parsedTemporal ?? undefined;
 
         try {
-          const manager = await getMemoryManager();
-          let results = await manager.search(query, { maxResults: maxResults * 2, minScore });
+          // Allow plugins to provide results via hook
+          const hookPayload = {
+            query,
+            maxResults,
+            minScore,
+            temporal,
+            sessionName,
+            results: null as any[] | null,
+          };
+
+          // Emit hook - plugins can set results
+          await eventBus.emit("memory:search", hookPayload);
+
+          // Use plugin results if provided, otherwise fall back to core FTS5
+          let results = hookPayload.results ?? await (async () => {
+            const manager = await getMemoryManager();
+            return manager.search(query, { maxResults: maxResults * 2, minScore, temporal });
+          })();
 
           // Filter session transcript results based on indexable permissions
           const ctx = getContext(sessionName);
@@ -728,7 +748,7 @@ export function getA2AMcpServer(sessionName: string): any {
           const secConfig = getSecurityConfig();
           const indexablePatterns = getSessionIndexable(secConfig, sessionName, trustLevel);
 
-          results = results.filter((r) => {
+          results = results.filter((r: any) => {
             // Non-session sources are always visible
             if (r.source !== "sessions") {
               return true;
@@ -743,14 +763,16 @@ export function getA2AMcpServer(sessionName: string): any {
           }).slice(0, maxResults);
 
           if (results.length === 0) {
-            return { content: [{ type: "text", text: `No matches found for "${query}"` }] };
+            const temporalNote = temporalExpr ? ` within time range "${temporalExpr}"` : "";
+            return { content: [{ type: "text", text: `No matches found for "${query}"${temporalNote}` }] };
           }
 
           const formatted = results.map((r, i) =>
             `[${i + 1}] ${r.source}/${r.path}:${r.startLine}-${r.endLine} (score: ${r.score.toFixed(2)})\n${r.snippet}`
           ).join("\n\n---\n\n");
 
-          return { content: [{ type: "text", text: `Found ${results.length} results:\n\n${formatted}` }] };
+          const temporalNote = temporalExpr ? ` (filtered by: ${temporalExpr})` : "";
+          return { content: [{ type: "text", text: `Found ${results.length} results${temporalNote}:\n\n${formatted}` }] };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           // Fallback to keyword-only search if embeddings fail

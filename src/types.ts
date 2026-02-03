@@ -533,6 +533,15 @@ export interface SystemShutdownEvent {
   code?: number;
 }
 
+// Memory events
+export interface MemorySearchEvent {
+  query: string;
+  maxResults: number;
+  minScore: number;
+  sessionName: string;
+  results: any[] | null;
+}
+
 /**
  * Event map - all core events and their payloads
  */
@@ -549,6 +558,7 @@ export interface WOPREventMap {
   "plugin:error": PluginErrorEvent;
   "config:change": ConfigChangeEvent;
   "system:shutdown": SystemShutdownEvent;
+  "memory:search": MemorySearchEvent;
   "*": WOPREvent;
 }
 

@@ -254,6 +254,8 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     }
 
     if (toRemove.length > 0) {
+      // Re-read to get any jobs added during execution (avoids race condition)
+      crons = getCrons();
       crons = crons.filter(c => !toRemove.includes(c.name));
       saveCrons(crons);
     }
