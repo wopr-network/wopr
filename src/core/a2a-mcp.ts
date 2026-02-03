@@ -685,10 +685,17 @@ export function getA2AMcpServer(sessionName: string): any {
   const getMemoryManager = async () => {
     if (!memoryManager) {
       const sessionDir = join(SESSIONS_DIR, sessionName);
+      // Get memory config from central config
+      const mainConfig = centralConfig.get();
+      const memoryConfig = (mainConfig as any).memory || {};
+
       memoryManager = await MemoryIndexManager.create({
         globalDir: GLOBAL_IDENTITY_DIR,
         sessionDir: sessionDir,
         config: {
+          provider: memoryConfig.provider || "auto",
+          model: memoryConfig.model || "text-embedding-3-small",
+          remote: memoryConfig.remote,
           store: {
             path: join(WOPR_HOME, "memory", "index.sqlite"),
             vector: { enabled: true },
