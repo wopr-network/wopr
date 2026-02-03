@@ -11,3 +11,4 @@ sessions/
 .env
 web/node_modules/
 /plugins/
+.pnpm-store
