@@ -255,6 +255,12 @@ export class WoprClient {
     });
   }
 
+  async reloadPlugin(name: string): Promise<void> {
+    await this.request(`/plugins/${encodeURIComponent(name)}/reload`, {
+      method: "POST",
+    });
+  }
+
   async searchPlugins(query: string): Promise<any[]> {
     const data = await this.request<{ results: any[] }>(`/plugins/search?q=${encodeURIComponent(query)}`);
     return data.results;
