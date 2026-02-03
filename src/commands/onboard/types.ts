@@ -26,6 +26,17 @@ export interface OnboardConfig {
   skills?: string[];
   plugins?: string[];
   voicePlugins?: string[];
+  external?: {
+    enabled?: boolean;
+    hostname?: string;
+    webhookUrl?: string;
+  };
+  github?: {
+    orgs?: string[];
+    webhookSecret?: string;
+    prReviewSession?: string;
+    releaseSession?: string;
+  };
   wizard?: {
     lastRunAt?: string;
     lastRunVersion?: string;
@@ -39,6 +50,8 @@ export interface OnboardOptions {
   workspace?: string;
   reset?: boolean;
   skipChannels?: boolean;
+  skipExternal?: boolean;
+  skipGithub?: boolean;
   skipSkills?: boolean;
   skipPlugins?: boolean;
   skipDaemon?: boolean;

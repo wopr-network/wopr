@@ -17,6 +17,8 @@ import { workspaceStep } from "./steps/05-workspace.js";
 import { providersStep } from "./steps/06-providers.js";
 import { channelsStep } from "./steps/07-channels.js";
 import { voiceStep } from "./steps/07b-voice.js";
+import { externalStep } from "./steps/07c-external.js";
+import { githubStep } from "./steps/07d-github.js";
 import { skillsStep } from "./steps/08-skills.js";
 import { daemonStep } from "./steps/09-daemon.js";
 import { finalizeStep } from "./steps/10-finalize.js";
@@ -30,7 +32,9 @@ const steps = [
   workspaceStep,
   providersStep,
   channelsStep,
-  voiceStep,  // Voice setup after channels
+  voiceStep,      // Voice setup after channels
+  externalStep,   // External access (Tailscale Funnel)
+  githubStep,     // GitHub webhook integration
   skillsStep,
   daemonStep,
   finalizeStep,
