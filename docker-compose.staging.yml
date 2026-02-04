@@ -1,0 +1,28 @@
+# WOPR Staging Environment
+# Builds from 'staging' branch, separate container/volume/port from production
+#
+# Usage:
+#   DISCORD_TOKEN_STAGING=<token> docker compose -f docker-compose.staging.yml up -d --build
+#
+# To rebuild on code changes:
+#   docker compose -f docker-compose.staging.yml build --no-cache && docker compose -f docker-compose.staging.yml up -d
+
+services:
+  wopr-staging:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wopr-staging
+    restart: unless-stopped
+    volumes:
+      - wopr-staging-data:/data
+      - ~/.claude:/claude-creds
+    environment:
+      - WOPR_HOME=/data
+      - WOPR_DAEMON_HOST=0.0.0.0
+      - DISCORD_TOKEN=${DISCORD_TOKEN_STAGING}
+    ports:
+      - "7438:7437"
+
+volumes:
+  wopr-staging-data:
