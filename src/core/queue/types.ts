@@ -11,6 +11,8 @@ export interface InjectOptions {
   silent?: boolean;
   onStream?: StreamCallback;
   from?: string;
+  /** Unique identifier for the sender (e.g., Discord user ID) */
+  senderId?: string;
   channel?: ChannelRef;
   images?: string[];
   source?: InjectionSource;

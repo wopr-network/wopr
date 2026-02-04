@@ -494,7 +494,7 @@ async function hasActiveSessionForKey(sessionKey: string): Promise<boolean> {
 async function injectIntoActiveSessionImpl(
   sessionKey: string,
   message: string,
-  options?: { from?: string; channel?: ChannelRef }
+  options?: { from?: string; senderId?: string; channel?: ChannelRef }
 ): Promise<void> {
   const client = await getProviderClientForSession(sessionKey);
 
@@ -546,14 +546,14 @@ function createPluginContext(
   return {
     inject: (session: string, message: string, options?: PluginInjectOptions) =>
       injectors.inject(session, message, options),
-    logMessage: (session: string, message: string, options?: { from?: string; channel?: ChannelRef }) =>
+    logMessage: (session: string, message: string, options?: { from?: string; senderId?: string; channel?: ChannelRef }) =>
       logMessageToSession(session, message, options),
     getSessions: injectors.getSessions,
     cancelInject: (session: string) => cancelSessionInject(session),
 
     // V2 Session API - for injecting into active sessions without queuing
     hasActiveSession: (session: string) => hasActiveSessionForKey(session),
-    injectIntoActiveSession: async (session: string, message: string, options?: { from?: string; channel?: ChannelRef }) => {
+    injectIntoActiveSession: async (session: string, message: string, options?: { from?: string; senderId?: string; channel?: ChannelRef }) => {
       return injectIntoActiveSessionImpl(session, message, options);
     },
 

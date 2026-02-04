@@ -722,7 +722,7 @@ export interface WOPRPluginContext {
 
   // Log a message to conversation history without triggering a response
   // Useful for capturing context from messages not directed at the bot
-  logMessage(session: string, message: string, options?: { from?: string; channel?: ChannelRef }): void;
+  logMessage(session: string, message: string, options?: { from?: string; senderId?: string; channel?: ChannelRef }): void;
 
   // Agent persona identity (from IDENTITY.md workspace file)
   getAgentIdentity(): AgentIdentity | Promise<AgentIdentity>;
@@ -875,6 +875,7 @@ export interface WOPRPluginContext {
    */
   injectIntoActiveSession?(session: string, message: string, options?: {
     from?: string;
+    senderId?: string;
     channel?: ChannelRef;
   }): Promise<void>;
 }
