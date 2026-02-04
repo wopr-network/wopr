@@ -5,6 +5,7 @@
  */
 import { confirm, note, spinner, text, select, pc } from "../prompts.js";
 import { execSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
 function exec(cmd: string): { stdout: string; success: boolean } {
@@ -141,7 +142,7 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   s.start(`Setting up webhook for ${selectedOrg}...`);
 
   const webhookUrl = `${external.webhookUrl}/github`;
-  const webhookSecret = `wopr-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const webhookSecret = randomBytes(32).toString("hex");
 
   const createCmd = `gh api orgs/${selectedOrg}/hooks -X POST \
     -f name=web \
@@ -194,9 +195,13 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
     "When PRs are opened or reviewed, events will be",
     `routed to ${prSession} for automated handling.`,
     "",
+    pc.dim("The webhook secret is stored in config for signature verification."),
     pc.dim("Update webhook config: wopr configure --plugin github"),
   ].join("\n"), "GitHub Integration Ready");
 
+  // Note: webhookSecret and prReviewSession are returned to OnboardConfig
+  // and saved to wopr.config.json. The wopr-plugin-github webhook handler
+  // reads these values from config for signature verification and routing.
   return {
     github: {
       orgs: [selectedOrg],

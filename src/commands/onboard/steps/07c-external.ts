@@ -102,7 +102,7 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
 
   // Check if funnel is enabled in ACL
   const funnelTest = exec("tailscale funnel status");
-  if (!funnelTest.success && funnelTest.stdout.includes("not enabled")) {
+  if (!funnelTest.success || funnelTest.stdout.includes("not enabled")) {
     s.stop("Funnel not enabled");
     await note([
       "Tailscale Funnel needs to be enabled in your tailnet.",
@@ -123,7 +123,18 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
 
   // Start funnel for webhook port
   const webhookPort = 7438;
-  exec(`tailscale funnel ${webhookPort}`);
+  const funnelResult = exec(`tailscale funnel ${webhookPort}`);
+  if (!funnelResult.success) {
+    s.stop("Failed to enable funnel");
+    await note([
+      "Could not enable Tailscale Funnel.",
+      "",
+      `Error: ${funnelResult.stdout}`,
+      "",
+      "Check your Tailscale configuration and try again.",
+    ].join("\n"), "Funnel Error");
+    return {};
+  }
 
   s.stop("Funnel enabled!");
 
