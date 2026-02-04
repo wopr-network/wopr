@@ -249,11 +249,12 @@ export function appendToConversationLog(name: string, entry: ConversationEntry):
 export function logMessage(
   session: string,
   content: string,
-  options?: { from?: string; channel?: any }
+  options?: { from?: string; senderId?: string; channel?: any }
 ): void {
   appendToConversationLog(session, {
     ts: Date.now(),
     from: options?.from || "unknown",
+    senderId: options?.senderId,
     content,
     type: "message",
     channel: options?.channel,
