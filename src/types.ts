@@ -45,6 +45,7 @@ export interface ChannelRef {
 export interface ConversationEntry {
   ts: number;              // Timestamp
   from: string;            // Username or "WOPR" or "system"
+  senderId?: string;       // Unique sender identifier (e.g., Discord user ID)
   content: string;         // Message content
   type: ConversationEntryType;
   channel?: ChannelRef;    // Optional channel metadata for traceability
