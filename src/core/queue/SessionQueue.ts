@@ -2,7 +2,7 @@
  * SessionQueue - FIFO queue for a single session
  *
  * Manages ordered execution of inject requests for one session.
- * Supports priority ordering, cancellation, and V2 active session injection.
+ * Supports priority ordering and cancellation.
  */
 
 import { logger } from "../../logger.js";
@@ -37,12 +37,6 @@ export class SessionQueue {
     abortSignal: AbortSignal
   ) => Promise<InjectResult>;
 
-  /** Optional V2 injector for active sessions */
-  private v2Injector?: (
-    sessionKey: string,
-    message: string | MultimodalMessage
-  ) => Promise<void>;
-
   constructor(
     sessionKey: string,
     executeInject: (
@@ -51,11 +45,9 @@ export class SessionQueue {
       options: InjectOptions | undefined,
       abortSignal: AbortSignal
     ) => Promise<InjectResult>,
-    v2Injector?: (sessionKey: string, message: string | MultimodalMessage) => Promise<void>
   ) {
     this.sessionKey = sessionKey;
     this.executeInject = executeInject;
-    this.v2Injector = v2Injector;
   }
 
   /**
@@ -108,50 +100,6 @@ export class SessionQueue {
       // Start processing if not already
       this.processNext();
     });
-  }
-
-  /**
-   * Try V2 injection into active session (if supported and active)
-   * Returns true if V2 injection succeeded, false if should use normal queue
-   */
-  async tryV2Inject(
-    message: string | MultimodalMessage,
-    options?: InjectOptions
-  ): Promise<{ success: boolean; result?: InjectResult }> {
-    // Check if V2 is enabled and there's an active session
-    if (!this.v2Injector || !this.active || options?.allowV2Inject === false) {
-      return { success: false };
-    }
-
-    try {
-      logger.info({
-        msg: "[queue] Attempting V2 inject into active session",
-        sessionKey: this.sessionKey,
-        activeInjectId: this.active.id,
-      });
-
-      await this.v2Injector(this.sessionKey, message);
-
-      this.emit({
-        type: "v2-inject",
-        sessionKey: this.sessionKey,
-        injectId: this.active.id,
-        timestamp: Date.now(),
-      });
-
-      // V2 inject doesn't return a response - it flows through the original stream
-      return {
-        success: true,
-        result: { response: "", sessionId: this.active.id, cost: 0 },
-      };
-    } catch (error) {
-      logger.warn({
-        msg: "[queue] V2 inject failed, will use normal queue",
-        sessionKey: this.sessionKey,
-        error: String(error),
-      });
-      return { success: false };
-    }
   }
 
   /**
@@ -333,15 +281,6 @@ export class SessionQueue {
         : undefined,
       oldestQueuedAt: this.queue[0]?.queuedAt,
     };
-  }
-
-  /**
-   * Set the active query generator (for V2 injection support)
-   */
-  setActiveQueryGenerator(generator: AsyncGenerator<unknown>): void {
-    if (this.active) {
-      this.active.queryGenerator = generator;
-    }
   }
 
   /**

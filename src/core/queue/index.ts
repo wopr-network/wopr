@@ -4,7 +4,6 @@
  * Provides FIFO queuing for inject operations with:
  * - Per-session promise chain queuing (no timeout-cancel!)
  * - Priority support
- * - V2 active session injection
  * - Cancellation support
  * - Event monitoring
  */

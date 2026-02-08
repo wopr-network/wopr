@@ -17,10 +17,6 @@ import {
   storeContext,
   clearContext,
 } from "../security/index.js";
-import {
-  emitInjection,
-  emitStream,
-} from "../plugins.js";
 import { providerRegistry } from "./providers.js";
 import {
   assembleContext,
@@ -104,16 +100,6 @@ function initQueue(): void {
   });
 
   logger.info("[sessions] Queue system initialized");
-}
-
-/**
- * Set the V2 injector for active session injection
- * Called by plugins.ts after initialization to avoid circular imports
- */
-export function setQueueV2Injector(
-  injector: (sessionKey: string, message: string | MultimodalMessage) => Promise<void>
-): void {
-  queueManager.setV2Injector(injector);
 }
 
 /**
@@ -286,7 +272,7 @@ export async function inject(
   // Initialize queue system on first inject
   initQueue();
 
-  // Queue handles everything: FIFO ordering, V2 injection, cancellation
+  // Queue handles everything: FIFO ordering, cancellation
   return queueManager.inject(name, message, options);
 }
 
@@ -435,9 +421,23 @@ async function executeInjectInternal(
   // Context from providers goes before the actual message for conversation flow
   // EXCEPT for slash commands - they must be at the start to be recognized by the SDK
   const isSlashCommand = processedMessage.trim().startsWith('/');
+
+  // Prefix message with sender identity so Claude knows who is speaking
+  // Format: "Username: message" (matches conversation_history format)
+  const senderPrefix = from && from !== "cli" && from !== "unknown" ? `${from}: ` : "";
+  const prefixedMessage = senderPrefix + processedMessage;
+
+  // DEBUG: Log what we're sending to Claude
+  logger.info({
+    msg: "DEBUG sender prefix",
+    from,
+    senderPrefix: senderPrefix || "(empty)",
+    messagePreview: prefixedMessage.slice(0, 100)
+  });
+
   const fullMessage = (assembled.context && !isSlashCommand)
-    ? `${assembled.context}\n\n${processedMessage}`
-    : processedMessage;
+    ? `${assembled.context}\n\n${prefixedMessage}`
+    : prefixedMessage;
   
   // System context is the assembled system + any session file context as fallback
   const fullContext = assembled.system || context || `You are WOPR session "${name}".`;
@@ -482,16 +482,10 @@ async function executeInjectInternal(
       mcpServers,
     };
 
-    // Check if provider supports V2 session API (for active session injection)
-    if (resolvedProvider.client.queryV2) {
-      logger.info(`[wopr] Using V2 session API for: ${name}`);
-      return resolvedProvider.client.queryV2({
-        ...queryOpts,
-        sessionKey: name,  // WOPR's session identifier
-      });
-    }
-
-    // Fall back to V1 query
+    // Use V1 query with resume + includePartialMessages for incremental streaming.
+    // V2 sessions don't support includePartialMessages, so text arrives all at once.
+    // V1 with resume gives us both session persistence AND progressive streaming.
+    logger.info(`[wopr] Using V1 query (streaming) for: ${name}${resumeSessionId ? ` (resume: ${resumeSessionId})` : ''}`);
     return resolvedProvider.client.query(queryOpts);
   };
 
@@ -554,20 +548,31 @@ async function executeInjectInternal(
             metadata: msg.compact_metadata || msg.metadata || undefined
           };
           if (onStream) onStream(streamMsg);
-          emitStream(name, from, streamMsg);
+
         }
         break;
+      case "stream_event": {
+        // Incremental streaming: extract text deltas from partial messages
+        const event = (msg as any).event;
+        if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+          const delta = event.delta.text;
+          if (delta) {
+            const streamMsg: StreamMessage = { type: "text", content: delta };
+            if (onStream) onStream(streamMsg);
+  
+          }
+        }
+        break;
+      }
       case "assistant":
+        // With includePartialMessages, text was already streamed incrementally via stream_event.
+        // Here we just collect the final text for the result and handle tool_use blocks.
         logger.info(`[inject] Processing assistant msg, content blocks: ${msg.message?.content?.length || 0}`);
         for (const block of msg.message.content) {
           logger.info(`[inject]   Block type: ${block.type}`);
           if (block.type === "text") {
             collected.push(block.text);
-            if (!silent) logger.info(block.text);
-            const streamMsg: StreamMessage = { type: "text", content: block.text };
-            if (onStream) onStream(streamMsg);
-            emitStream(name, from, streamMsg);
-            // Emit new event bus event for response chunks
+            // Emit the response chunk event (for memory capture etc.) but don't re-stream to Discord
             await emitSessionResponseChunk(name, messageText, collected.join(""), from, block.text);
           } else if (block.type === "tool_use") {
             // MCP server handles tool execution automatically
@@ -575,7 +580,7 @@ async function executeInjectInternal(
             if (!silent) logger.info(`[tool] ${block.name}`);
             const streamMsg: StreamMessage = { type: "tool_use", content: "", toolName: block.name };
             if (onStream) onStream(streamMsg);
-            emitStream(name, from, streamMsg);
+  
           }
         }
         break;
@@ -585,7 +590,7 @@ async function executeInjectInternal(
           if (!silent) logger.info(`\n[wopr] Complete (${providerUsed}). Cost: $${cost.toFixed(4)}`);
           const streamMsg: StreamMessage = { type: "complete", content: `Cost: $${cost.toFixed(4)}` };
           if (onStream) onStream(streamMsg);
-          emitStream(name, from, streamMsg);
+
         } else {
           if (!silent) logger.error(`[wopr] Error: ${msg.subtype}`);
           if (msg.errors) {
@@ -596,7 +601,7 @@ async function executeInjectInternal(
           }
           const streamMsg: StreamMessage = { type: "error", content: msg.subtype };
           if (onStream) onStream(streamMsg);
-          emitStream(name, from, streamMsg);
+
         }
         break;
     }
@@ -636,22 +641,30 @@ async function executeInjectInternal(
                 metadata: msg.compact_metadata || msg.metadata || undefined
               };
               if (onStream) onStream(streamMsg);
-              emitStream(name, from, streamMsg);
+    
             }
             break;
+          case "stream_event": {
+            const event = (msg as any).event;
+            if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+              const delta = event.delta.text;
+              if (delta) {
+                const streamMsg: StreamMessage = { type: "text", content: delta };
+                if (onStream) onStream(streamMsg);
+      
+              }
+            }
+            break;
+          }
           case "assistant":
             for (const block of msg.message.content) {
               if (block.type === "text") {
                 collected.push(block.text);
-                if (!silent) logger.info(block.text);
-                const streamMsg: StreamMessage = { type: "text", content: block.text };
-                if (onStream) onStream(streamMsg);
-                emitStream(name, from, streamMsg);
               } else if (block.type === "tool_use") {
                 if (!silent) logger.info(`[tool] ${block.name}`);
                 const streamMsg: StreamMessage = { type: "tool_use", content: "", toolName: block.name };
                 if (onStream) onStream(streamMsg);
-                emitStream(name, from, streamMsg);
+      
               }
             }
             break;
@@ -701,8 +714,6 @@ async function executeInjectInternal(
     });
   }
 
-  // Emit final injection event for plugins that want complete responses
-  emitInjection(name, from, messageText, response);
 
   // Update last trigger timestamp for progressive context
   // This marks the end of this interaction, so next trigger gets context since now

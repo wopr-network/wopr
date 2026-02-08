@@ -2,7 +2,7 @@ import { logger } from "./logger.js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
 import { join, resolve } from "path";
 import { execSync } from "child_process";
-import { EventEmitter } from "events";
+
 import { config as centralConfig } from "./core/config.js";
 import {
   WOPRPlugin,
@@ -11,11 +11,6 @@ import {
   InstalledPlugin,
   PluginRegistryEntry,
   PluginLogger,
-  InjectionHandler,
-  StreamHandler,
-  SessionStreamEvent,
-  StreamMessage,
-  StreamCallback,
   ChannelAdapter,
   ChannelRef,
   WebUiExtension,
@@ -36,7 +31,7 @@ import {
 } from "./core/channels.js";
 import { registerA2ATool } from "./core/a2a-mcp.js";
 import { z } from "zod";
-import { logMessage as logMessageToSession, cancelInject as cancelSessionInject, getSessionProvider, setQueueV2Injector } from "./core/sessions.js";
+import { logMessage as logMessageToSession, cancelInject as cancelSessionInject } from "./core/sessions.js";
 import {
   registerContextProvider as registerCtxProvider,
   unregisterContextProvider as unregisterCtxProvider,
@@ -65,15 +60,12 @@ import {
   ensureRequirements,
   formatMissingRequirements,
 } from "./plugins/requirements.js";
-
 import { homedir } from "os";
 const WOPR_HOME = process.env.WOPR_HOME || join(homedir(), "wopr");
 const PLUGINS_DIR = join(WOPR_HOME, "plugins");
 const PLUGINS_FILE = join(WOPR_HOME, "plugins.json");
 const REGISTRIES_FILE = join(WOPR_HOME, "plugin-registries.json");
 
-// Event emitter for injection events
-const pluginEvents = new EventEmitter();
 
 // Loaded plugins (runtime)
 const loadedPlugins: Map<string, { plugin: WOPRPlugin; context: WOPRPluginContext }> = new Map();
@@ -427,110 +419,6 @@ function addInstalledPlugin(plugin: InstalledPlugin): void {
 }
 
 // ============================================================================
-// V2 Session API Helpers
-// ============================================================================
-
-// Cache of resolved providers by session key (to avoid repeated resolution)
-const resolvedProviderCache = new Map<string, { client: any; resolvedAt: number }>();
-const PROVIDER_CACHE_TTL = 60000; // 1 minute
-
-async function getProviderClientForSession(sessionKey: string): Promise<any | null> {
-  // Check cache first
-  const cached = resolvedProviderCache.get(sessionKey);
-  if (cached && Date.now() - cached.resolvedAt < PROVIDER_CACHE_TTL) {
-    return cached.client;
-  }
-
-  // Get provider config for this session
-  const providerConfig = getSessionProvider(sessionKey);
-  if (!providerConfig) {
-    return null;
-  }
-
-  try {
-    const resolved = await providerRegistry.resolveProvider(providerConfig);
-    resolvedProviderCache.set(sessionKey, { client: resolved.client, resolvedAt: Date.now() });
-    return resolved.client;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if a session has an active V2 streaming response in progress.
- * Returns true only if the provider supports V2 AND has an active session.
- *
- * Note: This is async to ensure cache is populated before checking.
- * First call for a session may be slower, but ensures accurate results.
- */
-async function hasActiveSessionForKey(sessionKey: string): Promise<boolean> {
-  // Try cache first for performance
-  const cached = resolvedProviderCache.get(sessionKey);
-  if (cached && Date.now() - cached.resolvedAt < PROVIDER_CACHE_TTL) {
-    const client = cached.client;
-    if (client?.hasActiveSession) {
-      return client.hasActiveSession(sessionKey);
-    }
-    return false;
-  }
-
-  // Cache miss or expired - resolve and populate cache
-  try {
-    const client = await getProviderClientForSession(sessionKey);
-    if (client?.hasActiveSession) {
-      return client.hasActiveSession(sessionKey);
-    }
-  } catch {
-    // Provider resolution failed - no active session
-  }
-  return false;
-}
-
-/**
- * Inject a message into an actively streaming V2 session.
- * The message is sent via session.send() and responses flow through
- * the existing stream.
- */
-async function injectIntoActiveSessionImpl(
-  sessionKey: string,
-  message: string,
-  options?: { from?: string; senderId?: string; channel?: ChannelRef }
-): Promise<void> {
-  const client = await getProviderClientForSession(sessionKey);
-
-  if (!client) {
-    throw new Error(`No provider found for session: ${sessionKey}`);
-  }
-
-  if (!client.sendToActiveSession) {
-    throw new Error(`Provider does not support V2 sendToActiveSession for session: ${sessionKey}`);
-  }
-
-  if (!client.hasActiveSession?.(sessionKey)) {
-    throw new Error(`No active V2 session for key: ${sessionKey}`);
-  }
-
-  logger.info(`[plugins] Injecting into active V2 session: ${sessionKey} from: ${options?.from || 'unknown'}`);
-  await client.sendToActiveSession(sessionKey, message);
-}
-
-// Wire up the queue's V2 injector path (deferred to avoid circular import issues)
-// This allows the core queue to automatically try V2 injection for active sessions
-process.nextTick(() => {
-  setQueueV2Injector(async (sessionKey: string, message: string | { text: string; images?: string[] }) => {
-    // Check if there's an active session first
-    const hasActive = await hasActiveSessionForKey(sessionKey);
-    if (!hasActive) {
-      throw new Error(`No active V2 session for key: ${sessionKey}`);
-    }
-    // Extract text from multimodal message if needed
-    const messageText = typeof message === 'string' ? message : message.text;
-    await injectIntoActiveSessionImpl(sessionKey, messageText);
-  });
-  logger.info("[plugins] Queue V2 injector wired up");
-});
-
-// ============================================================================
 // Plugin Context Creation
 // ============================================================================
 
@@ -550,20 +438,6 @@ function createPluginContext(
       logMessageToSession(session, message, options),
     getSessions: injectors.getSessions,
     cancelInject: (session: string) => cancelSessionInject(session),
-
-    // V2 Session API - for injecting into active sessions without queuing
-    hasActiveSession: (session: string) => hasActiveSessionForKey(session),
-    injectIntoActiveSession: async (session: string, message: string, options?: { from?: string; senderId?: string; channel?: ChannelRef }) => {
-      return injectIntoActiveSessionImpl(session, message, options);
-    },
-
-    on(event: "injection" | "stream", handler: InjectionHandler | StreamHandler) {
-      pluginEvents.on(event, handler);
-    },
-
-    off(event: "injection" | "stream", handler: InjectionHandler | StreamHandler) {
-      pluginEvents.off(event, handler);
-    },
 
     // Event bus - reactive primitive for plugin composition
     events: createPluginEventBus(pluginName),
@@ -1310,17 +1184,6 @@ export async function discoverVoicePlugins(): Promise<{
   };
 }
 
-// ============================================================================
-// Event Emitters
-// ============================================================================
-
-export function emitInjection(session: string, from: string, message: string, response: string) {
-  pluginEvents.emit("injection", session, from, message, response);
-}
-
-export function emitStream(session: string, from: string, message: StreamMessage) {
-  pluginEvents.emit("stream", { session, from, message });
-}
 
 // ============================================================================
 // Context Providers

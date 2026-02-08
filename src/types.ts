@@ -454,11 +454,6 @@ export interface PluginInjectOptions {
    */
   contextProviders?: string[];
   /**
-   * If true, allow V2 injection into active streams (default: true).
-   * Set to false if the plugin handles V2 injection itself.
-   */
-  allowV2Inject?: boolean;
-  /**
    * Priority level (higher = processed first within queue)
    */
   priority?: number;
@@ -548,6 +543,24 @@ export interface SystemShutdownEvent {
 }
 
 // Memory events
+export interface MemoryFileChange {
+  action: "upsert" | "delete";
+  path: string;
+  absPath?: string;
+  source: "global" | "session" | "sessions";
+  chunks?: Array<{
+    id: string;
+    text: string;
+    hash: string;
+    startLine: number;
+    endLine: number;
+  }>;
+}
+
+export interface MemoryFilesChangedEvent {
+  changes: MemoryFileChange[];
+}
+
 export interface MemorySearchEvent {
   query: string;
   maxResults: number;
@@ -573,6 +586,7 @@ export interface WOPREventMap {
   "config:change": ConfigChangeEvent;
   "system:shutdown": SystemShutdownEvent;
   "memory:search": MemorySearchEvent;
+  "memory:filesChanged": MemoryFilesChangedEvent;
   "*": WOPREvent;
 }
 
@@ -738,12 +752,6 @@ export interface WOPRPluginContext {
   // Returns true if there was an injection to cancel, false otherwise
   cancelInject(session: string): boolean;
 
-  // Events - when sessions receive injections (deprecated, use events API)
-  on(event: "injection", handler: InjectionHandler): void;
-  on(event: "stream", handler: StreamHandler): void;
-  off(event: "injection", handler: InjectionHandler): void;
-  off(event: "stream", handler: StreamHandler): void;
-
   /**
    * Event bus for reactive plugin composition.
    * Exposes primitives - plugins compose their own behaviors.
@@ -854,48 +862,8 @@ export interface WOPRPluginContext {
   // Access to plugin directory
   getPluginDir(): string;
 
-  // =========================================================================
-  // V2 Session API - for injecting into active sessions without queuing
-  // =========================================================================
-
-  /**
-   * Check if a session has an active V2 streaming response in progress.
-   * When true, injectIntoActiveSession() can be used to inject messages
-   * without waiting for the current response to complete.
-   *
-   * Note: This is async to ensure provider cache is populated before checking.
-   */
-  hasActiveSession?(session: string): Promise<boolean>;
-
-  /**
-   * Inject a message into an actively streaming session.
-   * The message is sent via session.send() and responses flow through
-   * the existing stream - no new stream is created.
-   *
-   * @throws Error if no active session exists (use hasActiveSession() first)
-   */
-  injectIntoActiveSession?(session: string, message: string, options?: {
-    from?: string;
-    senderId?: string;
-    channel?: ChannelRef;
-  }): Promise<void>;
 }
 
-export type InjectionHandler = (
-  session: string,
-  from: string, // peer pubkey or "local"
-  message: string,
-  response: string
-) => void;
-
-// Streaming event - emitted as chunks arrive
-export interface SessionStreamEvent {
-  session: string;
-  from: string; // "cli" | "cron" | "p2p" | peer pubkey
-  message: StreamMessage;
-}
-
-export type StreamHandler = (event: SessionStreamEvent) => void;
 
 export interface PluginLogger {
   info(message: string, ...args: any[]): void;

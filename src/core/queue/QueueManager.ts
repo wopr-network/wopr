@@ -28,12 +28,6 @@ export class QueueManager {
     abortSignal: AbortSignal
   ) => Promise<InjectResult>;
 
-  /** Optional V2 injector - set via setV2Injector */
-  private v2Injector?: (
-    sessionKey: string,
-    message: string | MultimodalMessage
-  ) => Promise<void>;
-
   /**
    * Set the inject executor function
    * Must be called before any inject operations
@@ -51,17 +45,6 @@ export class QueueManager {
   }
 
   /**
-   * Set the V2 injector for active session injection
-   * Optional - if not set, V2 injection is disabled
-   */
-  setV2Injector(
-    injector: (sessionKey: string, message: string | MultimodalMessage) => Promise<void>
-  ): void {
-    this.v2Injector = injector;
-    logger.info("[queue-manager] V2 injector set");
-  }
-
-  /**
    * Get or create a queue for a session
    */
   private getQueue(sessionKey: string): SessionQueue {
@@ -71,7 +54,7 @@ export class QueueManager {
 
     let queue = this.queues.get(sessionKey);
     if (!queue) {
-      queue = new SessionQueue(sessionKey, this.executeInject, this.v2Injector);
+      queue = new SessionQueue(sessionKey, this.executeInject);
 
       // Forward events to global handlers
       queue.on((event) => {
@@ -100,16 +83,6 @@ export class QueueManager {
     options?: InjectOptions
   ): Promise<InjectResult> {
     const queue = this.getQueue(sessionKey);
-
-    // Try V2 injection first if there's an active session
-    if (queue.isActive() && options?.allowV2Inject !== false) {
-      const v2Result = await queue.tryV2Inject(message, options);
-      if (v2Result.success && v2Result.result) {
-        return v2Result.result;
-      }
-    }
-
-    // Normal queue path
     return queue.enqueue(message, options);
   }
 
@@ -199,15 +172,6 @@ export class QueueManager {
       }
     }
     return stats;
-  }
-
-  /**
-   * Set the active query generator for V2 support
-   * Called by the inject executor when starting a query
-   */
-  setActiveQueryGenerator(sessionKey: string, generator: AsyncGenerator<unknown>): void {
-    const queue = this.queues.get(sessionKey);
-    queue?.setActiveQueryGenerator(generator);
   }
 
   /**
