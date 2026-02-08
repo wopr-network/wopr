@@ -96,6 +96,24 @@ export interface MemorySearchEvent {
   results: any[] | null;
 }
 
+export interface MemoryFileChange {
+  action: "upsert" | "delete";
+  path: string;
+  absPath?: string;
+  source: "global" | "session" | "sessions";
+  chunks?: Array<{
+    id: string;
+    text: string;
+    hash: string;
+    startLine: number;
+    endLine: number;
+  }>;
+}
+
+export interface MemoryFilesChangedEvent {
+  changes: MemoryFileChange[];
+}
+
 // ============================================================================
 // Event Map - defines all core events and their payloads
 // ============================================================================
@@ -125,6 +143,7 @@ export interface WOPREventMap {
 
   // Memory events (for plugin enhancement)
   "memory:search": MemorySearchEvent;
+  "memory:filesChanged": MemoryFilesChangedEvent;
 
   // Wildcard - catch all
   "*": WOPREvent;
@@ -277,9 +296,25 @@ class WOPREventBusImpl implements WOPREventBus {
     source: string = "core"
   ): Promise<void> {
     const meta = { timestamp: Date.now(), source };
-    
-    // Emit specific event
-    this.emitter.emit(event as string, payload, meta);
+
+    // Collect promises from async handlers so we can await them
+    const promises: Promise<void>[] = [];
+    const listeners = this.emitter.listeners(event as string);
+    const isFilesChanged = (event as string) === "memory:filesChanged";
+    if (isFilesChanged) {
+      const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+      console.log(`[events] memory:filesChanged: ${listeners.length} handlers, heap=${heapMB}MB`);
+    }
+    for (let i = 0; i < listeners.length; i++) {
+      if (isFilesChanged) {
+        const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+        console.log(`[events] memory:filesChanged handler ${i}/${listeners.length} starting (heap=${heapMB}MB)`);
+      }
+      const result = (listeners[i] as Function)(payload, meta);
+      if (result && typeof result.then === "function") {
+        promises.push(result);
+      }
+    }
 
     // Also emit wildcard event for catch-all listeners
     const wildcardEvent: WOPREvent = {
@@ -288,7 +323,32 @@ class WOPREventBusImpl implements WOPREventBus {
       timestamp: meta.timestamp,
       source,
     };
-    this.emitter.emit("*", wildcardEvent, meta);
+    const wildcardListeners = this.emitter.listeners("*");
+    for (const listener of wildcardListeners) {
+      const result = (listener as Function)(wildcardEvent, meta);
+      if (result && typeof result.then === "function") {
+        promises.push(result);
+      }
+    }
+
+    // Await all async handlers
+    if (isFilesChanged) {
+      const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+      console.log(`[events] memory:filesChanged: awaiting ${promises.length} async handlers (heap=${heapMB}MB)`);
+    }
+    if (promises.length > 0) {
+      for (let i = 0; i < promises.length; i++) {
+        if (isFilesChanged) {
+          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+          console.log(`[events] memory:filesChanged: awaiting handler ${i}/${promises.length} (heap=${heapMB}MB)`);
+        }
+        await promises[i];
+        if (isFilesChanged) {
+          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+          console.log(`[events] memory:filesChanged: handler ${i} done (heap=${heapMB}MB)`);
+        }
+      }
+    }
 
     logger.debug(`[events] Emitted: ${event as string} (source: ${source})`);
   }

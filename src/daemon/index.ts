@@ -29,6 +29,7 @@ import { setupWebSocket, handleWebSocketMessage, handleWebSocketClose, broadcast
 import { getCrons, saveCrons, shouldRunCron, addCronHistory } from "../core/cron.js";
 import { inject } from "../core/sessions.js";
 import { loadAllPlugins, shutdownAllPlugins } from "../plugins.js";
+import { registerPluginExtension } from "../plugins.js";
 import type { StreamCallback } from "../types.js";
 
 // Provider registry imports
@@ -36,6 +37,21 @@ import { providerRegistry } from "../core/providers.js";
 
 const DEFAULT_PORT = parseInt(process.env.WOPR_DAEMON_PORT || "7437");
 const DEFAULT_HOST = process.env.WOPR_DAEMON_HOST || "127.0.0.1";
+
+// Global error handlers - prevent crash on unhandled errors
+process.on("uncaughtException", (error) => {
+  winstonLogger.error(`[daemon] Uncaught exception: ${error.message}`);
+  winstonLogger.error(`[daemon] Stack: ${error.stack}`);
+  // Don't exit - log and continue
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
+  winstonLogger.error(`[daemon] Unhandled rejection: ${msg}`);
+  if (stack) winstonLogger.error(`[daemon] Stack: ${stack}`);
+  // Don't exit - log and continue
+});
 
 export interface DaemonConfig {
   port?: number;
@@ -76,9 +92,16 @@ export function daemonLog(msg: string): void {
   writeFileSync(LOG_FILE, `[${timestamp}] ${msg}\n`, { flag: "a" });
 }
 
+function heapMB(): string {
+  const m = process.memoryUsage();
+  return `heap=${Math.round(m.heapUsed / 1024 / 1024)}MB rss=${Math.round(m.rss / 1024 / 1024)}MB`;
+}
+
 export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const port = config.port ?? DEFAULT_PORT;
   const host = config.host ?? DEFAULT_HOST;
+
+  daemonLog(`[heap] startup: ${heapMB()}`);
 
   // Load config from disk first
   await centralConfig.load();
@@ -159,8 +182,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     },
   };
 
-  // Load plugins (this is where providers register themselves)
-  await loadAllPlugins(injectors);
+  daemonLog(`[heap] before memory hooks: ${heapMB()}`);
 
   // Initialize memory system hooks (session save on destroy)
   try {
@@ -169,6 +191,54 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     daemonLog("Memory system hooks initialized");
   } catch (err) {
     daemonLog(`Warning: Memory hooks initialization failed: ${err}`);
+  }
+
+  daemonLog(`[heap] after memory hooks: ${heapMB()}`);
+
+  // Expose memory SQLite to plugins — they handle their own columns
+  try {
+    const { WOPR_HOME } = await import("../paths.js");
+    const { join } = await import("path");
+    const { createRequire } = await import("node:module");
+    const _require = createRequire(import.meta.url);
+    const { DatabaseSync } = _require("node:sqlite");
+    const dbPath = join(WOPR_HOME, "memory", "index.sqlite");
+    registerPluginExtension("core", "memory:db", new DatabaseSync(dbPath));
+    daemonLog("Memory SQLite exposed to plugins as core.memory:db");
+  } catch (err) {
+    daemonLog(`Warning: Memory db extension setup failed: ${err}`);
+  }
+
+  daemonLog(`[heap] before plugins: ${heapMB()}`);
+
+  // Load plugins (this is where providers register themselves)
+  await loadAllPlugins(injectors);
+
+  daemonLog(`[heap] after plugins: ${heapMB()}`);
+
+  // Run initial memory sync — emits memory:filesChanged so plugins (e.g. semantic) can index
+  // Only indexes global/session memory files, NOT session transcripts (those are huge and cause OOM)
+  try {
+    const { MemoryIndexManager } = await import("../memory/index.js");
+    const { GLOBAL_IDENTITY_DIR, WOPR_HOME, SESSIONS_DIR } = await import("../paths.js");
+    const { join } = await import("path");
+    const { config: centralConfig } = await import("../core/config.js");
+    const memCfg = (centralConfig.get() as any).memory || {};
+    const heap0 = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    daemonLog(`Memory sync starting (heap: ${heap0}MB)`);
+    const mgr = await MemoryIndexManager.create({
+      globalDir: GLOBAL_IDENTITY_DIR,
+      sessionDir: join(SESSIONS_DIR, "_boot"),
+      config: {
+        ...memCfg,
+        store: { path: join(WOPR_HOME, "memory", "index.sqlite") },
+      },
+    });
+    await mgr.sync();
+    const heap1 = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    daemonLog(`Initial memory sync complete (heap: ${heap1}MB)`);
+  } catch (err) {
+    daemonLog(`Warning: Initial memory sync failed: ${err}`);
   }
 
   // Check provider health after plugins have registered

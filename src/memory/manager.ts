@@ -2,23 +2,21 @@
 // Vector/semantic search available via wopr-plugin-memory-semantic
 import type { DatabaseSync } from "node:sqlite";
 import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
 import { WOPR_HOME } from "../paths.js";
+import { eventBus } from "../core/events.js";
+import type { MemoryFileChange } from "../core/events.js";
 import {
   buildFileEntry,
   chunkMarkdown,
   ensureDir,
-  hashText,
   listMemoryFiles,
-  type MemoryFileEntry,
 } from "./internal.js";
 import { ensureMemoryIndexSchema } from "./schema.js";
 import { syncSessionFiles } from "./sync-sessions.js";
-import { type SessionFileEntry } from "./session-files.js";
 import { type MemoryConfig, type MemorySearchResult, type MemorySource, type TemporalFilter, DEFAULT_MEMORY_CONFIG } from "./types.js";
 
 const META_KEY = "memory_index_meta_v1";
@@ -87,6 +85,30 @@ function buildTemporalFilter(
   return { sql: ` AND ${clauses.join(" AND ")}`, params };
 }
 
+/**
+ * Scan /data/sessions/{id}/ directories that have a memory/ subdirectory.
+ * Returns the session ROOT dirs (not the memory/ subdirs) because
+ * listMemoryFiles() expects a workspace dir and looks for memory/ inside it.
+ * Exported so other modules (e.g. a2a-mcp) can discover these dirs independently.
+ */
+export async function discoverSessionMemoryDirs(): Promise<string[]> {
+  const sessionsBase = "/data/sessions";
+  const dirs: string[] = [];
+  try {
+    const entries = await fs.readdir(sessionsBase, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const sessionDir = path.join(sessionsBase, entry.name);
+      const memDir = path.join(sessionDir, "memory");
+      try {
+        const stat = await fs.stat(memDir);
+        if (stat.isDirectory()) dirs.push(sessionDir);
+      } catch {}
+    }
+  } catch {}
+  return dirs;
+}
+
 export class MemoryIndexManager {
   private readonly globalDir: string;
   private readonly sessionDir: string;
@@ -133,6 +155,12 @@ export class MemoryIndexManager {
     this.db = this.openDatabase();
     this.fts = { enabled: true, available: false };
     this.ensureSchema();
+
+    // Subscribe FTS5 indexing as handler for memory:filesChanged
+    eventBus.on("memory:filesChanged", (event) => {
+      this.handleFilesChanged(event);
+    });
+
     this.dirty = true;
   }
 
@@ -260,231 +288,232 @@ export class MemoryIndexManager {
   }
 
   private async runSync(params?: { force?: boolean }): Promise<void> {
+    const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     const needsFullReindex = await this.checkNeedsFullReindex();
+    console.log(`[memory-sync] start (heap: ${heapMB()}MB, fullReindex: ${needsFullReindex})`);
 
-    // Sync global memory files
-    await this.syncMemoryFiles({
-      dir: this.globalDir,
+    // Emit per-source to keep memory bounded (don't accumulate all changes at once)
+
+    // Global memory files
+    const globalChanges = await this.scanMemoryFiles({
+      dirs: [this.globalDir],
       source: "global",
       needsFullReindex,
     });
+    console.log(`[memory-sync] global: ${globalChanges.length} changes (heap: ${heapMB()}MB)`);
+    if (globalChanges.length > 0) {
+      await eventBus.emit("memory:filesChanged", { changes: globalChanges }, "core");
+      console.log(`[memory-sync] global emitted (heap: ${heapMB()}MB)`);
+    }
 
-    // Sync session memory files
-    await this.syncMemoryFiles({
-      dir: this.sessionDir,
+    // Session memory files (current session + all session memory dirs)
+    const sessionMemoryDirs = await discoverSessionMemoryDirs();
+    console.log(`[memory-sync] session dirs: ${sessionMemoryDirs.length} (heap: ${heapMB()}MB)`);
+    const sessionChanges = await this.scanMemoryFiles({
+      dirs: [this.sessionDir, ...sessionMemoryDirs],
       source: "session",
       needsFullReindex,
     });
+    console.log(`[memory-sync] session: ${sessionChanges.length} changes (heap: ${heapMB()}MB)`);
+    if (sessionChanges.length > 0) {
+      await eventBus.emit("memory:filesChanged", { changes: sessionChanges }, "core");
+      console.log(`[memory-sync] session emitted (heap: ${heapMB()}MB)`);
+    }
 
-    // Sync session transcript files (conversation logs)
+    // Session transcripts — index one file at a time to avoid OOM
     if (this.config.sync.indexSessions !== false) {
-      await this.syncSessionTranscripts(needsFullReindex);
+      console.log(`[memory-sync] starting transcript streaming (heap: ${heapMB()}MB)`);
+      await this.syncSessionTranscriptsStreaming(needsFullReindex);
+      console.log(`[memory-sync] transcripts done (heap: ${heapMB()}MB)`);
     }
 
     this.writeMeta();
     this.dirty = false;
+    console.log(`[memory-sync] complete (heap: ${heapMB()}MB)`);
   }
 
-  private async syncSessionTranscripts(needsFullReindex: boolean): Promise<void> {
+  /**
+   * Stream session transcripts one file at a time — emit per-file so each
+   * can be processed and GC'd before loading the next. Prevents OOM from
+   * accumulating all 50MB+ of session JSONL in memory at once.
+   */
+  private async syncSessionTranscriptsStreaming(needsFullReindex: boolean): Promise<void> {
     await syncSessionFiles({
       db: this.db,
       needsFullReindex,
-      vectorTable: "", // Not used - no vector support
+      vectorTable: "",
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
       ftsAvailable: this.fts.available,
-      model: "fts5", // Placeholder - no embedding model
+      model: "fts5",
       dirtyFiles: new Set(),
       runWithConcurrency: (tasks, concurrency) => this.runWithConcurrency(tasks, concurrency),
-      indexSessionFile: (entry) => this.indexSessionFile(entry),
-      concurrency: INDEX_CONCURRENCY,
+      indexSessionFile: async (entry) => {
+        const chunks = chunkMarkdown(entry.content, this.config.chunking);
+        if (chunks.length === 0) return;
+        // Emit per-file — handlers process and release before next file
+        await eventBus.emit("memory:filesChanged", {
+          changes: [{
+            action: "upsert" as const,
+            path: entry.path,
+            absPath: entry.absPath,
+            source: "sessions" as MemorySource,
+            chunks: chunks.map((chunk) => ({
+              id: chunk.hash,
+              text: chunk.text,
+              hash: chunk.hash,
+              startLine: chunk.startLine,
+              endLine: chunk.endLine,
+            })),
+          }],
+        }, "core");
+      },
+      concurrency: 1, // One at a time to keep memory bounded
     });
   }
 
-  private async indexSessionFile(entry: SessionFileEntry): Promise<void> {
-    const chunks = chunkMarkdown(entry.content, this.config.chunking);
-
-    // Delete existing chunks for this file
-    this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(entry.path, "sessions");
-    if (this.fts.available) {
-      try {
-        this.db
-          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
-          .run(entry.path, "sessions");
-      } catch {}
-    }
-
-    // Insert chunks
-    const insertChunk = this.db.prepare(
-      `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    const insertFts = this.fts.available
-      ? this.db.prepare(
-          `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-      : null;
-
-    this.db.exec("BEGIN");
-    try {
-      for (const chunk of chunks) {
-        const id = randomUUID();
-        const now = Date.now();
-
-        insertChunk.run(
-          id,
-          entry.path,
-          "sessions",
-          chunk.startLine,
-          chunk.endLine,
-          chunk.hash,
-          "fts5",
-          chunk.text,
-          "[]", // No embedding
-          now,
-        );
-
-        if (insertFts) {
-          insertFts.run(
-            chunk.text,
-            id,
-            entry.path,
-            "sessions",
-            "fts5",
-            chunk.startLine,
-            chunk.endLine,
-          );
-        }
-      }
-
-      // Update file record
-      this.db
-        .prepare(
-          `INSERT OR REPLACE INTO files (path, source, hash, mtime, size)
-           VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(entry.path, "sessions", entry.hash, Math.floor(entry.mtimeMs), entry.size);
-
-      this.db.exec("COMMIT");
-    } catch (err) {
-      this.db.exec("ROLLBACK");
-      throw err;
-    }
-  }
-
-  private async syncMemoryFiles(params: {
-    dir: string;
+  private async scanMemoryFiles(params: {
+    dirs: string[];
     source: MemorySource;
     needsFullReindex: boolean;
-  }) {
-    const files = await listMemoryFiles(params.dir);
-    const fileEntries = await Promise.all(
-      files.map(async (file) => buildFileEntry(file, params.dir)),
-    );
-    const activePaths = new Set(fileEntries.map((entry) => entry.path));
+  }): Promise<MemoryFileChange[]> {
+    const changes: MemoryFileChange[] = [];
+    const activePaths = new Set<string>();
 
-    const tasks = fileEntries.map((entry) => async () => {
-      const record = this.db
-        .prepare(`SELECT hash FROM files WHERE path = ? AND source = ?`)
-        .get(entry.path, params.source) as { hash: string } | undefined;
-      if (!params.needsFullReindex && record?.hash === entry.hash) {
-        return;
+    for (const dir of params.dirs) {
+      const files = await listMemoryFiles(dir);
+      const fileEntries = await Promise.all(
+        files.map(async (file) => buildFileEntry(file, dir)),
+      );
+
+      for (const entry of fileEntries) {
+        activePaths.add(entry.path);
+        const record = this.db
+          .prepare(`SELECT hash FROM files WHERE path = ? AND source = ?`)
+          .get(entry.path, params.source) as { hash: string } | undefined;
+        if (!params.needsFullReindex && record?.hash === entry.hash) {
+          continue;
+        }
+        const content = await fs.readFile(entry.absPath, "utf-8");
+        const chunks = chunkMarkdown(content, this.config.chunking);
+        changes.push({
+          action: "upsert",
+          path: entry.path,
+          absPath: entry.absPath,
+          source: params.source,
+          chunks: chunks.map((chunk) => ({
+            id: chunk.hash,
+            text: chunk.text,
+            hash: chunk.hash,
+            startLine: chunk.startLine,
+            endLine: chunk.endLine,
+          })),
+        });
       }
-      await this.indexFile(entry, { source: params.source });
-    });
-    await this.runWithConcurrency(tasks, INDEX_CONCURRENCY);
+    }
 
-    // Remove stale entries
+    // Detect stale entries across ALL dirs for this source
     const staleRows = this.db
       .prepare(`SELECT path FROM files WHERE source = ?`)
       .all(params.source) as Array<{ path: string }>;
     for (const stale of staleRows) {
-      if (activePaths.has(stale.path)) {
+      if (!activePaths.has(stale.path)) {
+        changes.push({
+          action: "delete",
+          path: stale.path,
+          source: params.source,
+        });
+      }
+    }
+
+    return changes;
+  }
+
+  private handleFilesChanged(event: { changes: MemoryFileChange[] }): void {
+    const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    const totalChunks = event.changes.reduce((sum, c) => sum + (c.chunks?.length || 0), 0);
+    console.log(`[handleFilesChanged] ${event.changes.length} changes, ${totalChunks} total chunks (heap=${heapMB()}MB)`);
+    for (const change of event.changes) {
+      if (change.action === "delete") {
+        this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(change.path, change.source);
+        this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(change.path, change.source);
+        if (this.fts.available) {
+          try {
+            this.db
+              .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
+              .run(change.path, change.source);
+          } catch {}
+        }
         continue;
       }
-      this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, params.source);
-      this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, params.source);
+
+      // Upsert
+      if (!change.chunks || change.chunks.length === 0) continue;
+      console.log(`[handleFilesChanged] upsert ${change.path}: ${change.chunks.length} chunks (heap=${heapMB()}MB)`);
+
+      // Delete existing chunks for this file
+      this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(change.path, change.source);
       if (this.fts.available) {
         try {
           this.db
             .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
-            .run(stale.path, params.source);
+            .run(change.path, change.source);
         } catch {}
       }
-    }
-  }
 
-  private async indexFile(entry: MemoryFileEntry, params: { source: MemorySource }): Promise<void> {
-    const content = await fs.readFile(entry.absPath, "utf-8");
-    const chunks = chunkMarkdown(content, this.config.chunking);
+      const insertChunk = this.db.prepare(
+        `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      const insertFts = this.fts.available
+        ? this.db.prepare(
+            `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+        : null;
 
-    // Delete existing chunks for this file
-    this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(entry.path, params.source);
-    if (this.fts.available) {
+      this.db.exec("BEGIN");
       try {
-        this.db
-          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
-          .run(entry.path, params.source);
-      } catch {}
-    }
-
-    // Insert chunks
-    const insertChunk = this.db.prepare(
-      `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    );
-    const insertFts = this.fts.available
-      ? this.db.prepare(
-          `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-      : null;
-
-    this.db.exec("BEGIN");
-    try {
-      for (const chunk of chunks) {
-        const id = randomUUID();
-        const now = Date.now();
-
-        insertChunk.run(
-          id,
-          entry.path,
-          params.source,
-          chunk.startLine,
-          chunk.endLine,
-          chunk.hash,
-          "fts5",
-          chunk.text,
-          "[]", // No embedding
-          now,
-        );
-
-        if (insertFts) {
-          insertFts.run(
-            chunk.text,
-            id,
-            entry.path,
-            params.source,
-            "fts5",
+        for (const chunk of change.chunks) {
+          const now = Date.now();
+          insertChunk.run(
+            chunk.id,
+            change.path,
+            change.source,
             chunk.startLine,
             chunk.endLine,
+            chunk.hash,
+            "fts5",
+            chunk.text,
+            now,
           );
+          if (insertFts) {
+            insertFts.run(
+              chunk.text,
+              chunk.id,
+              change.path,
+              change.source,
+              "fts5",
+              chunk.startLine,
+              chunk.endLine,
+            );
+          }
         }
+
+        // Compute file-level hash from chunk hashes for the files table
+        const combinedHash = change.chunks.map((c) => c.hash).join("");
+        this.db
+          .prepare(
+            `INSERT OR REPLACE INTO files (path, source, hash, mtime, size)
+             VALUES (?, ?, ?, ?, ?)`,
+          )
+          .run(change.path, change.source, combinedHash, Date.now(), 0);
+
+        this.db.exec("COMMIT");
+      } catch (err) {
+        this.db.exec("ROLLBACK");
+        throw err;
       }
-
-      // Update file record
-      this.db
-        .prepare(
-          `INSERT OR REPLACE INTO files (path, source, hash, mtime, size)
-           VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(entry.path, params.source, entry.hash, Math.floor(entry.mtimeMs), entry.size);
-
-      this.db.exec("COMMIT");
-    } catch (err) {
-      this.db.exec("ROLLBACK");
-      throw err;
     }
   }
 
@@ -547,7 +576,7 @@ export class MemoryIndexManager {
   private ensureSchema() {
     const result = ensureMemoryIndexSchema({
       db: this.db,
-      embeddingCacheTable: "", // Not used
+      embeddingCacheTable: "embedding_cache",
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
     });

@@ -1,20 +1,78 @@
+networks:
+  wopr-net:
+    driver: bridge
+
 services:
   wopr:
     build: .
     container_name: wopr
     restart: unless-stopped
+    privileged: true
+    networks:
+      - wopr-net
+    group_add:
+      - "1001"  # docker group for socket access
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cgroup: host
+    tmpfs:
+      - /run
+      - /run/lock
     volumes:
+      # WOPR data
       - wopr-data:/data
-      - ~/.claude:/claude-creds
-      - wopr-claude-sessions:/home/node/.claude
+      # Full OS persistence - volumes auto-init from image on first run
+      - wopr-usr:/usr
+      - wopr-etc:/etc
+      - wopr-var-lib:/var/lib
+      - wopr-var-cache:/var/cache
+      - wopr-opt:/opt
+      - wopr-home:/home/node
+      # Claude credentials - bind mount overlays inside wopr-home volume
+      - ~/.claude:/home/node/.claude
+      # External mounts
+      - ~/malice:/tmp/malice:rw
+      # Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - WOPR_HOME=/data
       - WOPR_DAEMON_HOST=0.0.0.0
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OLLAMA_HOST=http://ollama:11434
     ports:
       - "7437:7437"
 
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: unless-stopped
+    networks:
+      - wopr-net
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_MODEL=qwen3-embedding:0.6b
+    entrypoint: /bin/sh -c "ollama serve & sleep 5 && ollama pull $$OLLAMA_MODEL && wait"
+
 volumes:
   wopr-data:
-  wopr-claude-sessions:
+  wopr-usr:
+  wopr-etc:
+  wopr-var-lib:
+  wopr-var-cache:
+  wopr-opt:
+  wopr-home:
+  ollama-data:
