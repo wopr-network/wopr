@@ -2,7 +2,6 @@
 // Vector/semantic search available via wopr-plugin-memory-semantic
 import type { DatabaseSync } from "node:sqlite";
 import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -360,7 +359,7 @@ export class MemoryIndexManager {
             absPath: entry.absPath,
             source: "sessions" as MemorySource,
             chunks: chunks.map((chunk) => ({
-              id: randomUUID(),
+              id: chunk.hash,
               text: chunk.text,
               hash: chunk.hash,
               startLine: chunk.startLine,
@@ -403,7 +402,7 @@ export class MemoryIndexManager {
           absPath: entry.absPath,
           source: params.source,
           chunks: chunks.map((chunk) => ({
-            id: randomUUID(),
+            id: chunk.hash,
             text: chunk.text,
             hash: chunk.hash,
             startLine: chunk.startLine,
@@ -577,6 +576,7 @@ export class MemoryIndexManager {
   private ensureSchema() {
     const result = ensureMemoryIndexSchema({
       db: this.db,
+      embeddingCacheTable: "embedding_cache",
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
     });
