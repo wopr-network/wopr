@@ -58,6 +58,8 @@ export interface WoprConfig {
    *       providers.anthropic.model = "claude-opus-4-5-20251101"
    */
   providers?: Record<string, ProviderDefaults>;
+  /** Memory system configuration (chunking, sync, etc.) */
+  memory?: Partial<import("../memory/types.js").MemoryConfig>;
   /**
    * Sandbox configuration for Docker-based isolation
    */

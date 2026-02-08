@@ -20,6 +20,19 @@ export const finalizeStep: OnboardStep = async (ctx: OnboardContext) => {
       config.setValue(key, value);
     }
   });
+
+  // Save embeddings config to plugin-specific data
+  if (finalConfig.embeddings) {
+    const pluginConfig: Record<string, unknown> = {
+      provider: finalConfig.embeddings.provider,
+      model: finalConfig.embeddings.model,
+    };
+    if (finalConfig.embeddings.ollamaBaseUrl) {
+      pluginConfig.ollama = { baseUrl: finalConfig.embeddings.ollamaBaseUrl };
+    }
+    config.setValue("plugins.data.wopr-plugin-memory-semantic", pluginConfig);
+  }
+
   await config.save();
   
   ctx.runtime.log("Configuration saved!");
