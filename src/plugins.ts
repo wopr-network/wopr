@@ -683,11 +683,8 @@ function createPluginEventBus(pluginName: string): WOPREventBus {
       eventBus.off(event, handler);
     },
 
-    async emit<T extends keyof import("./types.js").WOPREventMap>(
-      event: T,
-      payload: import("./types.js").WOPREventMap[T]
-    ): Promise<void> {
-      await eventBus.emit(event, payload, pluginName);
+    async emit(event: string, payload: any): Promise<void> {
+      await eventBus.emit(event as any, payload, pluginName);
     },
 
     async emitCustom(event: string, payload: any): Promise<void> {
