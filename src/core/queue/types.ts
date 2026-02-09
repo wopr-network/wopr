@@ -17,8 +17,6 @@ export interface InjectOptions {
   images?: string[];
   source?: InjectionSource;
   contextProviders?: string[];
-  /** If true, allow V2 injection into active streams (default: true) */
-  allowV2Inject?: boolean;
   /** Priority level (higher = processed first within queue) */
   priority?: number;
 }
@@ -63,8 +61,6 @@ export interface ActiveInject {
   sessionKey: string;
   startTime: number;
   abortController: AbortController;
-  /** For V2: the active query generator */
-  queryGenerator?: AsyncGenerator<unknown>;
 }
 
 /**
@@ -88,8 +84,7 @@ export type QueueEventType =
   | "start"
   | "complete"
   | "error"
-  | "cancel"
-  | "v2-inject";
+  | "cancel";
 
 export interface QueueEvent {
   type: QueueEventType;
