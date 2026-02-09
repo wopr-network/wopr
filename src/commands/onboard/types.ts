@@ -22,6 +22,11 @@ export interface OnboardConfig {
     mode?: "off" | "non-main" | "all";
     workspaceAccess?: "none" | "ro" | "rw";
   };
+  embeddings?: {
+    provider?: string;
+    model?: string;
+    ollamaBaseUrl?: string;
+  };
   channels?: string[];
   skills?: string[];
   plugins?: string[];

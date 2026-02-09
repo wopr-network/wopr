@@ -247,14 +247,6 @@ export function chunkMarkdown(
   return chunks;
 }
 
-export function parseEmbedding(raw: string): number[] {
-  try {
-    const parsed = JSON.parse(raw) as number[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length === 0 || b.length === 0) {

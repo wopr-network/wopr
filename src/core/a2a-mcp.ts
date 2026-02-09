@@ -9,7 +9,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { logger } from "../logger.js";
 import { join } from "path";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { SESSIONS_DIR, GLOBAL_IDENTITY_DIR, WOPR_HOME } from "../paths.js";
@@ -679,20 +679,20 @@ export function getA2AMcpServer(sessionName: string): any {
     )
   );
 
-  // Memory index manager instance (lazily initialized)
+  // Memory index manager instance (eagerly initialized, sync on startup)
   let memoryManager: MemoryIndexManager | null = null;
 
   const getMemoryManager = async () => {
     if (!memoryManager) {
       const sessionDir = join(SESSIONS_DIR, sessionName);
-      // Get memory config from central config
       const mainConfig = centralConfig.get();
-      const memoryConfig = (mainConfig as any).memory || {};
+      const memCfg = mainConfig.memory || {};
 
       memoryManager = await MemoryIndexManager.create({
         globalDir: GLOBAL_IDENTITY_DIR,
         sessionDir: sessionDir,
         config: {
+          ...memCfg,
           store: {
             path: join(WOPR_HOME, "memory", "index.sqlite"),
           },
@@ -701,6 +701,8 @@ export function getA2AMcpServer(sessionName: string): any {
     }
     return memoryManager;
   };
+
+
 
   tools.push(
     tool(
@@ -736,8 +738,11 @@ export function getA2AMcpServer(sessionName: string): any {
           // Emit hook - plugins can set results
           await eventBus.emit("memory:search", hookPayload);
 
+          logger.info(`[memory_search] After hook: results=${hookPayload.results ? hookPayload.results.length : 'null'}, query="${query}"`);
+
           // Use plugin results if provided, otherwise fall back to core FTS5
           let results = hookPayload.results ?? await (async () => {
+            logger.info(`[memory_search] Falling through to core FTS5 for query: "${query}"`);
             const manager = await getMemoryManager();
             return manager.search(query, { maxResults: maxResults * 2, minScore, temporal });
           })();
@@ -808,6 +813,29 @@ export function getA2AMcpServer(sessionName: string): any {
             for (const f of memFiles) {
               filesToSearch.push({ path: join(sessionMemoryDir, f), source: `session/memory/${f}` });
             }
+          }
+
+          // Add ALL session memory directories (not just current session)
+          const sessionsBase = "/data/sessions";
+          if (existsSync(sessionsBase)) {
+            try {
+              const sessionEntries = readdirSync(sessionsBase);
+              for (const entry of sessionEntries) {
+                const entryPath = join(sessionsBase, entry);
+                try {
+                  if (!statSync(entryPath).isDirectory()) continue;
+                } catch { continue; }
+                const memDir = join(entryPath, "memory");
+                if (memDir === sessionMemoryDir) continue; // already added above
+                if (!existsSync(memDir)) continue;
+                try {
+                  const memFiles = readdirSync(memDir).filter(f => f.endsWith(".md"));
+                  for (const f of memFiles) {
+                    filesToSearch.push({ path: join(memDir, f), source: `sessions/${entry}/memory/${f}` });
+                  }
+                } catch {}
+              }
+            } catch {}
           }
 
           if (filesToSearch.length === 0) {

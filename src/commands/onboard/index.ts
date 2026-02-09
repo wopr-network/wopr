@@ -15,6 +15,7 @@ import { configCheckStep } from "./steps/03-config-check.js";
 import { flowStep } from "./steps/04-flow.js";
 import { workspaceStep } from "./steps/05-workspace.js";
 import { providersStep } from "./steps/06-providers.js";
+import { embeddingsStep } from "./steps/06b-embeddings.js";
 import { channelsStep } from "./steps/07-channels.js";
 import { voiceStep } from "./steps/07b-voice.js";
 import { externalStep } from "./steps/07c-external.js";
@@ -31,6 +32,7 @@ const steps = [
   flowStep,
   workspaceStep,
   providersStep,
+  embeddingsStep,
   channelsStep,
   voiceStep,      // Voice setup after channels
   externalStep,   // External access (Tailscale Funnel)
