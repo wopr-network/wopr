@@ -8,25 +8,24 @@
 
 import { logger } from "../logger.js";
 import {
-  type InjectionSource,
-  type TrustLevel,
+  checkCapability,
+  checkSandboxRequired,
+  checkSessionAccess,
+  checkToolAccess,
+  filterToolsByPolicy,
+  type PolicyCheckResult,
+  type ResolvedPolicy,
+  resolvePolicy,
+  shouldLogSecurityEvent,
+} from "./policy.js";
+import {
   type Capability,
+  createInjectionSource,
+  type InjectionSource,
   type SecurityEvent,
   type SecurityEventType,
-  createInjectionSource,
+  type TrustLevel,
 } from "./types.js";
-import {
-  resolvePolicy,
-  checkSessionAccess,
-  checkCapability,
-  checkToolAccess,
-  checkSandboxRequired,
-  filterToolsByPolicy,
-  isEnforcementEnabled,
-  shouldLogSecurityEvent,
-  type ResolvedPolicy,
-  type PolicyCheckResult,
-} from "./policy.js";
 
 // ============================================================================
 // Security Context
@@ -152,7 +151,7 @@ export class SecurityContext {
    */
   requiresSandbox(): boolean {
     const sandbox = checkSandboxRequired(this.source, this.session);
-    return sandbox !== null && sandbox.enabled;
+    return sandbox?.enabled ?? false;
   }
 
   /**
@@ -186,10 +185,7 @@ export class SecurityContext {
   /**
    * Record a security event
    */
-  recordEvent(
-    type: SecurityEventType,
-    details: Partial<SecurityEvent>
-  ): void {
+  recordEvent(type: SecurityEventType, details: Partial<SecurityEvent>): void {
     const event: SecurityEvent = {
       type,
       timestamp: Date.now(),
@@ -208,7 +204,7 @@ export class SecurityContext {
         `[security] ${this.requestId}: ${type} - ${event.allowed ? "ALLOWED" : "DENIED"}` +
           (event.reason ? ` (${event.reason})` : "") +
           (event.tool ? ` tool=${event.tool}` : "") +
-          (event.capability ? ` cap=${event.capability}` : "")
+          (event.capability ? ` cap=${event.capability}` : ""),
       );
     }
   }
@@ -231,9 +227,7 @@ export class SecurityContext {
         gatewaySession: this.session,
         publicKey: this.source.identity?.publicKey,
       },
-      grantedCapabilities: this.policy.forwardRules?.allowActions?.map(
-        (a) => a as Capability
-      ),
+      grantedCapabilities: this.policy.forwardRules?.allowActions?.map((a) => a as Capability),
     });
 
     return new SecurityContext(derivedSource, targetSession);
@@ -269,10 +263,7 @@ export class SecurityContext {
 /**
  * Create a security context for an injection
  */
-export function createSecurityContext(
-  source: InjectionSource,
-  session: string
-): SecurityContext {
+export function createSecurityContext(source: InjectionSource, session: string): SecurityContext {
   return new SecurityContext(source, session);
 }
 
@@ -280,34 +271,25 @@ export function createSecurityContext(
  * Create a security context for CLI commands (owner trust)
  */
 export function createCliContext(session: string): SecurityContext {
-  return new SecurityContext(
-    createInjectionSource("cli"),
-    session
-  );
+  return new SecurityContext(createInjectionSource("cli"), session);
 }
 
 /**
  * Create a security context for daemon API calls (owner trust)
  */
 export function createDaemonContext(session: string): SecurityContext {
-  return new SecurityContext(
-    createInjectionSource("daemon"),
-    session
-  );
+  return new SecurityContext(createInjectionSource("daemon"), session);
 }
 
 /**
  * Create a security context for plugin-initiated injections
  */
-export function createPluginContext(
-  session: string,
-  pluginName: string
-): SecurityContext {
+export function createPluginContext(session: string, pluginName: string): SecurityContext {
   return new SecurityContext(
     createInjectionSource("plugin", {
       identity: { pluginName },
     }),
-    session
+    session,
   );
 }
 
@@ -315,10 +297,7 @@ export function createPluginContext(
  * Create a security context for cron jobs (owner trust)
  */
 export function createCronContext(session: string): SecurityContext {
-  return new SecurityContext(
-    createInjectionSource("cron"),
-    session
-  );
+  return new SecurityContext(createInjectionSource("cron"), session);
 }
 
 /**
@@ -329,7 +308,7 @@ export function createP2PContext(
   peerKey: string,
   trustLevel: TrustLevel = "untrusted",
   grantedCapabilities?: Capability[],
-  grantId?: string
+  grantId?: string,
 ): SecurityContext {
   return new SecurityContext(
     createInjectionSource("p2p", {
@@ -338,23 +317,20 @@ export function createP2PContext(
       grantedCapabilities,
       grantId,
     }),
-    session
+    session,
   );
 }
 
 /**
  * Create a security context for P2P discovered peers (always untrusted)
  */
-export function createP2PDiscoveryContext(
-  session: string,
-  peerKey: string
-): SecurityContext {
+export function createP2PDiscoveryContext(session: string, peerKey: string): SecurityContext {
   return new SecurityContext(
     createInjectionSource("p2p.discovery", {
       trustLevel: "untrusted",
       identity: { publicKey: peerKey },
     }),
-    session
+    session,
   );
 }
 
@@ -364,14 +340,14 @@ export function createP2PDiscoveryContext(
 export function createApiContext(
   session: string,
   apiKeyId?: string,
-  trustLevel: TrustLevel = "semi-trusted"
+  trustLevel: TrustLevel = "semi-trusted",
 ): SecurityContext {
   return new SecurityContext(
     createInjectionSource("api", {
       trustLevel,
       identity: apiKeyId ? { apiKeyId } : undefined,
     }),
-    session
+    session,
   );
 }
 
@@ -422,10 +398,7 @@ export function clearContext(session: string): void {
 /**
  * Run a function with a security context
  */
-export async function withSecurityContext<T>(
-  context: SecurityContext,
-  fn: () => Promise<T>
-): Promise<T> {
+export async function withSecurityContext<T>(context: SecurityContext, fn: () => Promise<T>): Promise<T> {
   storeContext(context);
   try {
     return await fn();

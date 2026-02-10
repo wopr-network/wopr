@@ -6,31 +6,21 @@
  */
 
 import { logger } from "../logger.js";
+import { clearContext, createSecurityContext, type SecurityContext, storeContext } from "./context.js";
 import {
-  type InjectionSource,
-  createInjectionSource,
-} from "./types.js";
-import {
-  SecurityContext,
-  createSecurityContext,
-  storeContext,
-  clearContext,
-} from "./context.js";
-import {
-  isGateway,
-  getForwardRules,
-  canForwardTo,
-  createForwardRequest,
-  validateForwardRequest,
-  queueForApproval,
   approveRequest,
   completeRequest,
   createForwardedContext,
-  requiresGateway,
-  findGatewayForSource,
+  createForwardRequest,
   type ForwardRequest,
-  type GatewayForwardRules,
+  findGatewayForSource,
+  getForwardRules,
+  isGateway,
+  queueForApproval,
+  requiresGateway,
+  validateForwardRequest,
 } from "./gateway.js";
+import { createInjectionSource, type InjectionSource } from "./types.js";
 
 // ============================================================================
 // Forward Result
@@ -51,6 +41,16 @@ export interface ForwardResult {
 
   /** Whether request requires approval */
   requiresApproval?: boolean;
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function generateTrackingId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 8);
+  return `fwd-${timestamp}-${random}`;
 }
 
 // ============================================================================
@@ -79,9 +79,9 @@ export async function forwardRequest(
     injectFn?: (
       session: string,
       message: string,
-      options?: { source?: InjectionSource; silent?: boolean }
+      options?: { source?: InjectionSource; silent?: boolean },
     ) => Promise<{ response: string }>;
-  }
+  },
 ): Promise<ForwardResult> {
   // Get gateway context
   const gatewayContext = createSecurityContext(
@@ -89,7 +89,7 @@ export async function forwardRequest(
       trustLevel: "owner",
       identity: { gatewaySession },
     }),
-    gatewaySession
+    gatewaySession,
   );
 
   // Verify this is a gateway session
@@ -97,18 +97,12 @@ export async function forwardRequest(
     return {
       success: false,
       error: `Session ${gatewaySession} is not a gateway`,
-      requestId: "",
+      requestId: generateTrackingId(),
     };
   }
 
   // Create forward request
-  const request = createForwardRequest(
-    gatewaySession,
-    targetSession,
-    message,
-    originalSource,
-    options?.actionType
-  );
+  const request = createForwardRequest(gatewaySession, targetSession, message, originalSource, options?.actionType);
 
   // Validate request
   const validation = validateForwardRequest(request, gatewayContext);
@@ -144,15 +138,14 @@ export async function executeForward(
   injectFn?: (
     session: string,
     message: string,
-    options?: { source?: InjectionSource; silent?: boolean }
-  ) => Promise<{ response: string }>
+    options?: { source?: InjectionSource; silent?: boolean },
+  ) => Promise<{ response: string }>,
 ): Promise<ForwardResult> {
   // Create forwarded context
   const forwardedContext = createForwardedContext(request);
 
   logger.info(
-    `[forward] Executing forward ${request.requestId}: ` +
-      `${request.sourceSession} -> ${request.targetSession}`
+    `[forward] Executing forward ${request.requestId}: ` + `${request.sourceSession} -> ${request.targetSession}`,
   );
 
   try {
@@ -182,15 +175,13 @@ export async function executeForward(
         requestId: request.requestId,
       };
     } finally {
-      clearContext(request.targetSession);
+      clearContext(forwardedContext.session);
     }
   } catch (err: any) {
-    logger.error(
-      `[forward] Forward ${request.requestId} failed: ${err.message}`
-    );
+    logger.error(`[forward] Forward ${request.requestId} failed: ${err.message}`);
     return {
       success: false,
-      error: err.message,
+      error: `Forward execution failed (${request.requestId})`,
       requestId: request.requestId,
     };
   }
@@ -204,8 +195,8 @@ export async function approveAndExecute(
   injectFn?: (
     session: string,
     message: string,
-    options?: { source?: InjectionSource; silent?: boolean }
-  ) => Promise<{ response: string }>
+    options?: { source?: InjectionSource; silent?: boolean },
+  ) => Promise<{ response: string }>,
 ): Promise<ForwardResult> {
   const request = approveRequest(requestId);
   if (!request) {
@@ -233,8 +224,8 @@ export async function routeThroughGateway(
   injectFn?: (
     session: string,
     message: string,
-    options?: { source?: InjectionSource; silent?: boolean }
-  ) => Promise<{ response: string }>
+    options?: { source?: InjectionSource; silent?: boolean },
+  ) => Promise<{ response: string }>,
 ): Promise<ForwardResult | null> {
   // Check if this source requires a gateway
   if (!requiresGateway(source, targetSession)) {
@@ -247,13 +238,11 @@ export async function routeThroughGateway(
     return {
       success: false,
       error: "No gateway available for this request",
-      requestId: "",
+      requestId: generateTrackingId(),
     };
   }
 
-  logger.info(
-    `[forward] Routing through gateway ${gateway} for ${source.type} -> ${targetSession}`
-  );
+  logger.info(`[forward] Routing through gateway ${gateway} for ${source.type} -> ${targetSession}`);
 
   // Forward through the gateway
   return forwardRequest(gateway, targetSession, message, source, {
@@ -274,15 +263,15 @@ export async function handleGatewayForward(
   injectFn?: (
     session: string,
     message: string,
-    options?: { source?: InjectionSource; silent?: boolean }
-  ) => Promise<{ response: string }>
+    options?: { source?: InjectionSource; silent?: boolean },
+  ) => Promise<{ response: string }>,
 ): Promise<ForwardResult> {
   // Verify caller is the gateway
   if (gatewayContext.session !== gatewaySession) {
     return {
       success: false,
       error: "Context mismatch",
-      requestId: "",
+      requestId: generateTrackingId(),
     };
   }
 
@@ -310,8 +299,7 @@ export async function handleGatewayForward(
 export const gatewayToolDefinitions = {
   gateway_forward: {
     name: "gateway_forward",
-    description:
-      "Forward a request to another session. Only available in gateway sessions.",
+    description: "Forward a request to another session. Only available in gateway sessions.",
     schema: {
       target: "string - Target session name",
       message: "string - Message to forward",
