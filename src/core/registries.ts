@@ -165,7 +165,7 @@ async function fetchGitHubSkills(
           skills.push({
             name: entry.name,
             description: frontmatter.description || "",
-            source: `github:${owner}/${repo}/${relative(cacheDir, subdir)}`,
+            source: `github:${owner}/${repo}/${relative(cacheDir, subdir).replace(/\\/g, "/")}`,
           });
         }
       } else {

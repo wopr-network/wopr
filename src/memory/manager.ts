@@ -10,6 +10,7 @@ const require = createRequire(import.meta.url);
 
 import type { MemoryFileChange } from "../core/events.js";
 import { eventBus } from "../core/events.js";
+import { logger } from "../logger.js";
 import { WOPR_HOME } from "../paths.js";
 import {
   buildFileEntry,
