@@ -2,11 +2,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import { logger } from "../logger.js";
 
-export function ensureMemoryIndexSchema(params: {
-  db: DatabaseSync;
-  ftsTable: string;
-  ftsEnabled: boolean;
-}): { ftsAvailable: boolean; ftsError?: string } {
+export function ensureMemoryIndexSchema(params: { db: DatabaseSync; ftsTable: string; ftsEnabled: boolean }): {
+  ftsAvailable: boolean;
+  ftsError?: string;
+} {
   params.db.exec(`
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,

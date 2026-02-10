@@ -1,15 +1,15 @@
 // WOPR Memory System - FTS5 keyword search
 // For semantic/vector search, install wopr-plugin-memory-semantic
 
+export { initMemoryHooks } from "./init.js";
 export { MemoryIndexManager } from "./manager.js";
+export { getRecentSessionContent, listSessionFiles } from "./session-files.js";
+export { createSessionDestroyHandler, saveSessionToMemory } from "./session-hook.js";
 export {
+  DEFAULT_MEMORY_CONFIG,
   type MemoryConfig,
   type MemorySearchResult,
   type MemorySource,
-  type TemporalFilter,
-  DEFAULT_MEMORY_CONFIG,
   parseTemporalFilter,
+  type TemporalFilter,
 } from "./types.js";
-export { saveSessionToMemory, createSessionDestroyHandler } from "./session-hook.js";
-export { listSessionFiles, getRecentSessionContent } from "./session-files.js";
-export { initMemoryHooks } from "./init.js";

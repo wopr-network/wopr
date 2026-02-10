@@ -2,8 +2,8 @@
 // Adapted from OpenClaw for WOPR
 import fs from "node:fs/promises";
 import path from "node:path";
-import { SESSIONS_DIR, WOPR_HOME } from "../paths.js";
 import { getConversationLogPath } from "../core/sessions.js";
+import { WOPR_HOME } from "../paths.js";
 import { getRecentSessionContent } from "./session-files.js";
 
 const MEMORY_DIR = path.join(WOPR_HOME, "memory");
@@ -94,10 +94,7 @@ export async function saveSessionToMemory(sessionName: string): Promise<string |
 
     return memoryFilePath;
   } catch (err) {
-    console.error(
-      "[session-memory] Failed to save session memory:",
-      err instanceof Error ? err.message : String(err),
-    );
+    console.error("[session-memory] Failed to save session memory:", err instanceof Error ? err.message : String(err));
     return null;
   }
 }
