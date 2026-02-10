@@ -157,8 +157,9 @@ export class MemoryIndexManager {
     this.ensureSchema();
 
     // Subscribe FTS5 indexing as handler for memory:filesChanged
+    // Return the promise so eventBus.emit() awaits DB writes before continuing
     eventBus.on("memory:filesChanged", (event) => {
-      this.handleFilesChanged(event);
+      return this.handleFilesChanged(event);
     });
 
     this.dirty = true;
@@ -427,7 +428,7 @@ export class MemoryIndexManager {
     return changes;
   }
 
-  private handleFilesChanged(event: { changes: MemoryFileChange[] }): void {
+  private async handleFilesChanged(event: { changes: MemoryFileChange[] }): Promise<void> {
     const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     const totalChunks = event.changes.reduce((sum, c) => sum + (c.chunks?.length || 0), 0);
     console.log(
