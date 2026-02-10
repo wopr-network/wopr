@@ -1,5 +1,5 @@
-import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { z } from "zod";
@@ -257,7 +257,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     if (existsSync(pluginDir)) {
       execSync("git pull", { cwd: pluginDir, stdio: "inherit" });
     } else {
-      execSync(`git clone https://github.com/${parts[0]}/${parts[1]} "${pluginDir}"`, { stdio: "inherit" });
+      execFileSync("git", ["clone", `https://github.com/${parts[0]}/${parts[1]}`, pluginDir], { stdio: "inherit" });
     }
 
     // Install dependencies if package.json exists
@@ -369,7 +369,7 @@ export function uninstallPlugin(name: string): boolean {
   const normalizedPath = resolve(plugin.path);
   const normalizedBase = resolve(PLUGINS_DIR);
   if (existsSync(normalizedPath) && normalizedPath.startsWith(normalizedBase + "/")) {
-    execSync(`rm -rf "${normalizedPath}"`);
+    rmSync(normalizedPath, { recursive: true, force: true });
   }
 
   // Remove from registry

@@ -937,7 +937,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
       logger.info("API key saved");
     } else if (subcommand === "logout") {
       clearAuth();
-      logger.info("Logged out");
+      logger.info("Logged out (WOPR credentials cleared; Claude Code OAuth credentials are managed separately)");
     } else {
       help();
     }
