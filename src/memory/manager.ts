@@ -462,12 +462,12 @@ export class MemoryIndexManager {
       }
 
       const insertChunk = this.db.prepare(
-        `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, updated_at)
+        `INSERT OR REPLACE INTO chunks (id, path, source, start_line, end_line, hash, model, text, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const insertFts = this.fts.available
         ? this.db.prepare(
-            `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
+            `INSERT OR REPLACE INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
           )
         : null;

@@ -297,8 +297,8 @@ class WOPREventBusImpl implements WOPREventBus {
   ): Promise<void> {
     const meta = { timestamp: Date.now(), source };
 
-    // Collect promises from async handlers so we can await them
-    const promises: Promise<void>[] = [];
+    // Await each handler sequentially so payload mutations (e.g. beforeInject
+    // adding <relevant-memories>) are visible to subsequent handlers.
     const listeners = this.emitter.listeners(event as string);
     const isFilesChanged = (event as string) === "memory:filesChanged";
     if (isFilesChanged) {
@@ -312,11 +312,15 @@ class WOPREventBusImpl implements WOPREventBus {
       }
       const result = (listeners[i] as Function)(payload, meta);
       if (result && typeof result.then === "function") {
-        promises.push(result);
+        await result;
+      }
+      if (isFilesChanged) {
+        const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+        console.log(`[events] memory:filesChanged: handler ${i} done (heap=${heapMB}MB)`);
       }
     }
 
-    // Also emit wildcard event for catch-all listeners
+    // Also emit wildcard event for catch-all listeners (sequentially)
     const wildcardEvent: WOPREvent = {
       type: event as string,
       payload,
@@ -327,26 +331,7 @@ class WOPREventBusImpl implements WOPREventBus {
     for (const listener of wildcardListeners) {
       const result = (listener as Function)(wildcardEvent, meta);
       if (result && typeof result.then === "function") {
-        promises.push(result);
-      }
-    }
-
-    // Await all async handlers
-    if (isFilesChanged) {
-      const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-      console.log(`[events] memory:filesChanged: awaiting ${promises.length} async handlers (heap=${heapMB}MB)`);
-    }
-    if (promises.length > 0) {
-      for (let i = 0; i < promises.length; i++) {
-        if (isFilesChanged) {
-          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-          console.log(`[events] memory:filesChanged: awaiting handler ${i}/${promises.length} (heap=${heapMB}MB)`);
-        }
-        await promises[i];
-        if (isFilesChanged) {
-          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-          console.log(`[events] memory:filesChanged: handler ${i} done (heap=${heapMB}MB)`);
-        }
+        await result;
       }
     }
 
