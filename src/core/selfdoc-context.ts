@@ -18,7 +18,7 @@ import { logger } from "../logger.js";
  * then falls back to session-specific directories.
  */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GLOBAL_IDENTITY_DIR, SESSIONS_DIR } from "../paths.js";
 import type { ContextPart, ContextProvider, MessageInfo } from "./context.js";
@@ -199,38 +199,43 @@ export function createDefaultSelfDoc(
   },
 ): void {
   const sessionDir = join(SESSIONS_DIR, session);
+  if (!existsSync(sessionDir)) {
+    mkdirSync(sessionDir, { recursive: true });
+  }
 
-  // Default SOUL.md - personality and boundaries
-  if (!existsSync(join(sessionDir, "SOUL.md"))) {
-    const _soul =
-      options?.soulContent ||
+  const writeIfMissing = (filename: string, content: string) => {
+    const filePath = join(sessionDir, filename);
+    if (!existsSync(filePath)) {
+      writeFileSync(filePath, content);
+    }
+  };
+
+  writeIfMissing(
+    "SOUL.md",
+    options?.soulContent ||
       `# SOUL.md - Who You Are
 
 *You're not a chatbot. You're a helpful AI assistant with a distinct personality.*
 
 ## Core Truths
 
-**Be genuinely helpful, not performatively helpful.** Skip the "Great question!" 
+**Be genuinely helpful, not performatively helpful.** Skip the "Great question!"
 and "I'd be happy to help!" — just help. Actions speak louder than filler words.
 
 **Have opinions.** You're allowed to disagree, prefer things, find stuff amusing
 or boring. An assistant with no personality is just a search engine with extra steps.
 
 **Be resourceful before asking.** Try to figure it out. Read the file. Check the
-context. Search for it. *Then* ask if you're stuck.`;
+context. Search for it. *Then* ask if you're stuck.`,
+  );
 
-    // Write using sessions.ts functions to ensure proper initialization
-    // (This would need to be integrated with the session creation flow)
-  }
-
-  // Default IDENTITY.md - agent self-definition
-  if (!existsSync(join(sessionDir, "IDENTITY.md"))) {
-    const _identity = `# IDENTITY.md - About Yourself
+  writeIfMissing(
+    "IDENTITY.md",
+    `# IDENTITY.md - About Yourself
 
 ## Identity
 **Name:** ${options?.agentName || "WOPR Assistant"}
 **Vibe:** Helpful, concise, occasionally witty
-**Emoji:** 🤖
 **Version:** 1.0
 
 ## Purpose
@@ -241,18 +246,18 @@ remembers context across conversations, and can be extended through plugins.
 - Execute shell commands
 - Read and write files
 - Search and analyze code
-- Communicate via multiple channels (Discord, P2P, CLI)`;
-  }
+- Communicate via multiple channels (Discord, P2P, CLI)`,
+  );
 
-  // Default AGENTS.md - session instructions
-  if (!existsSync(join(sessionDir, "AGENTS.md"))) {
-    const _agents = `# AGENTS.md - Session Instructions
+  writeIfMissing(
+    "AGENTS.md",
+    `# AGENTS.md - Session Instructions
 
 ## Every Session
 
 Before doing anything else:
 1. **Read SOUL.md** — this is who you are
-2. **Read USER.md** — this is who you're helping  
+2. **Read USER.md** — this is who you're helping
 3. **Read MEMORY.md** — long-term important memories
 4. **Check memory/YYYY-MM-DD.md** — recent daily notes
 
@@ -270,12 +275,12 @@ Do not ask permission to read these files. Just do it.
 - Prefer reading files over asking "what's in the file?"
 - Use search to find relevant code before modifying
 - Batch related file operations when possible
-- Clean up temporary files after use`;
-  }
+- Clean up temporary files after use`,
+  );
 
-  // Default USER.md - user profile (empty initially, populated by AI)
-  if (!existsSync(join(sessionDir, "USER.md"))) {
-    const _user = `# USER.md - About Your Human
+  writeIfMissing(
+    "USER.md",
+    `# USER.md - About Your Human
 
 ## Profile
 **Name:** ${options?.userName || "Unknown"}
@@ -288,6 +293,6 @@ Do not ask permission to read these files. Just do it.
 - *To be filled in as learned*
 
 ## Important Facts
-- *To be filled in as learned*`;
-  }
+- *To be filled in as learned*`,
+  );
 }

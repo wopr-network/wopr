@@ -253,6 +253,8 @@ class WOPREventBusImpl implements WOPREventBus {
       }
     };
 
+    // Store wrapper so off() can find and remove it
+    this.handlerWrappers.set(handler, wrapper);
     this.emitter.once(event as string, wrapper);
   }
 

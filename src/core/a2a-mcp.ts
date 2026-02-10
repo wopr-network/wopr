@@ -7,7 +7,7 @@
 
 import { exec } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, normalize, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
@@ -272,13 +272,17 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         limit: z.number().optional().describe("Maximum number of sessions to return (default: 50)"),
       },
-      async (_args) => {
+      async (args) => {
         if (!getSessions) throw new Error("Session functions not initialized");
         const sessions = getSessions();
-        const sessionList = Object.keys(sessions).map((key) => ({
+        let sessionList = Object.keys(sessions).map((key) => ({
           name: key,
           id: sessions[key],
         }));
+        const limit = args.limit ?? 50;
+        if (limit > 0 && sessionList.length > limit) {
+          sessionList = sessionList.slice(0, limit);
+        }
         return {
           content: [
             { type: "text", text: JSON.stringify({ sessions: sessionList, count: sessionList.length }, null, 2) },
@@ -1888,7 +1892,6 @@ export function getA2AMcpServer(sessionName: string): any {
           let workDir = cwd ? join(cwd) : sessionDir;
 
           // Normalize the path to resolve ../ and other traversal attempts
-          const { resolve, normalize } = require("node:path");
           workDir = resolve(normalize(workDir));
 
           // Allowed base directories
@@ -1900,7 +1903,7 @@ export function getA2AMcpServer(sessionName: string): any {
           // Check if workDir is within any allowed base directory
           const isAllowed = allowedBases.some((base) => {
             const normalizedBase = resolve(normalize(base));
-            return workDir.startsWith(`${normalizedBase}/`) || workDir === normalizedBase;
+            return workDir.startsWith(normalizedBase + sep) || workDir === normalizedBase;
           });
 
           if (!isAllowed) {

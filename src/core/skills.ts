@@ -672,7 +672,20 @@ export function removeSkill(name: string): void {
 }
 
 export function installSkillFromGitHub(owner: string, repo: string, skillPath: string, name?: string): Skill {
+  // Validate inputs to prevent shell injection
+  const validGhName = /^[a-zA-Z0-9._-]+$/;
+  const validPath = /^[a-zA-Z0-9._\-/]+$/;
+  if (!validGhName.test(owner) || !validGhName.test(repo)) {
+    throw new Error("Invalid GitHub owner or repo name");
+  }
+  if (!validPath.test(skillPath)) {
+    throw new Error("Invalid skill path");
+  }
+
   const skillName = name || skillPath.split("/").pop()!;
+  if (name && !validPath.test(name)) {
+    throw new Error("Invalid skill name");
+  }
   const targetDir = join(SKILLS_DIR, skillName);
 
   if (existsSync(targetDir)) {
