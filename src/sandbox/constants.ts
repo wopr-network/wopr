@@ -3,8 +3,8 @@
  * Copied from OpenClaw with WOPR paths.
  */
 
-import { homedir } from "os";
-import { join } from "path";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { WOPR_HOME } from "../paths.js";
 
 export const DEFAULT_SANDBOX_WORKSPACE_ROOT = join(homedir(), ".wopr", "sandboxes");
@@ -32,10 +32,10 @@ export const DEFAULT_TOOL_ALLOW = [
 
 // Default tools denied in sandbox
 export const DEFAULT_TOOL_DENY = [
-  "http_fetch",      // No network in sandbox by default
-  "cron_schedule",   // Can't create crons
+  "http_fetch", // No network in sandbox by default
+  "cron_schedule", // Can't create crons
   "cron_once",
-  "config_set",      // Can't modify config
+  "config_set", // Can't modify config
 ] as const;
 
 export const SANDBOX_STATE_DIR = join(WOPR_HOME, "sandbox");

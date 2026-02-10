@@ -37,14 +37,10 @@ function normalizeForHash(value: unknown): unknown {
     return undefined;
   }
   if (Array.isArray(value)) {
-    const normalized = value
-      .map(normalizeForHash)
-      .filter((item): item is unknown => item !== undefined);
+    const normalized = value.map(normalizeForHash).filter((item): item is unknown => item !== undefined);
     const primitives = normalized.filter(isPrimitive);
     if (primitives.length === normalized.length) {
-      return [...primitives].sort((a, b) =>
-        primitiveToString(a).localeCompare(primitiveToString(b))
-      );
+      return [...primitives].sort((a, b) => primitiveToString(a).localeCompare(primitiveToString(b)));
     }
     return normalized;
   }

@@ -4,14 +4,13 @@
  * Adapted from OpenClaw for WOPR.
  */
 
-import { existsSync, mkdirSync } from "fs";
-import { join } from "path";
+import { existsSync, mkdirSync } from "node:fs";
 import { logger } from "../logger.js";
-import type { SandboxContext, SandboxWorkspaceInfo } from "./types.js";
 import { resolveSandboxConfig, shouldSandbox } from "./config.js";
 import { ensureSandboxContainer } from "./docker.js";
 import { maybePruneSandboxes } from "./prune.js";
 import { resolveSandboxScopeKey, resolveSandboxWorkspaceDir } from "./shared.js";
+import type { SandboxContext, SandboxWorkspaceInfo } from "./types.js";
 
 /**
  * Ensure the sandbox workspace directory exists and is properly initialized.
@@ -45,9 +44,7 @@ export async function resolveSandboxContext(params: {
   // Resolve workspace directory
   const scopeKey = resolveSandboxScopeKey(cfg.scope, sessionName);
   const workspaceDir =
-    cfg.scope === "shared"
-      ? cfg.workspaceRoot
-      : resolveSandboxWorkspaceDir(cfg.workspaceRoot, scopeKey);
+    cfg.scope === "shared" ? cfg.workspaceRoot : resolveSandboxWorkspaceDir(cfg.workspaceRoot, scopeKey);
 
   // Ensure workspace exists
   await ensureSandboxWorkspace(workspaceDir);
@@ -90,9 +87,7 @@ export function getSandboxWorkspaceInfo(params: {
   const cfg = resolveSandboxConfig({ sessionName, trustLevel });
   const scopeKey = resolveSandboxScopeKey(cfg.scope, sessionName);
   const workspaceDir =
-    cfg.scope === "shared"
-      ? cfg.workspaceRoot
-      : resolveSandboxWorkspaceDir(cfg.workspaceRoot, scopeKey);
+    cfg.scope === "shared" ? cfg.workspaceRoot : resolveSandboxWorkspaceDir(cfg.workspaceRoot, scopeKey);
 
   return {
     workspaceDir,
