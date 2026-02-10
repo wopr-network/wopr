@@ -8,12 +8,12 @@ import { logger } from "./logger.js";
  * - Multi-provider credentials via ProviderRegistry
  */
 
-import { randomBytes, createHash } from "crypto";
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
-import { AUTH_FILE } from "./paths.js";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { providerRegistry } from "./core/providers.js";
+import { AUTH_FILE } from "./paths.js";
 
 // Claude Code credentials location
 const CLAUDE_CODE_CREDENTIALS = join(homedir(), ".claude", ".credentials.json");
@@ -55,9 +55,7 @@ export interface PKCEChallenge {
 export function generatePKCE(): PKCEChallenge {
   const state = randomBytes(32).toString("base64url");
   const codeVerifier = randomBytes(32).toString("base64url");
-  const codeChallenge = createHash("sha256")
-    .update(codeVerifier)
-    .digest("base64url");
+  const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
 
   return { state, codeVerifier, codeChallenge };
 }
@@ -81,7 +79,7 @@ export function buildAuthUrl(pkce: PKCEChallenge, redirectUri: string): string {
 export async function exchangeCode(
   code: string,
   codeVerifier: string,
-  redirectUri: string
+  redirectUri: string,
 ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
   const response = await fetch(OAUTH_TOKEN_URL, {
     method: "POST",
@@ -112,7 +110,7 @@ export async function exchangeCode(
 
 // Refresh an expired access token
 export async function refreshAccessToken(
-  refreshToken: string
+  refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
   const response = await fetch(OAUTH_TOKEN_URL, {
     method: "POST",
@@ -161,19 +159,32 @@ export function loadClaudeCodeCredentials(): AuthState | null {
   }
 }
 
-// Load auth state from disk (checks Claude Code creds first, then WOPR's own)
+// Load auth state from disk
+// Priority: WOPR explicit API key > Claude Code OAuth > WOPR OAuth
+// This ensures `wopr auth api-key` is not silently ignored when
+// ~/.claude/.credentials.json exists.
 export function loadAuth(): AuthState | null {
-  // First check for Claude Code credentials
+  // Check WOPR's own auth file first
+  let woprAuth: AuthState | null = null;
+  if (existsSync(AUTH_FILE)) {
+    try {
+      woprAuth = JSON.parse(readFileSync(AUTH_FILE, "utf-8"));
+    } catch {
+      // ignore
+    }
+  }
+
+  // If WOPR has an explicit API key, prefer it over Claude Code OAuth
+  if (woprAuth?.type === "api_key" && woprAuth.apiKey) {
+    return woprAuth;
+  }
+
+  // Otherwise try Claude Code credentials
   const claudeCodeAuth = loadClaudeCodeCredentials();
   if (claudeCodeAuth) return claudeCodeAuth;
 
-  // Fall back to WOPR's own auth file
-  if (!existsSync(AUTH_FILE)) return null;
-  try {
-    return JSON.parse(readFileSync(AUTH_FILE, "utf-8"));
-  } catch {
-    return null;
-  }
+  // Fall back to whatever WOPR auth was saved (e.g. WOPR's own OAuth)
+  return woprAuth;
 }
 
 // Initialize registry credentials on auth load
@@ -192,7 +203,7 @@ export async function loadAuthWithRegistry(): Promise<AuthState | null> {
   if (auth?.type === "api_key" && auth.apiKey) {
     try {
       await storeProviderCredential("anthropic", auth.apiKey);
-    } catch (error) {
+    } catch (_error) {
       // Silently fail - registry may not be fully initialized yet
     }
   }
@@ -271,12 +282,7 @@ export function getBetaHeaders(): string {
 }
 
 // Save OAuth tokens after successful auth flow
-export function saveOAuthTokens(
-  accessToken: string,
-  refreshToken: string,
-  expiresIn: number,
-  email?: string
-): void {
+export function saveOAuthTokens(accessToken: string, refreshToken: string, expiresIn: number, email?: string): void {
   const auth: AuthState = {
     type: "oauth",
     accessToken,
@@ -304,18 +310,12 @@ export function saveApiKey(apiKey: string): void {
  * @param credential - The credential string (API key, token, etc.)
  * @throws Error if provider is not registered or credential is invalid
  */
-export async function storeProviderCredential(
-  providerId: string,
-  credential: string
-): Promise<void> {
+export async function storeProviderCredential(providerId: string, credential: string): Promise<void> {
   try {
     await providerRegistry.setCredential(providerId, credential);
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
-    logger.error(
-      `Failed to store credential for provider ${providerId}: ${errorMessage}`
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to store credential for provider ${providerId}: ${errorMessage}`);
     throw error;
   }
 }
@@ -325,18 +325,13 @@ export async function storeProviderCredential(
  * @param providerId - The provider ID (e.g., "anthropic", "openai", "google")
  * @returns The credential string, or undefined if not found
  */
-export async function getProviderCredential(
-  providerId: string
-): Promise<string | undefined> {
+export async function getProviderCredential(providerId: string): Promise<string | undefined> {
   try {
     const creds = providerRegistry.getCredential(providerId);
     return creds?.credential;
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error);
-    logger.error(
-      `Failed to retrieve credential for provider ${providerId}: ${errorMessage}`
-    );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to retrieve credential for provider ${providerId}: ${errorMessage}`);
     return undefined;
   }
 }

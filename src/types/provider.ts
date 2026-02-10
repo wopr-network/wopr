@@ -40,10 +40,10 @@ export interface ProviderCredentials {
 
   /** Additional provider-specific data */
   metadata?: {
-    expiresAt?: number;           // For OAuth tokens
-    refreshToken?: string;        // For OAuth flows
-    region?: string;              // For region-specific providers
-    customKey?: string;           // For custom credentials
+    expiresAt?: number; // For OAuth tokens
+    refreshToken?: string; // For OAuth flows
+    region?: string; // For region-specific providers
+    customKey?: string; // For custom credentials
     [key: string]: unknown;
   };
 
@@ -177,7 +177,6 @@ export interface ModelClient {
    * Health check - verify provider is accessible
    */
   healthCheck(): Promise<boolean>;
-
 }
 
 /**
@@ -236,9 +235,9 @@ export interface ModelProvider {
  */
 export interface ProviderRegistration {
   provider: ModelProvider;
-  available: boolean;           // Can we use this provider?
-  lastChecked: number;          // When we last checked availability
-  error?: string;               // Error message if not available
+  available: boolean; // Can we use this provider?
+  lastChecked: number; // When we last checked availability
+  error?: string; // Error message if not available
 }
 
 /**
@@ -249,5 +248,5 @@ export interface ResolvedProvider {
   provider: ModelProvider;
   client: ModelClient;
   credential: string;
-  fallbackChain: string[];      // Remaining fallbacks
+  fallbackChain: string[]; // Remaining fallbacks
 }

@@ -6,9 +6,9 @@
  * Can auto-install missing dependencies via brew, apt, pip, npm, docker, etc.
  */
 
-import { execSync, spawn } from "child_process";
-import { accessSync, constants } from "fs";
-import { join, delimiter } from "path";
+import { execSync, spawn } from "node:child_process";
+import { accessSync, constants } from "node:fs";
+import { delimiter, join } from "node:path";
 import { logger } from "../logger.js";
 import type { InstallMethod, VoicePluginRequirements } from "../voice/types.js";
 
@@ -511,10 +511,7 @@ export async function ensureRequirements(
 /**
  * Check if an install method can help with missing requirements
  */
-function canMethodHelp(
-  method: InstallMethod,
-  missing: RequirementCheckResult["missing"],
-): boolean {
+function canMethodHelp(method: InstallMethod, missing: RequirementCheckResult["missing"]): boolean {
   switch (method.kind) {
     case "brew":
     case "apt":
@@ -523,12 +520,13 @@ function canMethodHelp(
       // These install binaries
       return missing.bins.length > 0;
 
-    case "docker":
+    case "docker": {
       // Check if this image is in the missing list
       const fullImage = method.tag ? `${method.image}:${method.tag}` : method.image;
       return missing.docker.some(
         (img) => img === fullImage || img === method.image || img.startsWith(`${method.image}:`),
       );
+    }
 
     case "script":
     case "manual":

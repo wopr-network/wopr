@@ -1,71 +1,56 @@
-import { logger } from "./logger.js";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
-import { join, resolve } from "path";
-import { execSync } from "child_process";
-
-import { config as centralConfig } from "./core/config.js";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { z } from "zod";
+import { registerA2ATool } from "./core/a2a-mcp.js";
 import {
-  WOPRPlugin,
-  WOPRPluginContext,
-  PluginCommand,
-  InstalledPlugin,
-  PluginRegistryEntry,
-  PluginLogger,
-  ChannelAdapter,
-  ChannelRef,
-  WebUiExtension,
-  UiComponentExtension,
-  ContextProvider,
-  ConfigSchema,
-  PluginInjectOptions,
-  HookOptions,
-  A2AServerConfig,
-  A2AToolDefinition,
-  ChannelProvider,
-} from "./types.js";
-import {
-  registerChannelProvider as registerChannelProviderCore,
-  unregisterChannelProvider as unregisterChannelProviderCore,
   getChannelProvider as getChannelProviderCore,
   getChannelProviders as getChannelProvidersCore,
+  registerChannelProvider as registerChannelProviderCore,
+  unregisterChannelProvider as unregisterChannelProviderCore,
 } from "./core/channels.js";
-import { registerA2ATool } from "./core/a2a-mcp.js";
-import { z } from "zod";
-import { logMessage as logMessageToSession, cancelInject as cancelSessionInject } from "./core/sessions.js";
+import { config as centralConfig } from "./core/config.js";
 import {
+  getContextProvider as getCtxProvider,
   registerContextProvider as registerCtxProvider,
   unregisterContextProvider as unregisterCtxProvider,
-  getContextProvider as getCtxProvider,
 } from "./core/context.js";
-import { providerRegistry } from "./core/providers.js";
-import type { ModelProvider } from "./types/provider.js";
-import type { 
-  ContextPart, 
-  MessageInfo 
-} from "./core/context.js";
-import { resolveIdentity, resolveUserProfile } from "./core/workspace.js";
 import { eventBus } from "./core/events.js";
+import { providerRegistry } from "./core/providers.js";
+import { cancelInject as cancelSessionInject, logMessage as logMessageToSession } from "./core/sessions.js";
+import { resolveIdentity, resolveUserProfile } from "./core/workspace.js";
+import { logger } from "./logger.js";
+import { checkRequirements, ensureRequirements, formatMissingRequirements } from "./plugins/requirements.js";
+import type { ModelProvider } from "./types/provider.js";
 import type {
+  A2AServerConfig,
+  ChannelAdapter,
+  ChannelProvider,
+  ChannelRef,
+  ConfigSchema,
+  ContextProvider,
+  EventHandler,
+  HookOptions,
+  InstalledPlugin,
+  MutableHookEvent,
+  PluginInjectOptions,
+  PluginLogger,
+  PluginRegistryEntry,
+  UiComponentExtension,
+  WebUiExtension,
   WOPREventBus,
   WOPRHookManager,
-  EventHandler,
-  MutableHookEvent,
-  SessionInjectEvent,
-  ChannelMessageEvent,
+  WOPRPlugin,
+  WOPRPluginContext,
 } from "./types.js";
 import { getVoiceRegistry } from "./voice/index.js";
-import type { STTProvider, TTSProvider, VoicePluginRequirements, InstallMethod } from "./voice/types.js";
-import {
-  checkRequirements,
-  ensureRequirements,
-  formatMissingRequirements,
-} from "./plugins/requirements.js";
-import { homedir } from "os";
+import type { InstallMethod, STTProvider, TTSProvider, VoicePluginRequirements } from "./voice/types.js";
+
 const WOPR_HOME = process.env.WOPR_HOME || join(homedir(), "wopr");
 const PLUGINS_DIR = join(WOPR_HOME, "plugins");
 const PLUGINS_FILE = join(WOPR_HOME, "plugins.json");
 const REGISTRIES_FILE = join(WOPR_HOME, "plugin-registries.json");
-
 
 // Loaded plugins (runtime)
 const loadedPlugins: Map<string, { plugin: WOPRPlugin; context: WOPRPluginContext }> = new Map();
@@ -220,7 +205,7 @@ function registerA2AServerImpl(config: A2AServerConfig): void {
         name: tool.name,
         description: tool.description,
         schema: zodSchema,
-        handler: async (args, context) => {
+        handler: async (args, _context) => {
           // Call the plugin's handler
           const result = await tool.handler(args);
           return result;
@@ -245,6 +230,16 @@ export interface InstallResult {
   enabled: boolean;
 }
 
+// Validate input for safe shell interpolation
+const SAFE_NAME = /^[a-zA-Z0-9._-]+$/;
+const SAFE_PKG = /^[@a-zA-Z0-9._\/-]+$/;
+
+function assertSafeName(value: string, label: string): void {
+  if (!SAFE_NAME.test(value)) {
+    throw new Error(`Invalid ${label}: ${value}`);
+  }
+}
+
 export async function installPlugin(source: string): Promise<InstalledPlugin> {
   mkdirSync(PLUGINS_DIR, { recursive: true });
 
@@ -252,13 +247,17 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
   if (source.startsWith("github:")) {
     // GitHub repo
     const repo = source.replace("github:", "");
-    const pluginDir = join(PLUGINS_DIR, repo.split("/")[1] || repo);
-    
+    const parts = repo.split("/");
+    if (parts.length !== 2) throw new Error("GitHub source must be github:owner/repo");
+    assertSafeName(parts[0], "GitHub owner");
+    assertSafeName(parts[1], "GitHub repo");
+    const pluginDir = join(PLUGINS_DIR, parts[1]);
+
     // Clone or pull
     if (existsSync(pluginDir)) {
       execSync("git pull", { cwd: pluginDir, stdio: "inherit" });
     } else {
-      execSync(`git clone https://github.com/${repo} "${pluginDir}"`, { stdio: "inherit" });
+      execSync(`git clone https://github.com/${parts[0]}/${parts[1]} "${pluginDir}"`, { stdio: "inherit" });
     }
 
     // Install dependencies if package.json exists
@@ -266,7 +265,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     if (existsSync(pkgPath)) {
       logger.info(`[plugins] Installing dependencies for ${repo}...`);
       execSync("npm install", { cwd: pluginDir, stdio: "inherit" });
-      
+
       // Build TypeScript plugins if tsconfig.json exists
       if (existsSync(join(pluginDir, "tsconfig.json"))) {
         logger.info(`[plugins] Building TypeScript plugin...`);
@@ -293,10 +292,10 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     // Local path
     const resolved = resolve(source.replace("~", process.env.HOME || "~"));
     const pluginDir = join(PLUGINS_DIR, resolved.split("/").pop() || "plugin");
-    
-    // Symlink or copy
+
+    // Symlink (no shell — avoids injection via path)
     if (!existsSync(pluginDir)) {
-      execSync(`ln -s "${resolved}" "${pluginDir}"`);
+      symlinkSync(resolved, pluginDir);
     }
 
     // Install dependencies if package.json exists
@@ -304,7 +303,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     if (existsSync(pkgPath)) {
       logger.info(`[plugins] Installing dependencies for local plugin...`);
       execSync("npm install", { cwd: pluginDir, stdio: "inherit" });
-      
+
       // Build TypeScript plugins if tsconfig.json exists
       if (existsSync(join(pluginDir, "tsconfig.json"))) {
         logger.info(`[plugins] Building TypeScript plugin...`);
@@ -329,9 +328,9 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
   } else {
     // npm package - normalize to wopr-plugin-<name> format (accept wopr-<name> too)
     const shortName = source.replace(/^wopr-plugin-/, "").replace(/^wopr-/, "");
-    const npmPackage = source.startsWith("wopr-") && !source.startsWith("wopr-plugin-")
-      ? source
-      : `wopr-plugin-${shortName}`;
+    const npmPackage =
+      source.startsWith("wopr-") && !source.startsWith("wopr-plugin-") ? source : `wopr-plugin-${shortName}`;
+    if (!SAFE_PKG.test(npmPackage)) throw new Error(`Invalid npm package name: ${npmPackage}`);
     const pluginDir = join(PLUGINS_DIR, shortName);
     mkdirSync(pluginDir, { recursive: true });
 
@@ -363,16 +362,18 @@ export function removePlugin(name: string): boolean {
 
 export function uninstallPlugin(name: string): boolean {
   const installed = getInstalledPlugins();
-  const plugin = installed.find(p => p.name === name);
+  const plugin = installed.find((p) => p.name === name);
   if (!plugin) return false;
 
-  // Remove files
-  if (existsSync(plugin.path)) {
-    execSync(`rm -rf "${plugin.path}"`);
+  // Remove files (only if under PLUGINS_DIR to prevent path traversal)
+  const normalizedPath = resolve(plugin.path);
+  const normalizedBase = resolve(PLUGINS_DIR);
+  if (existsSync(normalizedPath) && normalizedPath.startsWith(normalizedBase + "/")) {
+    execSync(`rm -rf "${normalizedPath}"`);
   }
 
   // Remove from registry
-  const remaining = installed.filter(p => p.name !== name);
+  const remaining = installed.filter((p) => p.name !== name);
   writeFileSync(PLUGINS_FILE, JSON.stringify(remaining, null, 2));
 
   return true;
@@ -380,7 +381,7 @@ export function uninstallPlugin(name: string): boolean {
 
 export function enablePlugin(name: string): boolean {
   const installed = getInstalledPlugins();
-  const plugin = installed.find(p => p.name === name);
+  const plugin = installed.find((p) => p.name === name);
   if (!plugin) return false;
 
   plugin.enabled = true;
@@ -390,7 +391,7 @@ export function enablePlugin(name: string): boolean {
 
 export function disablePlugin(name: string): boolean {
   const installed = getInstalledPlugins();
-  const plugin = installed.find(p => p.name === name);
+  const plugin = installed.find((p) => p.name === name);
   if (!plugin) return false;
 
   plugin.enabled = false;
@@ -409,7 +410,7 @@ export function getInstalledPlugins(): InstalledPlugin[] {
 
 function addInstalledPlugin(plugin: InstalledPlugin): void {
   const installed = getInstalledPlugins();
-  const existing = installed.findIndex(p => p.name === plugin.name);
+  const existing = installed.findIndex((p) => p.name === plugin.name);
   if (existing >= 0) {
     installed[existing] = plugin;
   } else {
@@ -427,15 +428,18 @@ function createPluginContext(
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
     getSessions: () => string[];
-  }
+  },
 ): WOPRPluginContext {
   const pluginName = plugin.name;
 
   return {
     inject: (session: string, message: string, options?: PluginInjectOptions) =>
       injectors.inject(session, message, options),
-    logMessage: (session: string, message: string, options?: { from?: string; senderId?: string; channel?: ChannelRef }) =>
-      logMessageToSession(session, message, options),
+    logMessage: (
+      session: string,
+      message: string,
+      options?: { from?: string; senderId?: string; channel?: ChannelRef },
+    ) => logMessageToSession(session, message, options),
     getSessions: injectors.getSessions,
     cancelInject: (session: string) => cancelSessionInject(session),
 
@@ -474,7 +478,7 @@ function createPluginContext(
     },
 
     getChannelsForSession(session: string) {
-      return Array.from(channelAdapters.values()).filter(adapter => adapter.session === session);
+      return Array.from(channelAdapters.values()).filter((adapter) => adapter.session === session);
     },
 
     registerWebUiExtension(extension: WebUiExtension) {
@@ -537,7 +541,10 @@ function createPluginContext(
     },
 
     getProvider(id: string): ModelProvider | undefined {
-      return providerPlugins.get(id) || providerRegistry.listProviders().find(p => p.id === id) as unknown as ModelProvider;
+      return (
+        providerPlugins.get(id) ||
+        (providerRegistry.listProviders().find((p) => p.id === id) as unknown as ModelProvider)
+      );
     },
 
     async getAgentIdentity() {
@@ -647,10 +654,13 @@ function createPluginContext(
  * Create an event bus instance scoped to a plugin
  */
 function createPluginEventBus(pluginName: string): WOPREventBus {
+  // Track original -> wrapped handler mapping so off() can find the right listener
+  const handlerMap = new Map<EventHandler<any>, EventHandler<any>>();
+
   return {
     on<T extends keyof import("./types.js").WOPREventMap>(
       event: T,
-      handler: EventHandler<import("./types.js").WOPREventMap[T]>
+      handler: EventHandler<import("./types.js").WOPREventMap[T]>,
     ): () => void {
       // Wrap handler to identify plugin source
       const wrappedHandler: EventHandler<any> = async (payload, evt) => {
@@ -658,29 +668,32 @@ function createPluginEventBus(pluginName: string): WOPREventBus {
         const eventWithSource = { ...evt, source: pluginName };
         await handler(payload, eventWithSource);
       };
-      
-      // Store reference for off()
-      (wrappedHandler as any)._original = handler;
-      
+
+      handlerMap.set(handler, wrappedHandler);
       return eventBus.on(event, wrappedHandler);
     },
 
     once<T extends keyof import("./types.js").WOPREventMap>(
       event: T,
-      handler: EventHandler<import("./types.js").WOPREventMap[T]>
+      handler: EventHandler<import("./types.js").WOPREventMap[T]>,
     ): void {
       const wrappedHandler: EventHandler<any> = async (payload, evt) => {
         const eventWithSource = { ...evt, source: pluginName };
         await handler(payload, eventWithSource);
       };
+      handlerMap.set(handler, wrappedHandler);
       eventBus.once(event, wrappedHandler);
     },
 
     off<T extends keyof import("./types.js").WOPREventMap>(
       event: T,
-      handler: EventHandler<import("./types.js").WOPREventMap[T]>
+      handler: EventHandler<import("./types.js").WOPREventMap[T]>,
     ): void {
-      eventBus.off(event, handler);
+      const wrapped = handlerMap.get(handler);
+      if (wrapped) {
+        eventBus.off(event, wrapped as EventHandler<import("./types.js").WOPREventMap[T]>);
+        handlerMap.delete(handler);
+      }
     },
 
     async emit(event: string, payload: any): Promise<void> {
@@ -701,7 +714,7 @@ function createPluginEventBus(pluginName: string): WOPREventBus {
  * Hook registration entry with metadata
  */
 interface HookEntry {
-  handler: Function;
+  handler: (...args: any[]) => any;
   priority: number;
   name?: string;
   once: boolean;
@@ -713,9 +726,12 @@ interface HookEntry {
  * Hooks provide typed, mutable access to core lifecycle events
  * with priority ordering (lower = runs first)
  */
-function createPluginHookManager(pluginName: string): WOPRHookManager {
+function createPluginHookManager(_pluginName: string): WOPRHookManager {
   // Map of event -> array of hook entries (sorted by priority)
   const hookEntries = new Map<string, HookEntry[]>();
+
+  // One bus subscription per event (prevents N*N handler calls)
+  const busSubscriptions = new Map<string, () => void>();
 
   // Mutable events that can transform data or block
   const mutableEvents = new Set(["message:incoming", "message:outgoing", "channel:message"]);
@@ -735,7 +751,7 @@ function createPluginHookManager(pluginName: string): WOPRHookManager {
 
   function insertSorted(entries: HookEntry[], entry: HookEntry): void {
     // Insert in priority order (lower = first)
-    const idx = entries.findIndex(e => e.priority > entry.priority);
+    const idx = entries.findIndex((e) => e.priority > entry.priority);
     if (idx === -1) {
       entries.push(entry);
     } else {
@@ -743,106 +759,120 @@ function createPluginHookManager(pluginName: string): WOPRHookManager {
     }
   }
 
+  /** Ensure exactly one event bus listener exists for this hook event */
+  function ensureBusSubscription(event: string): void {
+    if (busSubscriptions.has(event)) return;
+
+    const busEvent = eventMapping[event] || event;
+    const isMutable = mutableEvents.has(event);
+
+    const unsubscribe = eventBus.on(busEvent as any, async (payload, _evt) => {
+      const entries = getEntries(event);
+
+      if (isMutable) {
+        let prevented = false;
+        const mutableEvent: MutableHookEvent<any> = {
+          data: payload,
+          session: payload.session || "default",
+          preventDefault() {
+            prevented = true;
+            if (payload && typeof payload === "object") {
+              (payload as any)._prevented = true;
+            }
+          },
+          isPrevented() {
+            return prevented;
+          },
+        };
+
+        for (const entry of [...entries]) {
+          await entry.handler(mutableEvent);
+
+          if (entry.once) {
+            const idx = entries.indexOf(entry);
+            if (idx !== -1) entries.splice(idx, 1);
+          }
+
+          if (mutableEvent.isPrevented()) break;
+        }
+      } else {
+        for (const entry of [...entries]) {
+          await entry.handler(payload);
+
+          if (entry.once) {
+            const idx = entries.indexOf(entry);
+            if (idx !== -1) entries.splice(idx, 1);
+          }
+        }
+      }
+
+      // If all entries removed, clean up bus subscription
+      if (entries.length === 0) {
+        unsubscribe();
+        busSubscriptions.delete(event);
+      }
+    });
+
+    busSubscriptions.set(event, unsubscribe);
+  }
+
   return {
-    on(event: string, handler: Function, options?: HookOptions): () => void {
+    on(event: string, handler: (...args: any[]) => any, options?: HookOptions): () => void {
       const priority = options?.priority ?? 100;
       const name = options?.name;
       const once = options?.once ?? false;
-
-      // Resolve to underlying event bus event name
-      const busEvent = eventMapping[event] || event;
-
-      // Create unsubscribe function for event bus
-      const unsubscribe = eventBus.on(busEvent as any, async (payload, evt) => {
-        const entries = getEntries(event);
-        const isMutable = mutableEvents.has(event);
-
-        if (isMutable) {
-          // Mutable event - handlers can transform data
-          let prevented = false;
-          const mutableEvent: MutableHookEvent<any> = {
-            data: payload,
-            session: payload.session || "default",
-            preventDefault() {
-              prevented = true;
-              // Set _prevented on payload for mutable emit functions
-              if (payload && typeof payload === "object") {
-                (payload as any)._prevented = true;
-              }
-            },
-            isPrevented() { return prevented; },
-          };
-
-          for (const entry of [...entries]) {
-            await entry.handler(mutableEvent);
-
-            // Handle once option
-            if (entry.once) {
-              const idx = entries.indexOf(entry);
-              if (idx !== -1) {
-                entries.splice(idx, 1);
-                entry.unsubscribe();
-              }
-            }
-
-            if (mutableEvent.isPrevented()) break;
-          }
-        } else {
-          // Read-only event
-          for (const entry of [...entries]) {
-            await entry.handler(payload);
-
-            // Handle once option
-            if (entry.once) {
-              const idx = entries.indexOf(entry);
-              if (idx !== -1) {
-                entries.splice(idx, 1);
-                entry.unsubscribe();
-              }
-            }
-          }
-        }
-      });
 
       const entry: HookEntry = {
         handler,
         priority,
         name,
         once,
-        unsubscribe,
+        unsubscribe: () => {}, // placeholder, removal handled below
       };
 
       const entries = getEntries(event);
       insertSorted(entries, entry);
 
+      // Subscribe to event bus (only once per event)
+      ensureBusSubscription(event);
+
       return () => {
         const entries = getEntries(event);
         const idx = entries.indexOf(entry);
-        if (idx !== -1) {
-          entries.splice(idx, 1);
+        if (idx !== -1) entries.splice(idx, 1);
+
+        // If no entries left, unsubscribe from bus
+        if (entries.length === 0) {
+          busSubscriptions.get(event)?.();
+          busSubscriptions.delete(event);
         }
-        unsubscribe();
       };
     },
 
-    off(event: string, handler: Function): void {
+    off(event: string, handler: (...args: any[]) => any): void {
       const entries = getEntries(event);
-      const idx = entries.findIndex(e => e.handler === handler);
+      const idx = entries.findIndex((e) => e.handler === handler);
       if (idx !== -1) {
-        entries[idx].unsubscribe();
         entries.splice(idx, 1);
+      }
+      // If no entries left, unsubscribe from bus
+      if (entries.length === 0) {
+        busSubscriptions.get(event)?.();
+        busSubscriptions.delete(event);
       }
     },
 
     offByName(name: string): void {
       for (const [event, entries] of hookEntries) {
-        const toRemove = entries.filter(e => e.name === name);
+        const toRemove = entries.filter((e) => e.name === name);
         for (const entry of toRemove) {
-          entry.unsubscribe();
           const idx = entries.indexOf(entry);
-          if (idx !== -1) {
-            entries.splice(idx, 1);
-          }
+          if (idx !== -1) entries.splice(idx, 1);
+        }
+        // If no entries left, unsubscribe from bus
+        if (entries.length === 0) {
+          busSubscriptions.get(event)?.();
+          busSubscriptions.delete(event);
         }
       }
     },
@@ -905,19 +935,16 @@ export async function loadPlugin(
     if (requires) {
       logger.info(`[plugins] Checking requirements for ${installed.name}...`);
 
-      const { satisfied, installed: installedDeps, errors } = await ensureRequirements(
-        requires,
-        installMethods,
-        {
-          auto: options.autoInstall,
-          prompt: options.promptInstall,
-        },
-      );
+      const { satisfied, installed: installedDeps, errors } = await ensureRequirements(requires, installMethods, {
+        auto: options.autoInstall,
+        prompt: options.promptInstall,
+      });
 
       if (!satisfied) {
         const check = await checkRequirements(requires);
         const missing = formatMissingRequirements(check);
-        throw new Error(`Plugin ${installed.name} requirements not satisfied:\n${missing}`);
+        const errorDetail = errors.length > 0 ? `\nInstall errors:\n${errors.map((e) => `  - ${e}`).join("\n")}` : "";
+        throw new Error(`Plugin ${installed.name} requirements not satisfied:\n${missing}${errorDetail}`);
       }
 
       if (installedDeps.length > 0) {
@@ -929,7 +956,7 @@ export async function loadPlugin(
   // Temporarily change cwd to plugin directory for proper module resolution
   const originalCwd = process.cwd();
   process.chdir(installed.path);
-  
+
   let module: any;
   try {
     // Dynamic import with cache-busting query param for reloads
@@ -1023,7 +1050,7 @@ export function addRegistry(url: string, name?: string): PluginRegistryEntry {
 
 export function removeRegistry(url: string): boolean {
   const registries = getPluginRegistries();
-  const filtered = registries.filter(r => r.url !== url);
+  const filtered = registries.filter((r) => r.url !== url);
   if (filtered.length === registries.length) return false;
   writeFileSync(REGISTRIES_FILE, JSON.stringify(filtered, null, 2));
   return true;
@@ -1072,7 +1099,7 @@ export async function searchPlugins(query: string): Promise<DiscoveredPlugin[]> 
     for (const p of ghResults) {
       if (!seen.has(p.name)) {
         seen.add(p.name);
-        p.installed = installed.some(i => i.name === p.name);
+        p.installed = installed.some((i) => i.name === p.name);
         results.push(p);
       }
     }
@@ -1086,7 +1113,7 @@ export async function searchPlugins(query: string): Promise<DiscoveredPlugin[]> 
     for (const p of npmResults) {
       if (!seen.has(p.name)) {
         seen.add(p.name);
-        p.installed = installed.some(i => i.name === p.name);
+        p.installed = installed.some((i) => i.name === p.name);
         results.push(p);
       }
     }
@@ -1105,10 +1132,10 @@ async function searchGitHubPlugins(query?: string): Promise<DiscoveredPlugin[]> 
 
   try {
     // Get user's repos matching wopr-plugin-*
-    const output = execSync(
-      `gh repo list --json name,description,url --limit 100 2>/dev/null`,
-      { encoding: "utf-8", timeout: 10000 }
-    );
+    const output = execSync(`gh repo list --json name,description,url --limit 100 2>/dev/null`, {
+      encoding: "utf-8",
+      timeout: 10000,
+    });
     const repos = JSON.parse(output);
 
     for (const repo of repos) {
@@ -1135,13 +1162,14 @@ async function searchGitHubPlugins(query?: string): Promise<DiscoveredPlugin[]> 
  */
 async function searchNpmPlugins(query?: string): Promise<DiscoveredPlugin[]> {
   const results: DiscoveredPlugin[] = [];
-  const searchTerm = query ? `wopr-plugin-${query}` : "wopr-plugin-";
+  const sanitized = query ? query.replace(/[^a-zA-Z0-9._-]/g, "") : "";
+  const searchTerm = sanitized ? `wopr-plugin-${sanitized}` : "wopr-plugin-";
 
   try {
-    const output = execSync(
-      `npm search "${searchTerm}" --json 2>/dev/null | head -c 50000`,
-      { encoding: "utf-8", timeout: 15000 }
-    );
+    const output = execSync(`npm search "${searchTerm}" --json 2>/dev/null | head -c 50000`, {
+      encoding: "utf-8",
+      timeout: 15000,
+    });
     const packages = JSON.parse(output);
 
     for (const pkg of packages) {
@@ -1174,13 +1202,12 @@ export async function discoverVoicePlugins(): Promise<{
   const all = await searchPlugins("voice");
 
   return {
-    stt: all.filter(p => p.name.includes("stt") || p.name.includes("whisper") || p.name.includes("deepgram")),
-    tts: all.filter(p => p.name.includes("tts") || p.name.includes("piper") || p.name.includes("elevenlabs")),
-    channels: all.filter(p => p.name.includes("channel") && p.name.includes("voice")),
-    cli: all.filter(p => p.name.includes("voice-cli")),
+    stt: all.filter((p) => p.name.includes("stt") || p.name.includes("whisper") || p.name.includes("deepgram")),
+    tts: all.filter((p) => p.name.includes("tts") || p.name.includes("piper") || p.name.includes("elevenlabs")),
+    channels: all.filter((p) => p.name.includes("channel") && p.name.includes("voice")),
+    cli: all.filter((p) => p.name.includes("voice-cli")),
   };
 }
-
 
 // ============================================================================
 // Context Providers
@@ -1199,7 +1226,7 @@ export function getChannels(): ChannelAdapter[] {
 }
 
 export function getChannelsForSession(session: string): ChannelAdapter[] {
-  return Array.from(channelAdapters.values()).filter(adapter => adapter.session === session);
+  return Array.from(channelAdapters.values()).filter((adapter) => adapter.session === session);
 }
 
 // ============================================================================

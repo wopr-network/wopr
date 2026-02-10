@@ -4,8 +4,8 @@
  * Thin client for communicating with the WOPR daemon.
  */
 
-import type { CronJob, StreamCallback, StreamMessage, ConversationEntry } from "./types.js";
 import type { WoprConfig } from "./core/config.js";
+import type { ConversationEntry, CronJob, StreamCallback, StreamMessage } from "./types.js";
 
 const DEFAULT_URL = "http://127.0.0.1:7437";
 
@@ -83,24 +83,20 @@ export class WoprClient {
 
   async getConversationHistory(
     name: string,
-    limit?: number
+    limit?: number,
   ): Promise<{ name: string; entries: ConversationEntry[]; count: number }> {
     const url = `/sessions/${encodeURIComponent(name)}/conversation${limit ? `?limit=${limit}` : ""}`;
     return this.request(url);
   }
 
-  async inject(
-    session: string,
-    message: string,
-    onStream?: StreamCallback
-  ): Promise<InjectResult> {
+  async inject(session: string, message: string, onStream?: StreamCallback): Promise<InjectResult> {
     if (onStream) {
       // Use SSE for streaming
       const res = await fetch(`${this.baseUrl}/sessions/${encodeURIComponent(session)}/inject`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "text/event-stream",
+          Accept: "text/event-stream",
         },
         body: JSON.stringify({ message }),
       });
@@ -115,7 +111,7 @@ export class WoprClient {
 
       const decoder = new TextDecoder();
       let buffer = "";
-      let result: InjectResult = { sessionId: "", response: "", cost: 0 };
+      const result: InjectResult = { sessionId: "", response: "", cost: 0 };
       const chunks: string[] = [];
 
       while (true) {
@@ -217,7 +213,10 @@ export class WoprClient {
     });
   }
 
-  async initSessionDocs(session: string, options?: { agentName?: string; userName?: string }): Promise<{ created: string[] }> {
+  async initSessionDocs(
+    session: string,
+    options?: { agentName?: string; userName?: string },
+  ): Promise<{ created: string[] }> {
     return this.request(`/sessions/${encodeURIComponent(session)}/init-docs`, {
       method: "POST",
       body: JSON.stringify(options || {}),
@@ -481,17 +480,25 @@ export class WoprClient {
   }
 
   // Middleware management
-  async getMiddlewares(): Promise<{ name: string; priority: number; enabled: boolean; hasIncoming: boolean; hasOutgoing: boolean }[]> {
-    const data = await this.request<{ middlewares: { name: string; priority: number; enabled: boolean; hasIncoming: boolean; hasOutgoing: boolean }[] }>("/middleware");
+  async getMiddlewares(): Promise<
+    { name: string; priority: number; enabled: boolean; hasIncoming: boolean; hasOutgoing: boolean }[]
+  > {
+    const data = await this.request<{
+      middlewares: { name: string; priority: number; enabled: boolean; hasIncoming: boolean; hasOutgoing: boolean }[];
+    }>("/middleware");
     return data.middlewares;
   }
 
   async getMiddlewareChain(): Promise<{ name: string; priority: number; enabled: boolean }[]> {
-    const data = await this.request<{ chain: { name: string; priority: number; enabled: boolean }[] }>("/middleware/chain");
+    const data = await this.request<{ chain: { name: string; priority: number; enabled: boolean }[] }>(
+      "/middleware/chain",
+    );
     return data.chain;
   }
 
-  async getMiddleware(name: string): Promise<{ name: string; priority: number; enabled: boolean; hasIncoming: boolean; hasOutgoing: boolean }> {
+  async getMiddleware(
+    name: string,
+  ): Promise<{ name: string; priority: number; enabled: boolean; hasIncoming: boolean; hasOutgoing: boolean }> {
     return this.request(`/middleware/${encodeURIComponent(name)}`);
   }
 
@@ -516,7 +523,9 @@ export class WoprClient {
 
   // Context provider management
   async getContextProviders(): Promise<{ name: string; priority: number; enabled: boolean }[]> {
-    const data = await this.request<{ providers: { name: string; priority: number; enabled: boolean }[] }>("/middleware/context");
+    const data = await this.request<{ providers: { name: string; priority: number; enabled: boolean }[] }>(
+      "/middleware/context",
+    );
     return data.providers;
   }
 
