@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 import type { MemoryFileChange } from "../core/events.js";
 import { eventBus } from "../core/events.js";
 import { WOPR_HOME } from "../paths.js";
-import { buildFileEntry, chunkMarkdown, ensureDir, listMemoryFiles } from "./internal.js";
+import { buildFileEntry, chunkMarkdown, ensureDir, hashText, listMemoryFiles } from "./internal.js";
 import { ensureMemoryIndexSchema } from "./schema.js";
 import { syncSessionFiles } from "./sync-sessions.js";
 import {
@@ -25,7 +25,6 @@ import {
 const META_KEY = "memory_index_meta_v1";
 const SNIPPET_MAX_CHARS = 700;
 const FTS_TABLE = "chunks_fts";
-const _INDEX_CONCURRENCY = 4;
 
 type MemoryIndexMeta = {
   chunkTokens: number;
@@ -357,7 +356,7 @@ export class MemoryIndexManager {
                 absPath: entry.absPath,
                 source: "sessions" as MemorySource,
                 chunks: chunks.map((chunk) => ({
-                  id: chunk.hash,
+                  id: hashText(`sessions:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}`),
                   text: chunk.text,
                   hash: chunk.hash,
                   startLine: chunk.startLine,
@@ -401,7 +400,7 @@ export class MemoryIndexManager {
           absPath: entry.absPath,
           source: params.source,
           chunks: chunks.map((chunk) => ({
-            id: chunk.hash,
+            id: hashText(`${params.source}:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}`),
             text: chunk.text,
             hash: chunk.hash,
             startLine: chunk.startLine,
@@ -441,7 +440,9 @@ export class MemoryIndexManager {
         if (this.fts.available) {
           try {
             this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`).run(change.path, change.source);
-          } catch {}
+          } catch (err) {
+            console.warn(`[memory] FTS delete failed for ${change.path}: ${err}`);
+          }
         }
         continue;
       }
@@ -455,7 +456,9 @@ export class MemoryIndexManager {
       if (this.fts.available) {
         try {
           this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`).run(change.path, change.source);
-        } catch {}
+        } catch (err) {
+          console.warn(`[memory] FTS delete failed for ${change.path}: ${err}`);
+        }
       }
 
       const insertChunk = this.db.prepare(
@@ -573,17 +576,18 @@ export class MemoryIndexManager {
 
   private async runWithConcurrency<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
     const results: T[] = [];
-    const executing: Promise<void>[] = [];
+    const executing: Set<Promise<void>> = new Set();
 
     for (const task of tasks) {
       const p = task().then((result) => {
         results.push(result);
+      }).finally(() => {
+        executing.delete(p);
       });
-      executing.push(p);
+      executing.add(p);
 
-      if (executing.length >= concurrency) {
+      if (executing.size >= concurrency) {
         await Promise.race(executing);
-        executing.splice(executing.indexOf(p), 1);
       }
     }
 

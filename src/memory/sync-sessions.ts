@@ -48,18 +48,24 @@ export async function syncSessionFiles(params: {
       continue;
     }
     params.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, "sessions");
-    try {
-      params.db
-        .prepare(`DELETE FROM ${params.vectorTable} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`)
-        .run(stale.path, "sessions");
-    } catch {}
+    if (params.vectorTable) {
+      try {
+        params.db
+          .prepare(`DELETE FROM ${params.vectorTable} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`)
+          .run(stale.path, "sessions");
+      } catch (err) {
+        console.warn(`[sync-sessions] Vector table delete failed for ${stale.path}: ${err}`);
+      }
+    }
     params.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "sessions");
     if (params.ftsEnabled && params.ftsAvailable) {
       try {
         params.db
           .prepare(`DELETE FROM ${params.ftsTable} WHERE path = ? AND source = ? AND model = ?`)
           .run(stale.path, "sessions", params.model);
-      } catch {}
+      } catch (err) {
+        console.warn(`[sync-sessions] FTS delete failed for ${stale.path}: ${err}`);
+      }
     }
   }
 }
