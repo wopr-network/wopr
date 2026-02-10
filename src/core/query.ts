@@ -1,4 +1,5 @@
 import { logger } from "../logger.js";
+
 /**
  * Unified Query Interface
  *
@@ -6,13 +7,9 @@ import { logger } from "../logger.js";
  * Handles provider resolution, fallback, and response normalization.
  */
 
-import { providerRegistry } from "./providers.js";
+import type { ModelQueryOptions, ModelResponse, ProviderConfig } from "../types/provider.js";
 import { config as configManager } from "./config.js";
-import {
-  ProviderConfig,
-  ModelQueryOptions,
-  ModelResponse,
-} from "../types/provider.js";
+import { providerRegistry } from "./providers.js";
 
 /**
  * Query options normalized from session context
@@ -43,7 +40,7 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     config = request.providerConfig;
   } else {
     // Auto-detect: use first available provider
-    const available = providerRegistry.listProviders().filter(p => p.available);
+    const available = providerRegistry.listProviders().filter((p) => p.available);
     if (available.length === 0) {
       throw new Error("No providers available. Configure at least one provider (anthropic, kimi, openai, etc.)");
     }
@@ -87,8 +84,8 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     // Collect all chunks to build final response
     const chunks: string[] = [];
     let sessionId: string | undefined;
-    let providerUsed = resolved.provider.id;
-    let modelUsed = options.model || resolved.provider.defaultModel;
+    const providerUsed = resolved.provider.id;
+    const modelUsed = options.model || resolved.provider.defaultModel;
 
     for await (const msg of stream) {
       if (msg.type === "system" && msg.subtype === "init") {
@@ -120,9 +117,7 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
 /**
  * List available models across all configured providers
  */
-export async function listAvailableModels(): Promise<
-  Array<{ provider: string; models: string[] }>
-> {
+export async function listAvailableModels(): Promise<Array<{ provider: string; models: string[] }>> {
   const providers = providerRegistry.listProviders();
   const result = [];
 
@@ -139,7 +134,7 @@ export async function listAvailableModels(): Promise<
         provider: providerInfo.name,
         models,
       });
-    } catch (error) {
+    } catch (_error) {
       logger.warn(`Failed to list models for ${providerInfo.id}`);
     }
   }

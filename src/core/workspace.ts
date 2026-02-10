@@ -4,8 +4,8 @@
  * Inspired by clawdbot's workspace system
  */
 import fs from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import { logger } from "../logger.js";
 import { GLOBAL_IDENTITY_DIR } from "../paths.js";
 
@@ -234,7 +234,7 @@ async function isBrandNewWorkspace(dir: string): Promise<boolean> {
       } catch {
         return false;
       }
-    })
+    }),
   );
 
   return results.every((exists) => !exists);
@@ -497,11 +497,16 @@ function parseDurationMs(duration: string): number {
   const unit = (match[2] || "m").toLowerCase();
 
   switch (unit) {
-    case "s": return value * 1000;
-    case "m": return value * 60 * 1000;
-    case "h": return value * 60 * 60 * 1000;
-    case "d": return value * 24 * 60 * 60 * 1000;
-    default: return value * 60 * 1000;
+    case "s":
+      return value * 1000;
+    case "m":
+      return value * 60 * 1000;
+    case "h":
+      return value * 60 * 60 * 1000;
+    case "d":
+      return value * 24 * 60 * 60 * 1000;
+    default:
+      return value * 60 * 1000;
   }
 }
 
@@ -560,7 +565,7 @@ export function decideSoulEvil(config?: SoulEvilConfig, now: Date = new Date()):
 export async function applySoulEvilOverride(
   files: BootstrapFile[],
   customDir?: string,
-  config?: SoulEvilConfig
+  config?: SoulEvilConfig,
 ): Promise<BootstrapFile[]> {
   const decision = decideSoulEvil(config);
 

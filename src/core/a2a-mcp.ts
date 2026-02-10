@@ -66,16 +66,16 @@ function listAllMemoryFiles(sessionDir: string): string[] {
 
   // Add global memory files first
   if (existsSync(GLOBAL_MEMORY_DIR)) {
-    readdirSync(GLOBAL_MEMORY_DIR)
-      .filter((f) => f.endsWith(".md"))
-      .forEach((f) => files.add(f));
+    for (const f of readdirSync(GLOBAL_MEMORY_DIR).filter((f) => f.endsWith(".md"))) {
+      files.add(f);
+    }
   }
 
   // Add session memory files (may override global)
   if (existsSync(sessionMemoryDir)) {
-    readdirSync(sessionMemoryDir)
-      .filter((f) => f.endsWith(".md"))
-      .forEach((f) => files.add(f));
+    for (const f of readdirSync(sessionMemoryDir).filter((f) => f.endsWith(".md"))) {
+      files.add(f);
+    }
   }
 
   return Array.from(files);
@@ -619,9 +619,9 @@ export function getA2AMcpServer(sessionName: string): any {
           // Collect daily files from both global and session memory
           const dailyFiles: { name: string; path: string }[] = [];
           if (existsSync(GLOBAL_MEMORY_DIR)) {
-            readdirSync(GLOBAL_MEMORY_DIR)
-              .filter((f) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
-              .forEach((f) => dailyFiles.push({ name: f, path: join(GLOBAL_MEMORY_DIR, f) }));
+            for (const f of readdirSync(GLOBAL_MEMORY_DIR).filter((f) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))) {
+              dailyFiles.push({ name: f, path: join(GLOBAL_MEMORY_DIR, f) });
+            }
           }
           const sessionMemoryDir = join(sessionDir, "memory");
           if (existsSync(sessionMemoryDir)) {

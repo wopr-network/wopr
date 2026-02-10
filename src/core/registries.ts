@@ -1,4 +1,5 @@
 import { logger } from "../logger.js";
+
 /**
  * Skill registry management
  */

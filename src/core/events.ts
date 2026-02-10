@@ -1,6 +1,6 @@
 /**
  * WOPR Event Bus - Core primitive for plugin event communication
- * 
+ *
  * The WOPR way: Expose the event primitive, let plugins compose.
  * This is a typed event bus that allows plugins to:
  * - Subscribe to core lifecycle events
@@ -8,7 +8,7 @@
  * - Build reactive behaviors
  */
 
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 import { logger } from "../logger.js";
 
 // ============================================================================
@@ -162,30 +162,21 @@ export interface WOPREventBus {
    * @param handler - Handler function
    * @returns Unsubscribe function
    */
-  on<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): () => void;
+  on<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): () => void;
 
   /**
    * Subscribe to an event once
    * @param event - Event name
    * @param handler - Handler function
    */
-  once<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): void;
+  once<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void;
 
   /**
    * Unsubscribe from an event
    * @param event - Event name
    * @param handler - Handler function to remove
    */
-  off<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): void;
+  off<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void;
 
   /**
    * Emit an event
@@ -193,11 +184,7 @@ export interface WOPREventBus {
    * @param payload - Event payload
    * @param source - Source plugin or "core"
    */
-  emit<T extends keyof WOPREventMap>(
-    event: T,
-    payload: WOPREventMap[T],
-    source?: string
-  ): Promise<void>;
+  emit<T extends keyof WOPREventMap>(event: T, payload: WOPREventMap[T], source?: string): Promise<void>;
 
   /**
    * Emit a custom event (for inter-plugin communication)
@@ -205,11 +192,7 @@ export interface WOPREventBus {
    * @param payload - Event payload
    * @param source - Source plugin
    */
-  emitCustom(
-    event: string,
-    payload: any,
-    source?: string
-  ): Promise<void>;
+  emitCustom(event: string, payload: any, source?: string): Promise<void>;
 
   /**
    * Get list of all active event listeners
@@ -228,12 +211,9 @@ export interface WOPREventBus {
 
 class WOPREventBusImpl implements WOPREventBus {
   private emitter = new EventEmitter();
-  private handlerWrappers = new WeakMap<Function, Function>();
+  private handlerWrappers = new WeakMap<(...args: any[]) => any, (...args: any[]) => any>();
 
-  on<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): () => void {
+  on<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): () => void {
     // Wrap handler to provide full event context
     const wrapper = async (payload: any, meta: { timestamp: number; source?: string }) => {
       const fullEvent: WOPREvent = {
@@ -257,10 +237,7 @@ class WOPREventBusImpl implements WOPREventBus {
     return () => this.off(event, handler);
   }
 
-  once<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): void {
+  once<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void {
     const wrapper = async (payload: any, meta: { timestamp: number; source?: string }) => {
       const fullEvent: WOPREvent = {
         type: event as string,
@@ -279,10 +256,7 @@ class WOPREventBusImpl implements WOPREventBus {
     this.emitter.once(event as string, wrapper);
   }
 
-  off<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): void {
+  off<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void {
     const wrapper = this.handlerWrappers.get(handler);
     if (wrapper) {
       this.emitter.off(event as string, wrapper as (...args: any[]) => void);
@@ -299,21 +273,27 @@ class WOPREventBusImpl implements WOPREventBus {
     "memory:filesChanged",
   ]);
 
-  async emit<T extends keyof WOPREventMap>(
-    event: T,
-    payload: WOPREventMap[T],
-    source: string = "core"
-  ): Promise<void> {
+  async emit<T extends keyof WOPREventMap>(event: T, payload: WOPREventMap[T], source: string = "core"): Promise<void> {
     const meta = { timestamp: Date.now(), source };
     const eventName = event as string;
     const listeners = this.emitter.listeners(eventName);
     const sequential = WOPREventBusImpl.SEQUENTIAL_EVENTS.has(eventName);
+    const isFilesChanged = eventName === "memory:filesChanged";
+
+    if (isFilesChanged) {
+      const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+      logger.debug(`[events] memory:filesChanged: ${listeners.length} handlers, heap=${heapMB}MB`);
+    }
 
     if (sequential) {
       // Sequential: await each handler before starting the next so payload
       // mutations (e.g. beforeInject adding <relevant-memories>) are visible
       // to subsequent handlers.
       for (let i = 0; i < listeners.length; i++) {
+        if (isFilesChanged) {
+          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+          logger.debug(`[events] memory:filesChanged handler ${i}/${listeners.length} starting (heap=${heapMB}MB)`);
+        }
         try {
           const result = (listeners[i] as Function)(payload, meta);
           if (result && typeof result.then === "function") {
@@ -321,6 +301,10 @@ class WOPREventBusImpl implements WOPREventBus {
           }
         } catch (err) {
           logger.error(`[events] Handler ${i} error for ${eventName}:`, err);
+        }
+        if (isFilesChanged) {
+          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+          logger.debug(`[events] memory:filesChanged handler ${i} done (heap=${heapMB}MB)`);
         }
       }
     } else {
@@ -334,7 +318,7 @@ class WOPREventBusImpl implements WOPREventBus {
             promises.push(
               (result as Promise<void>).catch((err: unknown) => {
                 logger.error(`[events] Handler ${i} error for ${eventName}:`, err);
-              })
+              }),
             );
           }
         } catch (err) {
@@ -363,7 +347,7 @@ class WOPREventBusImpl implements WOPREventBus {
           wcPromises.push(
             (result as Promise<void>).catch((err: unknown) => {
               logger.error(`[events] Wildcard handler error for ${eventName}:`, err);
-            })
+            }),
           );
         }
       } catch (err) {
@@ -377,11 +361,7 @@ class WOPREventBusImpl implements WOPREventBus {
     logger.debug(`[events] Emitted: ${eventName} (source: ${source})`);
   }
 
-  async emitCustom(
-    event: string,
-    payload: any,
-    source: string = "unknown"
-  ): Promise<void> {
+  async emitCustom(event: string, payload: any, source: string = "unknown"): Promise<void> {
     // Validate custom event name (suggest plugin: prefix)
     if (!event.includes(":")) {
       logger.warn(`[events] Custom event '${event}' should use 'plugin:' prefix (e.g., 'myplugin:customEvent')`);
@@ -417,7 +397,7 @@ export async function emitSessionBeforeInject(
   session: string,
   message: string,
   from: string,
-  channel?: { type: string; id: string; name?: string }
+  channel?: { type: string; id: string; name?: string },
 ): Promise<void> {
   await eventBus.emit("session:beforeInject", { session, message, from, channel }, "core");
 }
@@ -426,7 +406,7 @@ export async function emitSessionAfterInject(
   session: string,
   message: string,
   response: string,
-  from: string
+  from: string,
 ): Promise<void> {
   await eventBus.emit("session:afterInject", { session, message, response, from }, "core");
 }
@@ -436,7 +416,7 @@ export async function emitSessionResponseChunk(
   message: string,
   response: string,
   from: string,
-  chunk: string
+  chunk: string,
 ): Promise<void> {
   await eventBus.emit("session:responseChunk", { session, message, response, from, chunk }, "core");
 }
@@ -449,15 +429,12 @@ export async function emitChannelMessage(
   channel: { type: string; id: string; name?: string },
   message: string,
   from: string,
-  metadata?: any
+  metadata?: any,
 ): Promise<void> {
   await eventBus.emit("channel:message", { channel, message, from, metadata }, "core");
 }
 
-export async function emitChannelSend(
-  channel: { type: string; id: string },
-  content: string
-): Promise<void> {
+export async function emitChannelSend(channel: { type: string; id: string }, content: string): Promise<void> {
   await eventBus.emit("channel:send", { channel, content }, "core");
 }
 
@@ -473,12 +450,7 @@ export async function emitPluginError(plugin: string, error: Error, context?: st
   await eventBus.emit("plugin:error", { plugin, error, context }, "core");
 }
 
-export async function emitConfigChange(
-  key: string,
-  oldValue: any,
-  newValue: any,
-  plugin?: string
-): Promise<void> {
+export async function emitConfigChange(key: string, oldValue: any, newValue: any, plugin?: string): Promise<void> {
   await eventBus.emit("config:change", { key, oldValue, newValue, plugin }, "core");
 }
 
@@ -516,7 +488,7 @@ export async function emitMutableIncoming(
   session: string,
   message: string,
   from: string,
-  channel?: { type: string; id: string; name?: string }
+  channel?: { type: string; id: string; name?: string },
 ): Promise<MutableIncomingResult> {
   // Create mutable payload that hooks can modify
   const mutablePayload = {
@@ -546,7 +518,7 @@ export async function emitMutableOutgoing(
   session: string,
   response: string,
   from: string,
-  channel?: { type: string; id: string; name?: string }
+  channel?: { type: string; id: string; name?: string },
 ): Promise<MutableOutgoingResult> {
   // Create mutable payload that hooks can modify
   const mutablePayload = {
