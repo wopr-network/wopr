@@ -240,11 +240,21 @@ export async function createMcpSocketBridge(_sessionName: string, socketPath: st
   // TODO: Implement full MCP socket bridge
 }
 
-// Cleanup on process exit
-process.on("SIGTERM", async () => {
-  await cleanupAllSandboxes();
-});
+// Cleanup on process exit (with hard timeout to prevent hanging)
+async function shutdownCleanup(): Promise<void> {
+  const timeout = setTimeout(() => {
+    logger.warn("[sandbox] Cleanup timed out, forcing exit");
+    process.exit(1);
+  }, 10000);
+  try {
+    await cleanupAllSandboxes();
+  } catch (err) {
+    logger.error(`[sandbox] Cleanup failed during shutdown: ${err}`);
+  } finally {
+    clearTimeout(timeout);
+    process.exit(0);
+  }
+}
 
-process.on("SIGINT", async () => {
-  await cleanupAllSandboxes();
-});
+process.on("SIGTERM", shutdownCleanup);
+process.on("SIGINT", shutdownCleanup);

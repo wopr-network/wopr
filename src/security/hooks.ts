@@ -71,7 +71,7 @@ export interface PostInjectResult {
 async function runCommandHook(command: string, context: HookContext): Promise<PreInjectResult | PostInjectResult> {
   if (!command || typeof command !== "string" || command.trim().length === 0) {
     logger.warn("[hooks] Empty or invalid hook command, skipping");
-    return { allow: true };
+    return {};
   }
   return new Promise((resolve) => {
     let settled = false;

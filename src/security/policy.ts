@@ -260,7 +260,7 @@ export function checkSessionAccess(source: InjectionSource, session: string): Po
   const policy = resolvePolicy(source, session);
 
   // Check minimum trust level
-  const minTrust = config.defaults.minTrustLevel || "untrusted";
+  const minTrust = config.defaults.minTrustLevel ?? "semi-trusted";
   if (!meetsTrustLevel(source.trustLevel, minTrust)) {
     return {
       allowed: false,

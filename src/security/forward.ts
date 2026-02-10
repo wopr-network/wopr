@@ -181,7 +181,7 @@ export async function executeForward(
     logger.error(`[forward] Forward ${request.requestId} failed: ${err.message}`);
     return {
       success: false,
-      error: "Forward execution failed",
+      error: `Forward execution failed (${request.requestId})`,
       requestId: request.requestId,
     };
   }
