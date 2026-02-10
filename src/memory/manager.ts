@@ -361,7 +361,7 @@ export class MemoryIndexManager {
             absPath: entry.absPath,
             source: "sessions" as MemorySource,
             chunks: chunks.map((chunk) => ({
-              id: hashText(`sessions:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.text}`),
+              id: chunk.hash,
               text: chunk.text,
               hash: chunk.hash,
               startLine: chunk.startLine,
@@ -404,9 +404,7 @@ export class MemoryIndexManager {
           absPath: entry.absPath,
           source: params.source,
           chunks: chunks.map((chunk) => ({
-            // Stable ID unique per file location + content, preventing collisions
-            // when identical text appears in different files or line ranges.
-            id: hashText(`${params.source}:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.text}`),
+            id: chunk.hash,
             text: chunk.text,
             hash: chunk.hash,
             startLine: chunk.startLine,
@@ -475,9 +473,12 @@ export class MemoryIndexManager {
       this.db.exec("BEGIN");
       try {
         for (const chunk of change.chunks) {
+          // Compute stable ID unique per source+path+location+content.
+          // Done here once rather than in each callsite that emits the event.
+          const chunkId = hashText(`${change.source}:${change.path}:${chunk.startLine}:${chunk.endLine}:${chunk.text}`);
           const now = Date.now();
           insertChunk.run(
-            chunk.id,
+            chunkId,
             change.path,
             change.source,
             chunk.startLine,
@@ -490,7 +491,7 @@ export class MemoryIndexManager {
           if (insertFts) {
             insertFts.run(
               chunk.text,
-              chunk.id,
+              chunkId,
               change.path,
               change.source,
               "fts5",
