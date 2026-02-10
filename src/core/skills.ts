@@ -3,12 +3,12 @@
  * Feature parity with Clawdbot skills system
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, statSync, realpathSync } from "fs";
-import { join, basename, dirname, resolve } from "path";
-import { execSync } from "child_process";
-import { homedir } from "os";
-import { WOPR_HOME, SKILLS_DIR, PROJECT_SKILLS_DIR } from "../paths.js";
+import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { logger } from "../logger.js";
+import { PROJECT_SKILLS_DIR, SKILLS_DIR, WOPR_HOME } from "../paths.js";
 
 // ============================================================================
 // Skill Validation Constants (per Agent Skills spec)
@@ -90,7 +90,7 @@ export interface SkillEntry {
 
 export function validateSkillName(name: string, parentDirName: string): string[] {
   const errors: string[] = [];
-  
+
   if (name !== parentDirName) {
     errors.push(`name "${name}" does not match parent directory "${parentDirName}"`);
   }
@@ -106,19 +106,19 @@ export function validateSkillName(name: string, parentDirName: string): string[]
   if (name.includes("--")) {
     errors.push(`name must not contain consecutive hyphens`);
   }
-  
+
   return errors;
 }
 
 export function validateSkillDescription(description?: string): string[] {
   const errors: string[] = [];
-  
+
   if (!description || description.trim() === "") {
     errors.push(`description is required`);
   } else if (description.length > MAX_DESCRIPTION_LENGTH) {
     errors.push(`description exceeds ${MAX_DESCRIPTION_LENGTH} characters (${description.length})`);
   }
-  
+
   return errors;
 }
 
@@ -148,30 +148,30 @@ export interface ParsedFrontmatter {
   "command-arg-mode"?: string;
 }
 
-export function parseSkillFrontmatter(content: string): { 
-  frontmatter: ParsedFrontmatter; 
+export function parseSkillFrontmatter(content: string): {
+  frontmatter: ParsedFrontmatter;
   body: string;
   warnings: SkillValidationWarning[];
 } {
   const warnings: SkillValidationWarning[] = [];
   const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  
+
   if (!match) {
     return { frontmatter: {}, body: content, warnings };
   }
-  
+
   const yamlContent = match[1];
   const body = match[2];
   const frontmatter: ParsedFrontmatter = {};
-  
+
   // Parse YAML-like frontmatter
   for (const line of yamlContent.split("\n")) {
     const colonIndex = line.indexOf(":");
     if (colonIndex === -1) continue;
-    
+
     const key = line.slice(0, colonIndex).trim();
     let value: any = line.slice(colonIndex + 1).trim();
-    
+
     // Try to parse JSON metadata
     if (key === "metadata") {
       try {
@@ -180,7 +180,7 @@ export function parseSkillFrontmatter(content: string): {
         // Keep as string if not valid JSON
       }
     }
-    
+
     // Parse arrays
     if (key === "allowed-tools") {
       try {
@@ -189,22 +189,22 @@ export function parseSkillFrontmatter(content: string): {
         value = value.split(",").map((s: string) => s.trim());
       }
     }
-    
+
     (frontmatter as any)[key] = value;
   }
-  
+
   // Validate frontmatter fields
   const fieldErrors = validateFrontmatterFields(Object.keys(frontmatter));
   for (const error of fieldErrors) {
     warnings.push({ skillPath: "", message: error });
   }
-  
+
   return { frontmatter, body, warnings };
 }
 
 export function resolveWoprMetadata(frontmatter: ParsedFrontmatter): SkillMetadata | undefined {
   if (!frontmatter.metadata) return undefined;
-  
+
   if (typeof frontmatter.metadata === "string") {
     try {
       const parsed = JSON.parse(frontmatter.metadata);
@@ -213,11 +213,11 @@ export function resolveWoprMetadata(frontmatter: ParsedFrontmatter): SkillMetada
       return undefined;
     }
   }
-  
+
   return frontmatter.metadata.wopr || frontmatter.metadata.clawdbot;
 }
 
-export function resolveSkillInvocationPolicy(frontmatter: ParsedFrontmatter): {
+export function resolveSkillInvocationPolicy(_frontmatter: ParsedFrontmatter): {
   disableModelInvocation?: boolean;
   userInvocable?: boolean;
 } {
@@ -230,13 +230,13 @@ export function resolveSkillInvocationPolicy(frontmatter: ParsedFrontmatter): {
 export function resolveCommandDispatch(frontmatter: ParsedFrontmatter): SkillCommandDispatch | undefined {
   const dispatch = frontmatter["command-dispatch"]?.trim().toLowerCase();
   if (dispatch !== "tool") return undefined;
-  
+
   const toolName = frontmatter["command-tool"]?.trim();
   if (!toolName) {
     logger.warn(`Skill requested tool dispatch but did not provide command-tool`);
     return undefined;
   }
-  
+
   const argMode = frontmatter["command-arg-mode"]?.trim().toLowerCase();
   return {
     kind: "tool",
@@ -258,29 +258,32 @@ export interface DiscoverOptions {
   ignoreSkills?: string[];
 }
 
-function loadSkillsFromDir(dir: string, source: string): { 
-  entries: SkillEntry[]; 
+function loadSkillsFromDir(
+  dir: string,
+  source: string,
+): {
+  entries: SkillEntry[];
   warnings: SkillValidationWarning[];
 } {
   const entries: SkillEntry[] = [];
   const warnings: SkillValidationWarning[] = [];
-  
+
   if (!existsSync(dir)) {
     return { entries, warnings };
   }
-  
+
   try {
     const items = readdirSync(dir, { withFileTypes: true });
-    
+
     for (const item of items) {
       // Skip hidden files and node_modules
       if (item.name.startsWith(".") || item.name === "node_modules") {
         continue;
       }
-      
+
       let isDirectory = item.isDirectory();
-      let isSymlink = item.isSymbolicLink();
-      
+      const isSymlink = item.isSymbolicLink();
+
       // Follow symlinks
       if (isSymlink) {
         try {
@@ -290,13 +293,13 @@ function loadSkillsFromDir(dir: string, source: string): {
           continue; // Broken symlink
         }
       }
-      
+
       if (isDirectory) {
         const skillFile = join(dir, item.name, "SKILL.md");
         if (!existsSync(skillFile)) {
           continue;
         }
-        
+
         const result = loadSkillFromFile(skillFile, source);
         if (result.entry) {
           entries.push(result.entry);
@@ -307,48 +310,51 @@ function loadSkillsFromDir(dir: string, source: string): {
   } catch (error) {
     logger.warn(`Failed to load skills from ${dir}:`, error);
   }
-  
+
   return { entries, warnings };
 }
 
-function loadSkillFromFile(filePath: string, source: string): { 
-  entry: SkillEntry | null; 
+function loadSkillFromFile(
+  filePath: string,
+  source: string,
+): {
+  entry: SkillEntry | null;
   warnings: SkillValidationWarning[];
 } {
   const warnings: SkillValidationWarning[] = [];
-  
+
   try {
     const content = readFileSync(filePath, "utf-8");
     const { frontmatter, warnings: fmWarnings } = parseSkillFrontmatter(content);
-    
+
     // Add filepath to warnings
     for (const w of fmWarnings) {
       w.skillPath = filePath;
     }
     warnings.push(...fmWarnings);
-    
+
     const skillDir = dirname(filePath);
     const parentDirName = basename(skillDir);
-    
+
     // Get name from frontmatter or directory
     const name = frontmatter.name || parentDirName;
-    
+
     // Validate
     const nameErrors = validateSkillName(name, parentDirName);
     for (const error of nameErrors) {
       warnings.push({ skillPath: filePath, message: error });
     }
-    
+
     const descErrors = validateSkillDescription(frontmatter.description);
     for (const error of descErrors) {
       warnings.push({ skillPath: filePath, message: error });
     }
-    
+
     // Must have description
     if (!frontmatter.description || frontmatter.description.trim() === "") {
       return { entry: null, warnings };
     }
-    
+
     const entry: SkillEntry = {
       skill: {
         name,
@@ -364,7 +370,7 @@ function loadSkillFromFile(filePath: string, source: string): {
       woprMetadata: resolveWoprMetadata(frontmatter),
       invocation: resolveSkillInvocationPolicy(frontmatter),
     };
-    
+
     return { entry, warnings };
   } catch (error) {
     const message = error instanceof Error ? error.message : "failed to parse skill file";
@@ -374,23 +380,22 @@ function loadSkillFromFile(filePath: string, source: string): {
 }
 
 function matchesPattern(name: string, patterns: string[]): boolean {
-  return patterns.some(pattern => {
-    // Simple glob matching
-    const regex = new RegExp(
-      "^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$"
-    );
+  return patterns.some((pattern) => {
+    // Escape regex metacharacters, then expand glob wildcards
+    const escaped = pattern.replace(/[.+^${}()|\\[\]]/g, "\\$&");
+    const regex = new RegExp(`^${escaped.replace(/\*/g, ".*").replace(/\?/g, ".")}$`);
     return regex.test(name);
   });
 }
 
-export function discoverSkills(options: DiscoverOptions = {}): { 
-  skills: Skill[]; 
+export function discoverSkills(options: DiscoverOptions = {}): {
+  skills: Skill[];
   warnings: SkillValidationWarning[];
 } {
   const allWarnings: SkillValidationWarning[] = [];
   const skillMap = new Map<string, Skill>();
   const realPathSet = new Set<string>();
-  
+
   const {
     extraDirs = [],
     bundledDir,
@@ -399,22 +404,22 @@ export function discoverSkills(options: DiscoverOptions = {}): {
     includeSkills = [],
     ignoreSkills = [],
   } = options;
-  
+
   // Load from all sources (precedence: extra < bundled < managed < workspace)
   const sources: { dir: string; source: string }[] = [
-    ...extraDirs.map(d => ({ dir: resolve(d.replace(/^~/, homedir())), source: "extra" })),
+    ...extraDirs.map((d) => ({ dir: resolve(d.replace(/^~/, homedir())), source: "extra" })),
     ...(bundledDir ? [{ dir: bundledDir, source: "bundled" }] : []),
     { dir: managedDir, source: "managed" },
     { dir: workspaceDir, source: "workspace" },
   ];
-  
+
   for (const { dir, source } of sources) {
     const { entries, warnings } = loadSkillsFromDir(dir, source);
     allWarnings.push(...warnings);
-    
+
     for (const entry of entries) {
       const { skill } = entry;
-      
+
       // Apply filters
       if (ignoreSkills.length > 0 && matchesPattern(skill.name, ignoreSkills)) {
         continue;
@@ -422,7 +427,7 @@ export function discoverSkills(options: DiscoverOptions = {}): {
       if (includeSkills.length > 0 && !matchesPattern(skill.name, includeSkills)) {
         continue;
       }
-      
+
       // Resolve symlinks for deduplication
       let realPath: string;
       try {
@@ -430,11 +435,11 @@ export function discoverSkills(options: DiscoverOptions = {}): {
       } catch {
         realPath = skill.path;
       }
-      
+
       if (realPathSet.has(realPath)) {
         continue; // Skip duplicate
       }
-      
+
       // Check for name collisions
       const existing = skillMap.get(skill.name);
       if (existing) {
@@ -444,12 +449,12 @@ export function discoverSkills(options: DiscoverOptions = {}): {
         });
         continue;
       }
-      
+
       skillMap.set(skill.name, skill);
       realPathSet.add(realPath);
     }
   }
-  
+
   return {
     skills: Array.from(skillMap.values()),
     warnings: allWarnings,
@@ -468,14 +473,16 @@ export function discoverSkillsLegacy(): Skill[] {
 export function formatSkillsXml(skills: Skill[]): string {
   if (skills.length === 0) return "";
 
-  const skillsXml = skills.map(s => {
-    const emoji = s.metadata?.emoji ? `${s.metadata.emoji} ` : "";
-    return `  <skill>
+  const skillsXml = skills
+    .map((s) => {
+      const emoji = s.metadata?.emoji ? `${s.metadata.emoji} ` : "";
+      return `  <skill>
     <name>${s.name}</name>
     <description>${emoji}${s.description}</description>
     <location>${s.path}</location>
   </skill>`;
-  }).join("\n");
+    })
+    .join("\n");
 
   return `
 <available_skills>
@@ -504,7 +511,7 @@ function sanitizeSkillCommandName(raw: string): string {
     .replace(/[^a-z0-9_]+/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
-  
+
   const trimmed = normalized.slice(0, SKILL_COMMAND_MAX_LENGTH);
   return trimmed || SKILL_COMMAND_FALLBACK;
 }
@@ -512,44 +519,45 @@ function sanitizeSkillCommandName(raw: string): string {
 function resolveUniqueSkillCommandName(base: string, used: Set<string>): string {
   const normalizedBase = base.toLowerCase();
   if (!used.has(normalizedBase)) return base;
-  
+
   for (let index = 2; index < 1000; index++) {
     const suffix = `_${index}`;
     const maxBaseLength = Math.max(1, SKILL_COMMAND_MAX_LENGTH - suffix.length);
     const trimmedBase = base.slice(0, maxBaseLength);
     const candidate = `${trimmedBase}${suffix}`;
-    
+
     if (!used.has(candidate.toLowerCase())) {
       return candidate;
     }
   }
-  
+
   return `${base.slice(0, Math.max(1, SKILL_COMMAND_MAX_LENGTH - 2))}_x`;
 }
 
 export function buildSkillCommandSpecs(
   skills: Skill[],
-  reservedNames: string[] = []
+  reservedNames: string[] = [],
 ): Array<{
   name: string;
   skillName: string;
   description: string;
   dispatch?: SkillCommandDispatch;
 }> {
-  const used = new Set<string>(reservedNames.map(r => r.toLowerCase()));
-  
+  const used = new Set<string>(reservedNames.map((r) => r.toLowerCase()));
+
   return skills
-    .filter(s => s.commandDispatch) // Only skills with command dispatch
-    .map(skill => {
+    .filter((s) => s.commandDispatch) // Only skills with command dispatch
+    .map((skill) => {
       const base = sanitizeSkillCommandName(skill.name);
       const unique = resolveUniqueSkillCommandName(base, used);
       used.add(unique.toLowerCase());
-      
+
       const rawDescription = skill.description?.trim() || skill.name;
-      const description = rawDescription.length > SKILL_COMMAND_DESCRIPTION_MAX_LENGTH
-        ? rawDescription.slice(0, SKILL_COMMAND_DESCRIPTION_MAX_LENGTH - 1) + "…"
-        : rawDescription;
-      
+      const description =
+        rawDescription.length > SKILL_COMMAND_DESCRIPTION_MAX_LENGTH
+          ? `${rawDescription.slice(0, SKILL_COMMAND_DESCRIPTION_MAX_LENGTH - 1)}…`
+          : rawDescription;
+
       return {
         name: unique,
         skillName: skill.name,
@@ -563,13 +571,13 @@ export function buildSkillCommandSpecs(
 // Dependency Checking
 // ============================================================================
 
-export function checkSkillDependencies(skill: Skill): { 
-  missing: string[]; 
+export function checkSkillDependencies(skill: Skill): {
+  missing: string[];
   satisfied: boolean;
 } {
   const missing: string[] = [];
   const requires = skill.metadata?.requires;
-  
+
   if (requires?.bins) {
     for (const bin of requires.bins) {
       try {
@@ -579,16 +587,16 @@ export function checkSkillDependencies(skill: Skill): {
       }
     }
   }
-  
+
   return { missing, satisfied: missing.length === 0 };
 }
 
 export async function installSkillDependencies(skill: Skill): Promise<boolean> {
   const installSteps = skill.metadata?.install;
   if (!installSteps || installSteps.length === 0) return true;
-  
+
   logger.info(`Installing dependencies for skill: ${skill.name}`);
-  
+
   for (const step of installSteps) {
     try {
       switch (step.kind) {
@@ -618,7 +626,7 @@ export async function installSkillDependencies(skill: Skill): Promise<boolean> {
       return false;
     }
   }
-  
+
   return true;
 }
 
@@ -635,13 +643,16 @@ export function createSkill(name: string, description?: string): Skill {
   mkdirSync(targetDir, { recursive: true });
   const desc = description || `WOPR skill: ${name}`;
   const skillPath = join(targetDir, "SKILL.md");
-  writeFileSync(skillPath, `---
+  writeFileSync(
+    skillPath,
+    `---
 name: ${name}
 description: ${desc}
 ---
 
 # ${name}
-`);
+`,
+  );
 
   return {
     name,
@@ -660,12 +671,7 @@ export function removeSkill(name: string): void {
   execSync(`rm -rf "${targetDir}"`);
 }
 
-export function installSkillFromGitHub(
-  owner: string,
-  repo: string,
-  skillPath: string,
-  name?: string
-): Skill {
+export function installSkillFromGitHub(owner: string, repo: string, skillPath: string, name?: string): Skill {
   const skillName = name || skillPath.split("/").pop()!;
   const targetDir = join(SKILLS_DIR, skillName);
 
@@ -675,7 +681,9 @@ export function installSkillFromGitHub(
 
   const tmpDir = join(SKILLS_DIR, `.tmp-${Date.now()}`);
   try {
-    execSync(`git clone --depth 1 --filter=blob:none --sparse https://github.com/${owner}/${repo}.git "${tmpDir}"`, { stdio: "pipe" });
+    execSync(`git clone --depth 1 --filter=blob:none --sparse https://github.com/${owner}/${repo}.git "${tmpDir}"`, {
+      stdio: "pipe",
+    });
     execSync(`git -C "${tmpDir}" sparse-checkout set "${skillPath}"`, { stdio: "pipe" });
     execSync(`mv "${tmpDir}/${skillPath}" "${targetDir}"`, { stdio: "pipe" });
     execSync(`rm -rf "${tmpDir}"`, { stdio: "pipe" });
@@ -684,7 +692,7 @@ export function installSkillFromGitHub(
     throw new Error("Failed to install skill from GitHub");
   }
 
-  const skill = discoverSkillsLegacy().find(s => s.name === skillName);
+  const skill = discoverSkillsLegacy().find((s) => s.name === skillName);
   if (!skill) {
     throw new Error("Skill installed but not discoverable");
   }
@@ -701,7 +709,7 @@ export function installSkillFromUrl(source: string, name?: string): Skill {
 
   execSync(`git clone "${source}" "${targetDir}"`, { stdio: "inherit" });
 
-  const skill = discoverSkillsLegacy().find(s => s.name === skillName);
+  const skill = discoverSkillsLegacy().find((s) => s.name === skillName);
   if (!skill) {
     throw new Error("Skill installed but not discoverable");
   }

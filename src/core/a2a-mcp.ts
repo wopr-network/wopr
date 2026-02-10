@@ -5,33 +5,26 @@
  * can use. Plugins can register additional tools via registerA2ATool().
  */
 
+import { exec } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { logger } from "../logger.js";
-import { join } from "path";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
-import { exec } from "child_process";
-import { promisify } from "util";
-import { SESSIONS_DIR, GLOBAL_IDENTITY_DIR, WOPR_HOME } from "../paths.js";
 import { MemoryIndexManager, parseTemporalFilter } from "../memory/index.js";
-import { config as centralConfig } from "./config.js";
+import { GLOBAL_IDENTITY_DIR, SESSIONS_DIR, WOPR_HOME } from "../paths.js";
 import {
-  getCrons,
-  addCron,
-  removeCron,
-  createOnceJob,
-  getCronHistory,
-} from "./cron.js";
-import { eventBus } from "./events.js";
-import {
-  getContext,
-  checkToolAccess,
-  isEnforcementEnabled,
-  getSessionIndexable,
   canIndexSession,
+  getContext,
   getSecurityConfig,
+  getSessionIndexable,
+  isEnforcementEnabled,
   type PolicyCheckResult,
 } from "../security/index.js";
+import { config as centralConfig } from "./config.js";
+import { addCron, createOnceJob, getCronHistory, getCrons, removeCron } from "./cron.js";
+import { eventBus } from "./events.js";
 
 const execAsync = promisify(exec);
 
@@ -74,15 +67,15 @@ function listAllMemoryFiles(sessionDir: string): string[] {
   // Add global memory files first
   if (existsSync(GLOBAL_MEMORY_DIR)) {
     readdirSync(GLOBAL_MEMORY_DIR)
-      .filter(f => f.endsWith(".md"))
-      .forEach(f => files.add(f));
+      .filter((f) => f.endsWith(".md"))
+      .forEach((f) => files.add(f));
   }
 
   // Add session memory files (may override global)
   if (existsSync(sessionMemoryDir)) {
     readdirSync(sessionMemoryDir)
-      .filter(f => f.endsWith(".md"))
-      .forEach(f => files.add(f));
+      .filter((f) => f.endsWith(".md"))
+      .forEach((f) => files.add(f));
   }
 
   return Array.from(files);
@@ -98,7 +91,7 @@ interface RegisteredTool {
 
 // Context passed to tool handlers
 export interface ToolContext {
-  sessionName: string;  // The WOPR session calling this tool
+  sessionName: string; // The WOPR session calling this tool
 }
 
 /**
@@ -132,7 +125,7 @@ function checkToolPermission(toolName: string, sessionName: string): PolicyCheck
 async function withSecurityCheck<T>(
   toolName: string,
   sessionName: string,
-  handler: () => Promise<T>
+  handler: () => Promise<T>,
 ): Promise<T | { content: { type: string; text: string }[]; isError: boolean }> {
   const check = checkToolPermission(toolName, sessionName);
 
@@ -198,14 +191,33 @@ export function unregisterA2ATool(name: string): boolean {
  */
 export function listA2ATools(): string[] {
   const coreTools = [
-    "sessions_list", "sessions_send", "sessions_history", "sessions_spawn",
-    "config_get", "config_set", "config_provider_defaults",
-    "memory_read", "memory_write", "memory_search", "memory_get",
-    "self_reflect", "identity_get", "identity_update", "soul_get", "soul_update",
-    "cron_schedule", "cron_once", "cron_list", "cron_cancel",
-    "event_emit", "event_list",
-    "security_whoami", "security_check",
-    "http_fetch", "exec_command", "notify"
+    "sessions_list",
+    "sessions_send",
+    "sessions_history",
+    "sessions_spawn",
+    "config_get",
+    "config_set",
+    "config_provider_defaults",
+    "memory_read",
+    "memory_write",
+    "memory_search",
+    "memory_get",
+    "self_reflect",
+    "identity_get",
+    "identity_update",
+    "soul_get",
+    "soul_update",
+    "cron_schedule",
+    "cron_once",
+    "cron_list",
+    "cron_cancel",
+    "event_emit",
+    "event_list",
+    "security_whoami",
+    "security_check",
+    "http_fetch",
+    "exec_command",
+    "notify",
   ];
   return [...coreTools, ...pluginTools.keys()];
 }
@@ -258,20 +270,22 @@ export function getA2AMcpServer(sessionName: string): any {
       "sessions_list",
       "List all active WOPR sessions with metadata. Use this to discover other sessions/agents you can communicate with.",
       {
-        limit: z.number().optional().describe("Maximum number of sessions to return (default: 50)")
+        limit: z.number().optional().describe("Maximum number of sessions to return (default: 50)"),
       },
-      async (args) => {
+      async (_args) => {
         if (!getSessions) throw new Error("Session functions not initialized");
         const sessions = getSessions();
-        const sessionList = Object.keys(sessions).map(key => ({
+        const sessionList = Object.keys(sessions).map((key) => ({
           name: key,
-          id: sessions[key]
+          id: sessions[key],
         }));
         return {
-          content: [{ type: "text", text: JSON.stringify({ sessions: sessionList, count: sessionList.length }, null, 2) }]
+          content: [
+            { type: "text", text: JSON.stringify({ sessions: sessionList, count: sessionList.length }, null, 2) },
+          ],
         };
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -280,7 +294,7 @@ export function getA2AMcpServer(sessionName: string): any {
       "Send a message to another WOPR session. Use this to delegate tasks, ask questions, or coordinate with other sessions.",
       {
         session: z.string().describe("Target session name (e.g., 'code-reviewer', 'discord-123456')"),
-        message: z.string().describe("The message to send to the target session")
+        message: z.string().describe("The message to send to the target session"),
       },
       async (args) => {
         // SECURITY: Check cross.inject capability
@@ -296,7 +310,7 @@ export function getA2AMcpServer(sessionName: string): any {
             logger.warn(`[a2a-mcp] sessions_send: Blocking self-inject attempt from ${sessionName}`);
             return {
               content: [{ type: "text", text: "Error: Cannot send message to yourself - this would cause a deadlock" }],
-              isError: true
+              isError: true,
             };
           }
 
@@ -304,19 +318,19 @@ export function getA2AMcpServer(sessionName: string): any {
             const response = await injectFn(session, message, { from: sessionName, silent: true });
             logger.info(`[a2a-mcp] sessions_send: ${sessionName} -> ${session} completed`);
             return {
-              content: [{ type: "text", text: `Response from ${session}:\n${response.response}` }]
+              content: [{ type: "text", text: `Response from ${session}:\n${response.response}` }],
             };
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
             logger.error(`[a2a-mcp] sessions_send: ${sessionName} -> ${session} failed: ${errMsg}`);
             return {
               content: [{ type: "text", text: `Error sending to ${session}: ${errMsg}` }],
-              isError: true
+              isError: true,
             };
           }
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -325,9 +339,15 @@ export function getA2AMcpServer(sessionName: string): any {
       "Fetch conversation history from a session. Use full=true to get complete untruncated history (the session mirror). Requires cross.read capability for reading other sessions' history.",
       {
         session: z.string().describe("Session name to fetch history from"),
-        limit: z.number().optional().describe("Number of recent messages to fetch (default: 10, ignored when full=true)"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Number of recent messages to fetch (default: 10, ignored when full=true)"),
         full: z.boolean().optional().describe("Return complete untruncated history - the full mirror (default: false)"),
-        offset: z.number().optional().describe("Skip this many messages from the start (for pagination, only with full=true)")
+        offset: z
+          .number()
+          .optional()
+          .describe("Skip this many messages from the start (for pagination, only with full=true)"),
       },
       async (args) => {
         // SECURITY: Check session.history capability, plus cross.read for other sessions
@@ -341,11 +361,18 @@ export function getA2AMcpServer(sessionName: string): any {
             if (ctx && !ctx.hasCapability("cross.read")) {
               if (isEnforcementEnabled()) {
                 return {
-                  content: [{ type: "text", text: `Access denied: Reading other sessions' history requires 'cross.read' capability` }],
+                  content: [
+                    {
+                      type: "text",
+                      text: `Access denied: Reading other sessions' history requires 'cross.read' capability`,
+                    },
+                  ],
                   isError: true,
                 };
               } else {
-                logger.warn(`[a2a-mcp] sessions_history: ${sessionName} reading ${session} history without cross.read capability`);
+                logger.warn(
+                  `[a2a-mcp] sessions_history: ${sessionName} reading ${session} history without cross.read capability`,
+                );
               }
             }
           }
@@ -368,37 +395,46 @@ export function getA2AMcpServer(sessionName: string): any {
               from: e.from,
               type: e.type,
               content: e.content, // FULL content, no truncation
-              channel: e.channel
+              channel: e.channel,
             }));
 
             return {
-              content: [{
-                type: "text",
-                text: JSON.stringify({
-                  session,
-                  total: totalCount,
-                  offset: startIdx,
-                  pageSize,
-                  returned: history.length,
-                  hasMore,
-                  nextOffset,
-                  history
-                }, null, 2)
-              }]
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      session,
+                      total: totalCount,
+                      offset: startIdx,
+                      pageSize,
+                      returned: history.length,
+                      hasMore,
+                      nextOffset,
+                      history,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
             };
           } else {
             // SUMMARY MODE: Backwards compatible truncated view
             const entries = readConversationLog(session, Math.min(limit, 50));
-            const formatted = entries.map((e: any) =>
-              `[${new Date(e.ts).toISOString()}] ${e.from}: ${e.content?.substring(0, 200)}${e.content?.length > 200 ? '...' : ''}`
-            ).join('\n');
+            const formatted = entries
+              .map(
+                (e: any) =>
+                  `[${new Date(e.ts).toISOString()}] ${e.from}: ${e.content?.substring(0, 200)}${e.content?.length > 200 ? "..." : ""}`,
+              )
+              .join("\n");
             return {
-              content: [{ type: "text", text: formatted || "No history found for this session." }]
+              content: [{ type: "text", text: formatted || "No history found for this session." }],
             };
           }
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -407,7 +443,7 @@ export function getA2AMcpServer(sessionName: string): any {
       "Create a new session with a specific purpose. The new session will be initialized with your description.",
       {
         name: z.string().describe("Name for the new session (e.g., 'python-reviewer')"),
-        purpose: z.string().describe("Describe what this session should do (becomes its system context)")
+        purpose: z.string().describe("Describe what this session should do (becomes its system context)"),
       },
       async (args) => {
         // SECURITY: Check session.spawn capability
@@ -416,11 +452,11 @@ export function getA2AMcpServer(sessionName: string): any {
           const { name, purpose } = args;
           setSessionContext(name, purpose);
           return {
-            content: [{ type: "text", text: `Session '${name}' created successfully with purpose: ${purpose}` }]
+            content: [{ type: "text", text: `Session '${name}' created successfully with purpose: ${purpose}` }],
           };
         });
-      }
-    )
+      },
+    ),
   );
 
   // ========================================================================
@@ -432,7 +468,7 @@ export function getA2AMcpServer(sessionName: string): any {
       "config_get",
       "Get a WOPR configuration value. Use dot notation for nested keys (e.g., 'providers.codex.model'). Sensitive values (API keys, secrets) are redacted for security.",
       {
-        key: z.string().optional().describe("Config key to retrieve (dot notation). Omit to get all config.")
+        key: z.string().optional().describe("Config key to retrieve (dot notation). Omit to get all config."),
       },
       async (args) => {
         // SECURITY: Check config.read capability
@@ -446,8 +482,17 @@ export function getA2AMcpServer(sessionName: string): any {
             if (typeof obj !== "object") {
               // Check if this is a sensitive field by name
               const keyName = path.split(".").pop()?.toLowerCase() || "";
-              const sensitiveKeys = ["apikey", "api_key", "secret", "token", "password", "private", "privatekey", "private_key"];
-              if (sensitiveKeys.some(sk => keyName.includes(sk))) {
+              const sensitiveKeys = [
+                "apikey",
+                "api_key",
+                "secret",
+                "token",
+                "password",
+                "private",
+                "privatekey",
+                "private_key",
+              ];
+              if (sensitiveKeys.some((sk) => keyName.includes(sk))) {
                 return "[REDACTED]";
               }
               return obj;
@@ -473,8 +518,8 @@ export function getA2AMcpServer(sessionName: string): any {
           const redactedConfig = redactSensitive(centralConfig.get());
           return { content: [{ type: "text", text: JSON.stringify(redactedConfig, null, 2) }] };
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -483,7 +528,7 @@ export function getA2AMcpServer(sessionName: string): any {
       "Set a WOPR configuration value. Use dot notation for nested keys. Changes are persisted immediately.",
       {
         key: z.string().describe("Config key to set (dot notation)"),
-        value: z.string().describe("Value to set (strings, numbers, booleans, or JSON for objects)")
+        value: z.string().describe("Value to set (strings, numbers, booleans, or JSON for objects)"),
       },
       async (args) => {
         // SECURITY: Check config.write capability
@@ -491,13 +536,17 @@ export function getA2AMcpServer(sessionName: string): any {
           const { key, value } = args;
           await centralConfig.load();
           let parsedValue: any = value;
-          try { parsedValue = JSON.parse(value); } catch { /* keep as string */ }
+          try {
+            parsedValue = JSON.parse(value);
+          } catch {
+            /* keep as string */
+          }
           centralConfig.setValue(key, parsedValue);
           await centralConfig.save();
           return { content: [{ type: "text", text: `Config set: ${key} = ${JSON.stringify(parsedValue)}` }] };
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -507,7 +556,7 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         provider: z.string().describe("Provider ID (e.g., 'codex', 'anthropic')"),
         model: z.string().optional().describe("Default model for this provider"),
-        reasoningEffort: z.string().optional().describe("For Codex: minimal/low/medium/high/xhigh")
+        reasoningEffort: z.string().optional().describe("For Codex: minimal/low/medium/high/xhigh"),
       },
       async (args) => {
         const { provider, model, reasoningEffort } = args;
@@ -527,8 +576,8 @@ export function getA2AMcpServer(sessionName: string): any {
 
         const updated = centralConfig.getProviderDefaults(provider);
         return { content: [{ type: "text", text: `Provider defaults updated:\n${JSON.stringify(updated, null, 2)}` }] };
-      }
-    )
+      },
+    ),
   );
 
   // ========================================================================
@@ -543,7 +592,7 @@ export function getA2AMcpServer(sessionName: string): any {
         file: z.string().optional().describe("Filename to read (e.g., 'SELF.md', '2026-01-24.md')"),
         from: z.number().optional().describe("Starting line number (1-indexed)"),
         lines: z.number().optional().describe("Number of lines to read"),
-        days: z.number().optional().describe("For daily logs: read last N days (default: 7)")
+        days: z.number().optional().describe("For daily logs: read last N days (default: 7)"),
       },
       async (args) => {
         const { file, days = 7, from, lines: lineCount } = args;
@@ -557,10 +606,12 @@ export function getA2AMcpServer(sessionName: string): any {
             if (resolved.exists && !files.includes(f)) files.push(f);
           }
           return {
-            content: [{ type: "text", text: files.length > 0
-              ? `Available memory files:\n${files.join("\n")}`
-              : "No memory files found."
-            }]
+            content: [
+              {
+                type: "text",
+                text: files.length > 0 ? `Available memory files:\n${files.join("\n")}` : "No memory files found.",
+              },
+            ],
           };
         }
 
@@ -569,16 +620,16 @@ export function getA2AMcpServer(sessionName: string): any {
           const dailyFiles: { name: string; path: string }[] = [];
           if (existsSync(GLOBAL_MEMORY_DIR)) {
             readdirSync(GLOBAL_MEMORY_DIR)
-              .filter(f => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
-              .forEach(f => dailyFiles.push({ name: f, path: join(GLOBAL_MEMORY_DIR, f) }));
+              .filter((f) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
+              .forEach((f) => dailyFiles.push({ name: f, path: join(GLOBAL_MEMORY_DIR, f) }));
           }
           const sessionMemoryDir = join(sessionDir, "memory");
           if (existsSync(sessionMemoryDir)) {
             readdirSync(sessionMemoryDir)
-              .filter(f => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
-              .forEach(f => {
+              .filter((f) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
+              .forEach((f) => {
                 // Session overrides global for same date
-                const idx = dailyFiles.findIndex(d => d.name === f);
+                const idx = dailyFiles.findIndex((d) => d.name === f);
                 if (idx >= 0) dailyFiles[idx].path = join(sessionMemoryDir, f);
                 else dailyFiles.push({ name: f, path: join(sessionMemoryDir, f) });
               });
@@ -588,10 +639,12 @@ export function getA2AMcpServer(sessionName: string): any {
           if (recent.length === 0) {
             return { content: [{ type: "text", text: "No daily memory files yet." }] };
           }
-          const contents = recent.map(({ name, path }) => {
-            const content = readFileSync(path, "utf-8");
-            return `## ${name.replace(".md", "")}\n\n${content}`;
-          }).join("\n\n---\n\n");
+          const contents = recent
+            .map(({ name, path }) => {
+              const content = readFileSync(path, "utf-8");
+              return `## ${name.replace(".md", "")}\n\n${content}`;
+            })
+            .join("\n\n---\n\n");
           return { content: [{ type: "text", text: contents }] };
         }
 
@@ -618,20 +671,31 @@ export function getA2AMcpServer(sessionName: string): any {
         if (from !== undefined && from > 0) {
           const allLines = content.split("\n");
           const startIdx = Math.max(0, from - 1);
-          const endIdx = lineCount !== undefined
-            ? Math.min(allLines.length, startIdx + lineCount)
-            : allLines.length;
+          const endIdx = lineCount !== undefined ? Math.min(allLines.length, startIdx + lineCount) : allLines.length;
           const snippet = allLines.slice(startIdx, endIdx).join("\n");
           return {
-            content: [{ type: "text", text: JSON.stringify({
-              path: file, from: startIdx + 1, to: endIdx, totalLines: allLines.length, text: snippet
-            }, null, 2) }]
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    path: file,
+                    from: startIdx + 1,
+                    to: endIdx,
+                    totalLines: allLines.length,
+                    text: snippet,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
           };
         }
 
         return { content: [{ type: "text", text: content }] };
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -641,7 +705,7 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         file: z.string().describe("Filename (e.g., 'today' for today's log, 'SELF.md')"),
         content: z.string().describe("Content to write or append"),
-        append: z.boolean().optional().describe("If true, append instead of replacing")
+        append: z.boolean().optional().describe("If true, append instead of replacing"),
       },
       async (args) => {
         // SECURITY: Check memory.write capability
@@ -650,33 +714,31 @@ export function getA2AMcpServer(sessionName: string): any {
           const sessionDir = join(SESSIONS_DIR, sessionName);
           const memoryDir = join(sessionDir, "memory");
 
-        if (!existsSync(memoryDir)) {
-          mkdirSync(memoryDir, { recursive: true });
-        }
+          if (!existsSync(memoryDir)) {
+            mkdirSync(memoryDir, { recursive: true });
+          }
 
-        let filename = file;
-        if (file === "today") {
-          filename = new Date().toISOString().split("T")[0] + ".md";
-        }
+          let filename = file;
+          if (file === "today") {
+            filename = `${new Date().toISOString().split("T")[0]}.md`;
+          }
 
-        const rootFiles = ["SOUL.md", "IDENTITY.md", "MEMORY.md", "USER.md", "AGENTS.md"];
-        const filePath = rootFiles.includes(filename)
-          ? join(sessionDir, filename)
-          : join(memoryDir, filename);
+          const rootFiles = ["SOUL.md", "IDENTITY.md", "MEMORY.md", "USER.md", "AGENTS.md"];
+          const filePath = rootFiles.includes(filename) ? join(sessionDir, filename) : join(memoryDir, filename);
 
-        const shouldAppend = append !== undefined ? append : filename.match(/^\d{4}-\d{2}-\d{2}\.md$/);
+          const shouldAppend = append !== undefined ? append : filename.match(/^\d{4}-\d{2}-\d{2}\.md$/);
 
-        if (shouldAppend && existsSync(filePath)) {
-          const existing = readFileSync(filePath, "utf-8");
-          writeFileSync(filePath, existing + "\n\n" + content);
-        } else {
-          writeFileSync(filePath, content);
-        }
+          if (shouldAppend && existsSync(filePath)) {
+            const existing = readFileSync(filePath, "utf-8");
+            writeFileSync(filePath, `${existing}\n\n${content}`);
+          } else {
+            writeFileSync(filePath, content);
+          }
 
-        return { content: [{ type: "text", text: `${shouldAppend ? "Appended to" : "Wrote"} ${filename}` }] };
+          return { content: [{ type: "text", text: `${shouldAppend ? "Appended to" : "Wrote"} ${filename}` }] };
         });
-      }
-    )
+      },
+    ),
   );
 
   // Memory index manager instance (eagerly initialized, sync on startup)
@@ -702,8 +764,6 @@ export function getA2AMcpServer(sessionName: string): any {
     return memoryManager;
   };
 
-
-
   tools.push(
     tool(
       "memory_search",
@@ -712,7 +772,12 @@ export function getA2AMcpServer(sessionName: string): any {
         query: z.string().describe("Search query"),
         maxResults: z.number().optional().describe("Maximum results (default: 10)"),
         minScore: z.number().optional().describe("Minimum relevance score 0-1 (default: 0.35)"),
-        temporal: z.string().optional().describe("Time filter: relative (\"24h\", \"7d\", \"2w\", \"1m\", \"last 3 days\") or date range (\"2026-01-01\", \"2026-01-01 to 2026-01-05\")")
+        temporal: z
+          .string()
+          .optional()
+          .describe(
+            'Time filter: relative ("24h", "7d", "2w", "1m", "last 3 days") or date range ("2026-01-01", "2026-01-01 to 2026-01-05")',
+          ),
       },
       async (args) => {
         const { query, maxResults = 10, minScore = 0.35, temporal: temporalExpr } = args;
@@ -720,7 +785,14 @@ export function getA2AMcpServer(sessionName: string): any {
         // Parse temporal filter if provided
         const parsedTemporal = temporalExpr ? parseTemporalFilter(temporalExpr) : null;
         if (temporalExpr && !parsedTemporal) {
-          return { content: [{ type: "text", text: `Invalid temporal filter "${temporalExpr}". Examples: "24h", "7d", "last 3 days", "2026-01-01", "2026-01-01 to 2026-01-05"` }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Invalid temporal filter "${temporalExpr}". Examples: "24h", "7d", "last 3 days", "2026-01-01", "2026-01-01 to 2026-01-05"`,
+              },
+            ],
+          };
         }
         const temporal = parsedTemporal ?? undefined;
 
@@ -738,14 +810,18 @@ export function getA2AMcpServer(sessionName: string): any {
           // Emit hook - plugins can set results
           await eventBus.emit("memory:search", hookPayload);
 
-          logger.info(`[memory_search] After hook: results=${hookPayload.results ? hookPayload.results.length : 'null'}, query="${query}"`);
+          logger.info(
+            `[memory_search] After hook: results=${hookPayload.results ? hookPayload.results.length : "null"}, query="${query}"`,
+          );
 
           // Use plugin results if provided, otherwise fall back to core FTS5
-          let results = hookPayload.results ?? await (async () => {
-            logger.info(`[memory_search] Falling through to core FTS5 for query: "${query}"`);
-            const manager = await getMemoryManager();
-            return manager.search(query, { maxResults: maxResults * 2, minScore, temporal });
-          })();
+          let results =
+            hookPayload.results ??
+            (await (async () => {
+              logger.info(`[memory_search] Falling through to core FTS5 for query: "${query}"`);
+              const manager = await getMemoryManager();
+              return manager.search(query, { maxResults: maxResults * 2, minScore, temporal });
+            })());
 
           // Filter session transcript results based on indexable permissions
           const ctx = getContext(sessionName);
@@ -753,31 +829,38 @@ export function getA2AMcpServer(sessionName: string): any {
           const secConfig = getSecurityConfig();
           const indexablePatterns = getSessionIndexable(secConfig, sessionName, trustLevel);
 
-          results = results.filter((r: any) => {
-            // Non-session sources are always visible
-            if (r.source !== "sessions") {
-              return true;
-            }
-            // Extract target session name from path (e.g., "sessions/foo.conversation.jsonl" -> "foo")
-            const pathMatch = r.path.match(/^sessions\/(.+?)\.conversation\.jsonl$/);
-            if (!pathMatch) {
-              return true; // Non-standard path, allow
-            }
-            const targetSession = pathMatch[1];
-            return canIndexSession(sessionName, targetSession, indexablePatterns);
-          }).slice(0, maxResults);
+          results = results
+            .filter((r: any) => {
+              // Non-session sources are always visible
+              if (r.source !== "sessions") {
+                return true;
+              }
+              // Extract target session name from path (e.g., "sessions/foo.conversation.jsonl" -> "foo")
+              const pathMatch = r.path.match(/^sessions\/(.+?)\.conversation\.jsonl$/);
+              if (!pathMatch) {
+                return true; // Non-standard path, allow
+              }
+              const targetSession = pathMatch[1];
+              return canIndexSession(sessionName, targetSession, indexablePatterns);
+            })
+            .slice(0, maxResults);
 
           if (results.length === 0) {
             const temporalNote = temporalExpr ? ` within time range "${temporalExpr}"` : "";
             return { content: [{ type: "text", text: `No matches found for "${query}"${temporalNote}` }] };
           }
 
-          const formatted = results.map((r, i) =>
-            `[${i + 1}] ${r.source}/${r.path}:${r.startLine}-${r.endLine} (score: ${r.score.toFixed(2)})\n${r.snippet}`
-          ).join("\n\n---\n\n");
+          const formatted = results
+            .map(
+              (r, i) =>
+                `[${i + 1}] ${r.source}/${r.path}:${r.startLine}-${r.endLine} (score: ${r.score.toFixed(2)})\n${r.snippet}`,
+            )
+            .join("\n\n---\n\n");
 
           const temporalNote = temporalExpr ? ` (filtered by: ${temporalExpr})` : "";
-          return { content: [{ type: "text", text: `Found ${results.length} results${temporalNote}:\n\n${formatted}` }] };
+          return {
+            content: [{ type: "text", text: `Found ${results.length} results${temporalNote}:\n\n${formatted}` }],
+          };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           // Fallback to keyword-only search if embeddings fail
@@ -801,7 +884,7 @@ export function getA2AMcpServer(sessionName: string): any {
 
           // Add global memory files
           if (existsSync(GLOBAL_MEMORY_DIR)) {
-            const memFiles = readdirSync(GLOBAL_MEMORY_DIR).filter(f => f.endsWith(".md"));
+            const memFiles = readdirSync(GLOBAL_MEMORY_DIR).filter((f) => f.endsWith(".md"));
             for (const f of memFiles) {
               filesToSearch.push({ path: join(GLOBAL_MEMORY_DIR, f), source: `global/memory/${f}` });
             }
@@ -809,7 +892,7 @@ export function getA2AMcpServer(sessionName: string): any {
 
           // Add session memory files
           if (existsSync(sessionMemoryDir)) {
-            const memFiles = readdirSync(sessionMemoryDir).filter(f => f.endsWith(".md"));
+            const memFiles = readdirSync(sessionMemoryDir).filter((f) => f.endsWith(".md"));
             for (const f of memFiles) {
               filesToSearch.push({ path: join(sessionMemoryDir, f), source: `session/memory/${f}` });
             }
@@ -824,12 +907,14 @@ export function getA2AMcpServer(sessionName: string): any {
                 const entryPath = join(sessionsBase, entry);
                 try {
                   if (!statSync(entryPath).isDirectory()) continue;
-                } catch { continue; }
+                } catch {
+                  continue;
+                }
                 const memDir = join(entryPath, "memory");
                 if (memDir === sessionMemoryDir) continue; // already added above
                 if (!existsSync(memDir)) continue;
                 try {
-                  const memFiles = readdirSync(memDir).filter(f => f.endsWith(".md"));
+                  const memFiles = readdirSync(memDir).filter((f) => f.endsWith(".md"));
                   for (const f of memFiles) {
                     filesToSearch.push({ path: join(memDir, f), source: `sessions/${entry}/memory/${f}` });
                   }
@@ -842,7 +927,10 @@ export function getA2AMcpServer(sessionName: string): any {
             return { content: [{ type: "text", text: "No memory files found." }] };
           }
 
-          const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+          const queryTerms = query
+            .toLowerCase()
+            .split(/\s+/)
+            .filter((t) => t.length > 2);
           const results: any[] = [];
 
           for (const { path: filePath, source } of filesToSearch) {
@@ -880,21 +968,26 @@ export function getA2AMcpServer(sessionName: string): any {
           }
 
           results.sort((a, b) => b.score - a.score);
-          const filteredResults = results.filter(r => r.score >= minScore);
+          const filteredResults = results.filter((r) => r.score >= minScore);
           const topResults = filteredResults.slice(0, maxResults);
 
           if (topResults.length === 0) {
             return { content: [{ type: "text", text: `No matches found for "${query}"` }] };
           }
 
-          const formatted = topResults.map((r, i) =>
-            `[${i + 1}] ${r.relPath}:${r.lineStart}-${r.lineEnd} (score: ${r.score.toFixed(2)})\n${r.snippet}`
-          ).join("\n\n---\n\n");
+          const formatted = topResults
+            .map(
+              (r, i) =>
+                `[${i + 1}] ${r.relPath}:${r.lineStart}-${r.lineEnd} (score: ${r.score.toFixed(2)})\n${r.snippet}`,
+            )
+            .join("\n\n---\n\n");
 
-          return { content: [{ type: "text", text: `Found ${topResults.length} results (keyword fallback):\n\n${formatted}` }] };
+          return {
+            content: [{ type: "text", text: `Found ${topResults.length} results (keyword fallback):\n\n${formatted}` }],
+          };
         }
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -904,7 +997,7 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         path: z.string().describe("Relative path from search results"),
         from: z.number().optional().describe("Starting line number (1-indexed)"),
-        lines: z.number().optional().describe("Number of lines to read")
+        lines: z.number().optional().describe("Number of lines to read"),
       },
       async (args) => {
         const { path: relPath, from, lines: lineCount } = args;
@@ -922,24 +1015,46 @@ export function getA2AMcpServer(sessionName: string): any {
 
         if (from !== undefined && from > 0) {
           const startIdx = Math.max(0, from - 1);
-          const endIdx = lineCount !== undefined
-            ? Math.min(allLines.length, startIdx + lineCount)
-            : allLines.length;
+          const endIdx = lineCount !== undefined ? Math.min(allLines.length, startIdx + lineCount) : allLines.length;
           const snippet = allLines.slice(startIdx, endIdx).join("\n");
           return {
-            content: [{ type: "text", text: JSON.stringify({
-              path: relPath, from: startIdx + 1, to: endIdx, totalLines: allLines.length, text: snippet
-            }, null, 2) }]
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    path: relPath,
+                    from: startIdx + 1,
+                    to: endIdx,
+                    totalLines: allLines.length,
+                    text: snippet,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
           };
         }
 
         return {
-          content: [{ type: "text", text: JSON.stringify({
-            path: relPath, totalLines: allLines.length, text: content
-          }, null, 2) }]
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  path: relPath,
+                  totalLines: allLines.length,
+                  text: content,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
         };
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -949,7 +1064,7 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         reflection: z.string().optional().describe("The reflection to record"),
         tattoo: z.string().optional().describe("A persistent identity marker"),
-        section: z.string().optional().describe("Section header (default: today's date)")
+        section: z.string().optional().describe("Section header (default: today's date)"),
       },
       async (args) => {
         // SECURITY: Check memory.write capability
@@ -959,51 +1074,51 @@ export function getA2AMcpServer(sessionName: string): any {
             return { content: [{ type: "text", text: "Provide 'reflection' or 'tattoo'" }], isError: true };
           }
 
-        const sessionDir = join(SESSIONS_DIR, sessionName);
-        const memoryDir = join(sessionDir, "memory");
-        const selfPath = join(memoryDir, "SELF.md");
+          const sessionDir = join(SESSIONS_DIR, sessionName);
+          const memoryDir = join(sessionDir, "memory");
+          const selfPath = join(memoryDir, "SELF.md");
 
-        if (!existsSync(memoryDir)) mkdirSync(memoryDir, { recursive: true });
-        if (!existsSync(selfPath)) writeFileSync(selfPath, "# SELF.md — Private Reflections\n\n");
+          if (!existsSync(memoryDir)) mkdirSync(memoryDir, { recursive: true });
+          if (!existsSync(selfPath)) writeFileSync(selfPath, "# SELF.md — Private Reflections\n\n");
 
-        const existing = readFileSync(selfPath, "utf-8");
-        const today = new Date().toISOString().split("T")[0];
+          const existing = readFileSync(selfPath, "utf-8");
+          const today = new Date().toISOString().split("T")[0];
 
-        if (tattoo) {
-          const lines = existing.split("\n");
-          let tattooSection = lines.findIndex(l => l.includes("## Tattoos"));
-          if (tattooSection === -1) {
-            const titleLine = lines.findIndex(l => l.startsWith("# "));
-            const newContent = [
-              ...lines.slice(0, titleLine + 1),
-              `\n## Tattoos\n\n- "${tattoo}"\n`,
-              ...lines.slice(titleLine + 1)
-            ].join("\n");
-            writeFileSync(selfPath, newContent);
-          } else {
-            const beforeTattoo = lines.slice(0, tattooSection + 1);
-            const afterTattoo = lines.slice(tattooSection + 1);
-            const insertPoint = afterTattoo.findIndex(l => l.startsWith("## "));
-            if (insertPoint === -1) {
-              afterTattoo.push(`- "${tattoo}"`);
+          if (tattoo) {
+            const lines = existing.split("\n");
+            const tattooSection = lines.findIndex((l) => l.includes("## Tattoos"));
+            if (tattooSection === -1) {
+              const titleLine = lines.findIndex((l) => l.startsWith("# "));
+              const newContent = [
+                ...lines.slice(0, titleLine + 1),
+                `\n## Tattoos\n\n- "${tattoo}"\n`,
+                ...lines.slice(titleLine + 1),
+              ].join("\n");
+              writeFileSync(selfPath, newContent);
             } else {
-              afterTattoo.splice(insertPoint, 0, `- "${tattoo}"`);
+              const beforeTattoo = lines.slice(0, tattooSection + 1);
+              const afterTattoo = lines.slice(tattooSection + 1);
+              const insertPoint = afterTattoo.findIndex((l) => l.startsWith("## "));
+              if (insertPoint === -1) {
+                afterTattoo.push(`- "${tattoo}"`);
+              } else {
+                afterTattoo.splice(insertPoint, 0, `- "${tattoo}"`);
+              }
+              writeFileSync(selfPath, [...beforeTattoo, ...afterTattoo].join("\n"));
             }
-            writeFileSync(selfPath, [...beforeTattoo, ...afterTattoo].join("\n"));
+            return { content: [{ type: "text", text: `Tattoo added: "${tattoo}"` }] };
           }
-          return { content: [{ type: "text", text: `Tattoo added: "${tattoo}"` }] };
-        }
 
-        if (reflection) {
-          const sectionHeader = section || today;
-          writeFileSync(selfPath, existing + `\n---\n\n## ${sectionHeader}\n\n${reflection}\n`);
-          return { content: [{ type: "text", text: `Reflection added under "${sectionHeader}"` }] };
-        }
+          if (reflection) {
+            const sectionHeader = section || today;
+            writeFileSync(selfPath, `${existing}\n---\n\n## ${sectionHeader}\n\n${reflection}\n`);
+            return { content: [{ type: "text", text: `Reflection added under "${sectionHeader}"` }] };
+          }
 
-        return { content: [{ type: "text", text: "Nothing to add" }] };
+          return { content: [{ type: "text", text: "Nothing to add" }] };
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1032,17 +1147,23 @@ export function getA2AMcpServer(sessionName: string): any {
         if (emojiMatch) identity.emoji = emojiMatch[1].trim();
 
         return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              parsed: identity,
-              raw: content,
-              source: resolved.isGlobal ? "global" : "session"
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  parsed: identity,
+                  raw: content,
+                  source: resolved.isGlobal ? "global" : "session",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
         };
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1055,7 +1176,7 @@ export function getA2AMcpServer(sessionName: string): any {
         vibe: z.string().optional().describe("Personality vibe"),
         emoji: z.string().optional().describe("Identity emoji"),
         section: z.string().optional().describe("Custom section name"),
-        sectionContent: z.string().optional().describe("Content for custom section")
+        sectionContent: z.string().optional().describe("Content for custom section"),
       },
       async (args) => {
         // SECURITY: Check memory.write capability
@@ -1064,48 +1185,49 @@ export function getA2AMcpServer(sessionName: string): any {
           const sessionDir = join(SESSIONS_DIR, sessionName);
           const identityPath = join(sessionDir, "IDENTITY.md");
 
-        let content = existsSync(identityPath)
-          ? readFileSync(identityPath, "utf-8")
-          : "# IDENTITY.md - Agent Identity\n\n";
+          let content = existsSync(identityPath)
+            ? readFileSync(identityPath, "utf-8")
+            : "# IDENTITY.md - Agent Identity\n\n";
 
-        const updates: string[] = [];
-        if (name) {
-          content = content.replace(/[-*]\s*Name:\s*.+/i, `- Name: ${name}`);
-          if (!content.includes("Name:")) content += `- Name: ${name}\n`;
-          updates.push(`name: ${name}`);
-        }
-        if (creature) {
-          content = content.replace(/[-*]\s*Creature:\s*.+/i, `- Creature: ${creature}`);
-          if (!content.includes("Creature:")) content += `- Creature: ${creature}\n`;
-          updates.push(`creature: ${creature}`);
-        }
-        if (vibe) {
-          content = content.replace(/[-*]\s*Vibe:\s*.+/i, `- Vibe: ${vibe}`);
-          if (!content.includes("Vibe:")) content += `- Vibe: ${vibe}\n`;
-          updates.push(`vibe: ${vibe}`);
-        }
-        if (emoji) {
-          content = content.replace(/[-*]\s*Emoji:\s*.+/i, `- Emoji: ${emoji}`);
-          if (!content.includes("Emoji:")) content += `- Emoji: ${emoji}\n`;
-          updates.push(`emoji: ${emoji}`);
-        }
-
-        if (section && sectionContent) {
-          const sectionRegex = new RegExp(`## ${section}[\\s\\S]*?(?=\\n## |$)`, "i");
-          const newSection = `## ${section}\n\n${sectionContent}\n`;
-          if (content.match(sectionRegex)) {
-            content = content.replace(sectionRegex, newSection);
-          } else {
-            content += `\n${newSection}`;
+          const updates: string[] = [];
+          if (name) {
+            content = content.replace(/[-*]\s*Name:\s*.+/i, `- Name: ${name}`);
+            if (!content.includes("Name:")) content += `- Name: ${name}\n`;
+            updates.push(`name: ${name}`);
           }
-          updates.push(`section: ${section}`);
-        }
+          if (creature) {
+            content = content.replace(/[-*]\s*Creature:\s*.+/i, `- Creature: ${creature}`);
+            if (!content.includes("Creature:")) content += `- Creature: ${creature}\n`;
+            updates.push(`creature: ${creature}`);
+          }
+          if (vibe) {
+            content = content.replace(/[-*]\s*Vibe:\s*.+/i, `- Vibe: ${vibe}`);
+            if (!content.includes("Vibe:")) content += `- Vibe: ${vibe}\n`;
+            updates.push(`vibe: ${vibe}`);
+          }
+          if (emoji) {
+            content = content.replace(/[-*]\s*Emoji:\s*.+/i, `- Emoji: ${emoji}`);
+            if (!content.includes("Emoji:")) content += `- Emoji: ${emoji}\n`;
+            updates.push(`emoji: ${emoji}`);
+          }
 
-        writeFileSync(identityPath, content);
-        return { content: [{ type: "text", text: `Identity updated: ${updates.join(", ")}` }] };
+          if (section && sectionContent) {
+            const safeSection = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const sectionRegex = new RegExp(`## ${safeSection}[\\s\\S]*?(?=\\n## |$)`, "i");
+            const newSection = `## ${section}\n\n${sectionContent}\n`;
+            if (content.match(sectionRegex)) {
+              content = content.replace(sectionRegex, newSection);
+            } else {
+              content += `\n${newSection}`;
+            }
+            updates.push(`section: ${section}`);
+          }
+
+          writeFileSync(identityPath, content);
+          return { content: [{ type: "text", text: `Identity updated: ${updates.join(", ")}` }] };
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1123,13 +1245,15 @@ export function getA2AMcpServer(sessionName: string): any {
 
         const content = readFileSync(resolved.path, "utf-8");
         return {
-          content: [{
-            type: "text",
-            text: `[Source: ${resolved.isGlobal ? "global" : "session"}]\n\n${content}`
-          }]
+          content: [
+            {
+              type: "text",
+              text: `[Source: ${resolved.isGlobal ? "global" : "session"}]\n\n${content}`,
+            },
+          ],
         };
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1139,7 +1263,7 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         content: z.string().optional().describe("Full content to replace SOUL.md"),
         section: z.string().optional().describe("Section header to add/update"),
-        sectionContent: z.string().optional().describe("Content for the section")
+        sectionContent: z.string().optional().describe("Content for the section"),
       },
       async (args) => {
         // SECURITY: Check memory.write capability
@@ -1153,27 +1277,31 @@ export function getA2AMcpServer(sessionName: string): any {
             return { content: [{ type: "text", text: "SOUL.md replaced entirely" }] };
           }
 
-        if (section && sectionContent) {
-          let existing = existsSync(soulPath)
-            ? readFileSync(soulPath, "utf-8")
-            : "# SOUL.md - Persona & Boundaries\n\n";
+          if (section && sectionContent) {
+            let existing = existsSync(soulPath)
+              ? readFileSync(soulPath, "utf-8")
+              : "# SOUL.md - Persona & Boundaries\n\n";
 
-          const sectionRegex = new RegExp(`## ${section}[\\s\\S]*?(?=\\n## |$)`, "i");
-          const newSection = `## ${section}\n\n${sectionContent}\n`;
-          if (existing.match(sectionRegex)) {
-            existing = existing.replace(sectionRegex, newSection);
-          } else {
-            existing += `\n${newSection}`;
+            const safeSection = section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const sectionRegex = new RegExp(`## ${safeSection}[\\s\\S]*?(?=\\n## |$)`, "i");
+            const newSection = `## ${section}\n\n${sectionContent}\n`;
+            if (existing.match(sectionRegex)) {
+              existing = existing.replace(sectionRegex, newSection);
+            } else {
+              existing += `\n${newSection}`;
+            }
+
+            writeFileSync(soulPath, existing);
+            return { content: [{ type: "text", text: `SOUL.md section "${section}" updated` }] };
           }
 
-          writeFileSync(soulPath, existing);
-          return { content: [{ type: "text", text: `SOUL.md section "${section}" updated` }] };
-        }
-
-        return { content: [{ type: "text", text: "Provide 'content' or 'section'+'sectionContent'" }], isError: true };
+          return {
+            content: [{ type: "text", text: "Provide 'content' or 'section'+'sectionContent'" }],
+            isError: true,
+          };
         });
-      }
-    )
+      },
+    ),
   );
 
   // ========================================================================
@@ -1188,7 +1316,7 @@ export function getA2AMcpServer(sessionName: string): any {
         name: z.string().describe("Unique name for this cron job"),
         schedule: z.string().describe("Cron schedule (e.g., '0 9 * * *' for 9am daily)"),
         session: z.string().describe("Target session to receive the message"),
-        message: z.string().describe("Message to inject into the session")
+        message: z.string().describe("Message to inject into the session"),
       },
       async (args) => {
         // SECURITY: Check cron.manage capability
@@ -1201,11 +1329,18 @@ export function getA2AMcpServer(sessionName: string): any {
             if (ctx && !ctx.hasCapability("cross.inject")) {
               if (isEnforcementEnabled()) {
                 return {
-                  content: [{ type: "text", text: `Access denied: Scheduling cron jobs for other sessions requires 'cross.inject' capability` }],
+                  content: [
+                    {
+                      type: "text",
+                      text: `Access denied: Scheduling cron jobs for other sessions requires 'cross.inject' capability`,
+                    },
+                  ],
                   isError: true,
                 };
               } else {
-                logger.warn(`[a2a-mcp] cron_schedule: ${sessionName} targeting ${session} without cross.inject capability`);
+                logger.warn(
+                  `[a2a-mcp] cron_schedule: ${sessionName} targeting ${session} without cross.inject capability`,
+                );
               }
             }
           }
@@ -1213,8 +1348,8 @@ export function getA2AMcpServer(sessionName: string): any {
           addCron({ name, schedule, session, message });
           return { content: [{ type: "text", text: `Cron job '${name}' scheduled: ${schedule} -> ${session}` }] };
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1224,7 +1359,7 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         time: z.string().describe("When to run: '+5m', '+1h', '14:30', or ISO timestamp"),
         session: z.string().describe("Target session"),
-        message: z.string().describe("Message to inject")
+        message: z.string().describe("Message to inject"),
       },
       async (args) => {
         // SECURITY: Check cron.manage capability
@@ -1237,7 +1372,12 @@ export function getA2AMcpServer(sessionName: string): any {
             if (ctx && !ctx.hasCapability("cross.inject")) {
               if (isEnforcementEnabled()) {
                 return {
-                  content: [{ type: "text", text: `Access denied: Scheduling cron jobs for other sessions requires 'cross.inject' capability` }],
+                  content: [
+                    {
+                      type: "text",
+                      text: `Access denied: Scheduling cron jobs for other sessions requires 'cross.inject' capability`,
+                    },
+                  ],
                   isError: true,
                 };
               } else {
@@ -1249,34 +1389,31 @@ export function getA2AMcpServer(sessionName: string): any {
           try {
             const job = createOnceJob(time, session, message);
             addCron(job);
-            return { content: [{ type: "text", text: `One-time job scheduled for ${new Date(job.runAt!).toISOString()}` }] };
+            return {
+              content: [{ type: "text", text: `One-time job scheduled for ${new Date(job.runAt!).toISOString()}` }],
+            };
           } catch (err: any) {
             return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
           }
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
-    tool(
-      "cron_list",
-      "List all scheduled cron jobs.",
-      {},
-      async () => {
-        const crons = getCrons();
-        if (crons.length === 0) {
-          return { content: [{ type: "text", text: "No cron jobs scheduled." }] };
-        }
-        const formatted = crons.map((c: any) => {
-          const schedule = c.once && c.runAt
-            ? `once at ${new Date(c.runAt).toISOString()}`
-            : c.schedule;
-          return `- ${c.name}: ${schedule} -> ${c.session}`;
-        }).join("\n");
-        return { content: [{ type: "text", text: `Scheduled cron jobs:\n${formatted}` }] };
+    tool("cron_list", "List all scheduled cron jobs.", {}, async () => {
+      const crons = getCrons();
+      if (crons.length === 0) {
+        return { content: [{ type: "text", text: "No cron jobs scheduled." }] };
       }
-    )
+      const formatted = crons
+        .map((c: any) => {
+          const schedule = c.once && c.runAt ? `once at ${new Date(c.runAt).toISOString()}` : c.schedule;
+          return `- ${c.name}: ${schedule} -> ${c.session}`;
+        })
+        .join("\n");
+      return { content: [{ type: "text", text: `Scheduled cron jobs:\n${formatted}` }] };
+    }),
   );
 
   tools.push(
@@ -1284,7 +1421,7 @@ export function getA2AMcpServer(sessionName: string): any {
       "cron_cancel",
       "Cancel a scheduled cron job by name.",
       {
-        name: z.string().describe("Name of the cron job to cancel")
+        name: z.string().describe("Name of the cron job to cancel"),
       },
       async (args) => {
         // SECURITY: Check cron.manage capability
@@ -1303,8 +1440,8 @@ export function getA2AMcpServer(sessionName: string): any {
           logger.error(`[a2a-mcp] cron_cancel failed: ${errMsg}`);
           return { content: [{ type: "text", text: `Error: ${errMsg}` }], isError: true };
         }
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1318,7 +1455,7 @@ export function getA2AMcpServer(sessionName: string): any {
         offset: z.number().optional().describe("Skip this many entries (for pagination)"),
         since: z.number().optional().describe("Only show entries after this timestamp (ms)"),
         successOnly: z.boolean().optional().describe("Only show successful executions"),
-        failedOnly: z.boolean().optional().describe("Only show failed executions")
+        failedOnly: z.boolean().optional().describe("Only show failed executions"),
       },
       async (args) => {
         const result = getCronHistory({
@@ -1358,8 +1495,8 @@ export function getA2AMcpServer(sessionName: string): any {
         }
 
         return { content: [{ type: "text", text: lines.join("\n") }] };
-      }
-    )
+      },
+    ),
   );
 
   // ========================================================================
@@ -1372,7 +1509,7 @@ export function getA2AMcpServer(sessionName: string): any {
       "Emit a custom event that other sessions/plugins can listen for.",
       {
         event: z.string().describe("Event name (e.g., 'plugin:myagent:task_complete')"),
-        payload: z.record(z.string(), z.any()).optional().describe("Event payload data")
+        payload: z.record(z.string(), z.any()).optional().describe("Event payload data"),
       },
       async (args) => {
         // SECURITY: Check event.emit capability
@@ -1381,28 +1518,35 @@ export function getA2AMcpServer(sessionName: string): any {
           await eventBus.emitCustom(event, payload || {}, sessionName);
           return { content: [{ type: "text", text: `Event '${event}' emitted` }] };
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
-    tool(
-      "event_list",
-      "List available event types.",
-      {},
-      async () => {
-        const coreEvents = [
-          "session:create", "session:beforeInject", "session:afterInject",
-          "session:responseChunk", "session:destroy",
-          "channel:message", "channel:send",
-          "plugin:beforeInit", "plugin:afterInit", "plugin:error",
-          "config:change", "system:shutdown"
-        ];
-        return {
-          content: [{ type: "text", text: `Core events:\n${coreEvents.map(e => `- ${e}`).join("\n")}\n\nCustom: Use 'plugin:yourname:event' format.` }]
-        };
-      }
-    )
+    tool("event_list", "List available event types.", {}, async () => {
+      const coreEvents = [
+        "session:create",
+        "session:beforeInject",
+        "session:afterInject",
+        "session:responseChunk",
+        "session:destroy",
+        "channel:message",
+        "channel:send",
+        "plugin:beforeInit",
+        "plugin:afterInit",
+        "plugin:error",
+        "config:change",
+        "system:shutdown",
+      ];
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Core events:\n${coreEvents.map((e) => `- ${e}`).join("\n")}\n\nCustom: Use 'plugin:yourname:event' format.`,
+          },
+        ],
+      };
+    }),
   );
 
   // ========================================================================
@@ -1419,16 +1563,22 @@ export function getA2AMcpServer(sessionName: string): any {
 
         if (!context) {
           return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                warning: "No security context found (legacy mode)",
-                trustLevel: "owner",
-                capabilities: ["*"],
-                sandbox: { enabled: false },
-                session: sessionName,
-              }, null, 2)
-            }]
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    warning: "No security context found (legacy mode)",
+                    trustLevel: "owner",
+                    capabilities: ["*"],
+                    sandbox: { enabled: false },
+                    session: sessionName,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
           };
         }
 
@@ -1436,29 +1586,35 @@ export function getA2AMcpServer(sessionName: string): any {
         const policy = context.getResolvedPolicy();
 
         return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              session: sessionName,
-              source: {
-                type: context.source.type,
-                trustLevel: context.source.trustLevel,
-                identity: context.source.identity,
-              },
-              capabilities: policy.capabilities,
-              allowedTools: policy.tools.allow,
-              deniedTools: policy.tools.deny,
-              sandbox: {
-                enabled: policy.sandbox.enabled,
-                network: policy.sandbox.network,
-              },
-              isGateway: policy.isGateway,
-              canForward: policy.canForward,
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  session: sessionName,
+                  source: {
+                    type: context.source.type,
+                    trustLevel: context.source.trustLevel,
+                    identity: context.source.identity,
+                  },
+                  capabilities: policy.capabilities,
+                  allowedTools: policy.tools.allow,
+                  deniedTools: policy.tools.deny,
+                  sandbox: {
+                    enabled: policy.sandbox.enabled,
+                    network: policy.sandbox.network,
+                  },
+                  isGateway: policy.isGateway,
+                  canForward: policy.canForward,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
         };
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1467,7 +1623,7 @@ export function getA2AMcpServer(sessionName: string): any {
       "Check if a specific tool or capability is allowed before attempting to use it.",
       {
         tool: z.string().optional().describe("Tool name to check (e.g., 'http_fetch', 'exec_command')"),
-        capability: z.string().optional().describe("Capability to check (e.g., 'inject.network', 'cross.inject')")
+        capability: z.string().optional().describe("Capability to check (e.g., 'inject.network', 'cross.inject')"),
       },
       async (args) => {
         const { tool: toolName, capability } = args;
@@ -1475,52 +1631,72 @@ export function getA2AMcpServer(sessionName: string): any {
 
         if (!context) {
           return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                allowed: true,
-                reason: "No security context (legacy mode allows all)"
-              }, null, 2)
-            }]
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    allowed: true,
+                    reason: "No security context (legacy mode allows all)",
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
           };
         }
 
         if (toolName) {
           const check = context.canUseTool(toolName);
           return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                tool: toolName,
-                ...check
-              }, null, 2)
-            }]
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    tool: toolName,
+                    ...check,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
           };
         }
 
         if (capability) {
           const allowed = context.hasCapability(capability as any);
           return {
-            content: [{
-              type: "text",
-              text: JSON.stringify({
-                capability,
-                allowed,
-                trustLevel: context.source.trustLevel
-              }, null, 2)
-            }]
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    capability,
+                    allowed,
+                    trustLevel: context.source.trustLevel,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
           };
         }
 
         return {
-          content: [{
-            type: "text",
-            text: "Provide 'tool' or 'capability' to check"
-          }],
-          isError: true
+          content: [
+            {
+              type: "text",
+              text: "Provide 'tool' or 'capability' to check",
+            },
+          ],
+          isError: true,
         };
-      }
-    )
+      },
+    ),
   );
 
   // ========================================================================
@@ -1534,10 +1710,15 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         url: z.string().describe("URL to fetch"),
         method: z.string().optional().describe("HTTP method (default: GET)"),
-        headers: z.record(z.string(), z.string()).optional().describe("Request headers as key-value pairs. Examples: Authorization='Bearer token', X-API-Key='key123', Content-Type='application/json'"),
+        headers: z
+          .record(z.string(), z.string())
+          .optional()
+          .describe(
+            "Request headers as key-value pairs. Examples: Authorization='Bearer token', X-API-Key='key123', Content-Type='application/json'",
+          ),
         body: z.string().optional().describe("Request body (for POST, PUT, PATCH)"),
         timeout: z.number().optional().describe("Timeout in ms (default: 30000)"),
-        includeHeaders: z.boolean().optional().describe("Include response headers in output (default: false)")
+        includeHeaders: z.boolean().optional().describe("Include response headers in output (default: false)"),
       },
       async (args) => {
         // SECURITY: Check inject.network capability (potential exfiltration vector)
@@ -1564,7 +1745,7 @@ export function getA2AMcpServer(sessionName: string): any {
               response.headers.forEach((value, key) => {
                 headerLines.push(`${key}: ${value}`);
               });
-              responseHeaders = headerLines.join("\n") + "\n\n";
+              responseHeaders = `${headerLines.join("\n")}\n\n`;
             }
 
             const contentType = response.headers.get("content-type") || "";
@@ -1578,16 +1759,23 @@ export function getA2AMcpServer(sessionName: string): any {
             }
 
             if (responseBody.length > 10000) {
-              responseBody = responseBody.substring(0, 10000) + "\n... (truncated)";
+              responseBody = `${responseBody.substring(0, 10000)}\n... (truncated)`;
             }
 
-            return { content: [{ type: "text", text: `HTTP ${response.status} ${response.statusText}\n${responseHeaders}\n${responseBody}` }] };
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `HTTP ${response.status} ${response.statusText}\n${responseHeaders}\n${responseBody}`,
+                },
+              ],
+            };
           } catch (err: any) {
             return { content: [{ type: "text", text: `HTTP request failed: ${err.message}` }], isError: true };
           }
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1597,7 +1785,7 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         command: z.string().describe("Command to execute"),
         cwd: z.string().optional().describe("Working directory (must be within session directory)"),
-        timeout: z.number().optional().describe("Timeout in ms (default: 10000, max: 60000)")
+        timeout: z.number().optional().describe("Timeout in ms (default: 10000, max: 60000)"),
       },
       async (args) => {
         // SECURITY: Check inject.exec capability
@@ -1619,20 +1807,20 @@ export function getA2AMcpServer(sessionName: string): any {
             if (!result) {
               return {
                 content: [{ type: "text", text: "Failed to execute in sandbox" }],
-                isError: true
+                isError: true,
               };
             }
 
             let output = result.stdout;
             if (result.stderr) output += `\n[stderr]\n${result.stderr}`;
             if (output.length > 10000) {
-              output = output.substring(0, 10000) + "\n... (truncated)";
+              output = `${output.substring(0, 10000)}\n... (truncated)`;
             }
 
             if (result.exitCode !== 0) {
               return {
                 content: [{ type: "text", text: output || `Exit code: ${result.exitCode}` }],
-                isError: true
+                isError: true,
               };
             }
 
@@ -1641,24 +1829,57 @@ export function getA2AMcpServer(sessionName: string): any {
 
           // HOST EXECUTION: Restricted to safe commands only
           const allowedCommands = [
-            "ls", "cat", "grep", "find", "echo", "date", "pwd", "whoami",
-            "head", "tail", "wc", "sort", "uniq", "diff", "env", "which",
-            "file", "stat", "du", "df", "uptime", "hostname", "uname"
+            "ls",
+            "cat",
+            "grep",
+            "find",
+            "echo",
+            "date",
+            "pwd",
+            "whoami",
+            "head",
+            "tail",
+            "wc",
+            "sort",
+            "uniq",
+            "diff",
+            "env",
+            "which",
+            "file",
+            "stat",
+            "du",
+            "df",
+            "uptime",
+            "hostname",
+            "uname",
           ];
 
           const firstWord = command.trim().split(/\s+/)[0];
           if (!allowedCommands.includes(firstWord)) {
             return {
-              content: [{ type: "text", text: `Command '${firstWord}' not allowed on host. Allowed: ${allowedCommands.join(", ")}. Enable sandboxing for full shell access.` }],
-              isError: true
+              content: [
+                {
+                  type: "text",
+                  text: `Command '${firstWord}' not allowed on host. Allowed: ${allowedCommands.join(", ")}. Enable sandboxing for full shell access.`,
+                },
+              ],
+              isError: true,
             };
           }
 
-          if (command.includes(";") || command.includes("&&") || command.includes("||") ||
-              command.includes("|") || command.includes("`") || command.includes("$(")) {
+          if (
+            command.includes(";") ||
+            command.includes("&&") ||
+            command.includes("||") ||
+            command.includes("|") ||
+            command.includes("`") ||
+            command.includes("$(")
+          ) {
             return {
-              content: [{ type: "text", text: "Shell operators not allowed on host. Enable sandboxing for full shell access." }],
-              isError: true
+              content: [
+                { type: "text", text: "Shell operators not allowed on host. Enable sandboxing for full shell access." },
+              ],
+              isError: true,
             };
           }
 
@@ -1667,25 +1888,30 @@ export function getA2AMcpServer(sessionName: string): any {
           let workDir = cwd ? join(cwd) : sessionDir;
 
           // Normalize the path to resolve ../ and other traversal attempts
-          const { resolve, normalize } = require("path");
+          const { resolve, normalize } = require("node:path");
           workDir = resolve(normalize(workDir));
 
           // Allowed base directories
           const allowedBases = [
-            SESSIONS_DIR,           // Session directories
-            GLOBAL_IDENTITY_DIR,    // Global identity for read-only memory access
+            SESSIONS_DIR, // Session directories
+            GLOBAL_IDENTITY_DIR, // Global identity for read-only memory access
           ];
 
           // Check if workDir is within any allowed base directory
-          const isAllowed = allowedBases.some(base => {
+          const isAllowed = allowedBases.some((base) => {
             const normalizedBase = resolve(normalize(base));
-            return workDir.startsWith(normalizedBase + "/") || workDir === normalizedBase;
+            return workDir.startsWith(`${normalizedBase}/`) || workDir === normalizedBase;
           });
 
           if (!isAllowed) {
             return {
-              content: [{ type: "text", text: `Access denied: Working directory '${cwd}' is outside allowed paths. Must be within session directory or global identity.` }],
-              isError: true
+              content: [
+                {
+                  type: "text",
+                  text: `Access denied: Working directory '${cwd}' is outside allowed paths. Must be within session directory or global identity.`,
+                },
+              ],
+              isError: true,
             };
           }
 
@@ -1698,11 +1924,18 @@ export function getA2AMcpServer(sessionName: string): any {
               if (ctx && !ctx.hasCapability("cross.read")) {
                 if (isEnforcementEnabled()) {
                   return {
-                    content: [{ type: "text", text: `Access denied: Accessing other sessions' directories requires 'cross.read' capability` }],
+                    content: [
+                      {
+                        type: "text",
+                        text: `Access denied: Accessing other sessions' directories requires 'cross.read' capability`,
+                      },
+                    ],
                     isError: true,
                   };
                 } else {
-                  logger.warn(`[a2a-mcp] exec_command: ${sessionName} accessing ${targetSession}'s directory without cross.read capability`);
+                  logger.warn(
+                    `[a2a-mcp] exec_command: ${sessionName} accessing ${targetSession}'s directory without cross.read capability`,
+                  );
                 }
               }
             }
@@ -1718,7 +1951,7 @@ export function getA2AMcpServer(sessionName: string): any {
             let output = stdout;
             if (stderr) output += `\n[stderr]\n${stderr}`;
             if (output.length > 10000) {
-              output = output.substring(0, 10000) + "\n... (truncated)";
+              output = `${output.substring(0, 10000)}\n... (truncated)`;
             }
 
             return { content: [{ type: "text", text: output || "(no output)" }] };
@@ -1726,8 +1959,8 @@ export function getA2AMcpServer(sessionName: string): any {
             return { content: [{ type: "text", text: `Command failed: ${err.message}` }], isError: true };
           }
         });
-      }
-    )
+      },
+    ),
   );
 
   tools.push(
@@ -1737,23 +1970,27 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         message: z.string().describe("Notification message"),
         level: z.string().optional().describe("Level: info, warn, error"),
-        channel: z.string().optional().describe("Specific channel to notify")
+        channel: z.string().optional().describe("Specific channel to notify"),
       },
       async (args) => {
         const { message, level = "info", channel } = args;
         const logLevel = level === "error" ? "error" : level === "warn" ? "warn" : "info";
         logger[logLevel](`[NOTIFY] ${message}`);
 
-        await eventBus.emitCustom("notification:send", {
-          message,
-          level,
-          channel,
-          fromSession: sessionName,
-        }, sessionName);
+        await eventBus.emitCustom(
+          "notification:send",
+          {
+            message,
+            level,
+            channel,
+            fromSession: sessionName,
+          },
+          sessionName,
+        );
 
         return { content: [{ type: "text", text: `Notification sent: [${level.toUpperCase()}] ${message}` }] };
-      }
-    )
+      },
+    ),
   );
 
   // ========================================================================
@@ -1762,18 +1999,13 @@ export function getA2AMcpServer(sessionName: string): any {
 
   for (const [, pluginTool] of pluginTools) {
     tools.push(
-      tool(
-        pluginTool.name,
-        pluginTool.description,
-        pluginTool.schema.shape,
-        async (args) => {
-          const result = await pluginTool.handler(args, makeContext());
-          if (typeof result === "string") {
-            return { content: [{ type: "text", text: result }] };
-          }
-          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      tool(pluginTool.name, pluginTool.description, pluginTool.schema.shape, async (args) => {
+        const result = await pluginTool.handler(args, makeContext());
+        if (typeof result === "string") {
+          return { content: [{ type: "text", text: result }] };
         }
-      )
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }),
     );
   }
 

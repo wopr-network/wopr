@@ -6,7 +6,7 @@
  * Can auto-install missing dependencies via brew, apt, pip, npm, docker, etc.
  */
 
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 import { logger } from "../logger.js";
@@ -112,7 +112,7 @@ export async function dockerImageExists(image: string): Promise<boolean> {
   if (!hasDocker()) return false;
 
   try {
-    execSync(`docker image inspect ${image}`, {
+    execFileSync("docker", ["image", "inspect", image], {
       timeout: 5000,
       stdio: "pipe",
     });

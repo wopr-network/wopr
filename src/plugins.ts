@@ -255,7 +255,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
 
     // Clone or pull
     if (existsSync(pluginDir)) {
-      execSync("git pull", { cwd: pluginDir, stdio: "inherit" });
+      execFileSync("git", ["pull"], { cwd: pluginDir, stdio: "inherit" });
     } else {
       execFileSync("git", ["clone", `https://github.com/${parts[0]}/${parts[1]}`, pluginDir], { stdio: "inherit" });
     }
@@ -264,12 +264,12 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     const pkgPath = join(pluginDir, "package.json");
     if (existsSync(pkgPath)) {
       logger.info(`[plugins] Installing dependencies for ${repo}...`);
-      execSync("npm install", { cwd: pluginDir, stdio: "inherit" });
+      execFileSync("npm", ["install"], { cwd: pluginDir, stdio: "inherit" });
 
       // Build TypeScript plugins if tsconfig.json exists
       if (existsSync(join(pluginDir, "tsconfig.json"))) {
         logger.info(`[plugins] Building TypeScript plugin...`);
-        execSync("npm run build", { cwd: pluginDir, stdio: "inherit" });
+        execFileSync("npm", ["run", "build"], { cwd: pluginDir, stdio: "inherit" });
       }
     }
 
@@ -302,12 +302,12 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     const pkgPath = join(pluginDir, "package.json");
     if (existsSync(pkgPath)) {
       logger.info(`[plugins] Installing dependencies for local plugin...`);
-      execSync("npm install", { cwd: pluginDir, stdio: "inherit" });
+      execFileSync("npm", ["install"], { cwd: pluginDir, stdio: "inherit" });
 
       // Build TypeScript plugins if tsconfig.json exists
       if (existsSync(join(pluginDir, "tsconfig.json"))) {
         logger.info(`[plugins] Building TypeScript plugin...`);
-        execSync("npm run build", { cwd: pluginDir, stdio: "inherit" });
+        execFileSync("npm", ["run", "build"], { cwd: pluginDir, stdio: "inherit" });
       }
     }
 
@@ -335,7 +335,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     mkdirSync(pluginDir, { recursive: true });
 
     // Use npm to install
-    execSync(`npm install "${npmPackage}"`, { cwd: pluginDir, stdio: "inherit" });
+    execFileSync("npm", ["install", npmPackage], { cwd: pluginDir, stdio: "inherit" });
 
     // Read installed package metadata
     const pkgPath = join(pluginDir, "node_modules", npmPackage, "package.json");
@@ -1136,7 +1136,7 @@ async function searchGitHubPlugins(query?: string): Promise<DiscoveredPlugin[]> 
 
   try {
     // Get user's repos matching wopr-plugin-*
-    const output = execSync(`gh repo list --json name,description,url --limit 100 2>/dev/null`, {
+    const output = execFileSync("gh", ["repo", "list", "--json", "name,description,url", "--limit", "100"], {
       encoding: "utf-8",
       timeout: 10000,
     });
