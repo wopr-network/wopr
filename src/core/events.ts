@@ -290,67 +290,91 @@ class WOPREventBusImpl implements WOPREventBus {
     }
   }
 
+  // Events where payload mutation order matters — handlers run sequentially.
+  // All other events run handlers concurrently for throughput.
+  private static SEQUENTIAL_EVENTS: ReadonlySet<string> = new Set([
+    "session:beforeInject",
+    "session:afterInject",
+    "memory:search",
+    "memory:filesChanged",
+  ]);
+
   async emit<T extends keyof WOPREventMap>(
     event: T,
     payload: WOPREventMap[T],
     source: string = "core"
   ): Promise<void> {
     const meta = { timestamp: Date.now(), source };
+    const eventName = event as string;
+    const listeners = this.emitter.listeners(eventName);
+    const sequential = WOPREventBusImpl.SEQUENTIAL_EVENTS.has(eventName);
 
-    // Collect promises from async handlers so we can await them
-    const promises: Promise<void>[] = [];
-    const listeners = this.emitter.listeners(event as string);
-    const isFilesChanged = (event as string) === "memory:filesChanged";
-    if (isFilesChanged) {
-      const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-      console.log(`[events] memory:filesChanged: ${listeners.length} handlers, heap=${heapMB}MB`);
-    }
-    for (let i = 0; i < listeners.length; i++) {
-      if (isFilesChanged) {
-        const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-        console.log(`[events] memory:filesChanged handler ${i}/${listeners.length} starting (heap=${heapMB}MB)`);
+    if (sequential) {
+      // Sequential: await each handler before starting the next so payload
+      // mutations (e.g. beforeInject adding <relevant-memories>) are visible
+      // to subsequent handlers.
+      for (let i = 0; i < listeners.length; i++) {
+        try {
+          const result = (listeners[i] as Function)(payload, meta);
+          if (result && typeof result.then === "function") {
+            await result;
+          }
+        } catch (err) {
+          logger.error(`[events] Handler ${i} error for ${eventName}:`, err);
+        }
       }
-      const result = (listeners[i] as Function)(payload, meta);
-      if (result && typeof result.then === "function") {
-        promises.push(result);
+    } else {
+      // Concurrent: start all handlers, then await, for throughput on
+      // high-frequency events like session:responseChunk.
+      const promises: Promise<void>[] = [];
+      for (let i = 0; i < listeners.length; i++) {
+        try {
+          const result = (listeners[i] as Function)(payload, meta);
+          if (result && typeof result.then === "function") {
+            promises.push(
+              (result as Promise<void>).catch((err: unknown) => {
+                logger.error(`[events] Handler ${i} error for ${eventName}:`, err);
+              })
+            );
+          }
+        } catch (err) {
+          logger.error(`[events] Handler ${i} sync throw for ${eventName}:`, err);
+        }
+      }
+      if (promises.length > 0) {
+        await Promise.all(promises);
       }
     }
 
-    // Also emit wildcard event for catch-all listeners
+    // Wildcard listeners — always concurrent (observation only, no mutation)
+    // Shallow-copy payload so wildcard handlers can't mutate the live object
     const wildcardEvent: WOPREvent = {
-      type: event as string,
-      payload,
+      type: eventName,
+      payload: typeof payload === "object" && payload !== null ? { ...payload } : payload,
       timestamp: meta.timestamp,
       source,
     };
     const wildcardListeners = this.emitter.listeners("*");
+    const wcPromises: Promise<void>[] = [];
     for (const listener of wildcardListeners) {
-      const result = (listener as Function)(wildcardEvent, meta);
-      if (result && typeof result.then === "function") {
-        promises.push(result);
+      try {
+        const result = (listener as Function)(wildcardEvent, meta);
+        if (result && typeof result.then === "function") {
+          wcPromises.push(
+            (result as Promise<void>).catch((err: unknown) => {
+              logger.error(`[events] Wildcard handler error for ${eventName}:`, err);
+            })
+          );
+        }
+      } catch (err) {
+        logger.error(`[events] Wildcard handler sync throw for ${eventName}:`, err);
       }
     }
-
-    // Await all async handlers
-    if (isFilesChanged) {
-      const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-      console.log(`[events] memory:filesChanged: awaiting ${promises.length} async handlers (heap=${heapMB}MB)`);
-    }
-    if (promises.length > 0) {
-      for (let i = 0; i < promises.length; i++) {
-        if (isFilesChanged) {
-          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-          console.log(`[events] memory:filesChanged: awaiting handler ${i}/${promises.length} (heap=${heapMB}MB)`);
-        }
-        await promises[i];
-        if (isFilesChanged) {
-          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-          console.log(`[events] memory:filesChanged: handler ${i} done (heap=${heapMB}MB)`);
-        }
-      }
+    if (wcPromises.length > 0) {
+      await Promise.all(wcPromises);
     }
 
-    logger.debug(`[events] Emitted: ${event as string} (source: ${source})`);
+    logger.debug(`[events] Emitted: ${eventName} (source: ${source})`);
   }
 
   async emitCustom(

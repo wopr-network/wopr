@@ -1,20 +1,19 @@
 /**
  * Onboard wizard helpers
  */
-import fs from "node:fs/promises";
-import path from "node:path";
+
 import { spawn } from "node:child_process";
-import { setTimeout } from "node:timers/promises";
-import { config } from "../../core/config.js";
-import { logger } from "../../logger.js";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { OnboardConfig, OnboardRuntime } from "./types.js";
 
-export const DEFAULT_WORKSPACE = path.join(process.env.HOME || "~", ".wopr", "workspace");
+export const DEFAULT_WORKSPACE = path.join(os.homedir(), ".wopr", "workspace");
 export const DEFAULT_PORT = 3000;
 
 export function summarizeExistingConfig(cfg: OnboardConfig): string {
   const rows: string[] = [];
-  
+
   if (cfg.workspace) {
     rows.push(`workspace: ${cfg.workspace}`);
   }
@@ -30,7 +29,7 @@ export function summarizeExistingConfig(cfg: OnboardConfig): string {
   if (cfg.channels?.length) {
     rows.push(`channels: ${cfg.channels.join(", ")}`);
   }
-  
+
   return rows.length ? rows.join("\n") : "No configuration detected.";
 }
 
@@ -62,23 +61,22 @@ export async function isLaunchdAvailable(): Promise<boolean> {
   return detectBinary("launchctl");
 }
 
-export async function probeGateway(url: string, token?: string, timeoutMs = 2000): Promise<{ ok: boolean; error?: string }> {
+export async function probeGateway(
+  url: string,
+  token?: string,
+  timeoutMs = 2000,
+): Promise<{ ok: boolean; error?: string }> {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(timeoutMs, null).then(() => controller.abort());
-    
     const headers: Record<string, string> = {};
     if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
+      headers.Authorization = `Bearer ${token}`;
     }
-    
-    const response = await fetch(`${url}/api/health`, {
+
+    const response = await fetch(`${url}/health`, {
       headers,
-      signal: controller.signal,
+      signal: AbortSignal.timeout(timeoutMs),
     });
-    
-    clearTimeout(timeout as any);
-    
+
     if (response.ok) {
       return { ok: true };
     }
@@ -91,52 +89,54 @@ export async function probeGateway(url: string, token?: string, timeoutMs = 2000
 export async function waitForGateway(
   url: string,
   token?: string,
-  options: { deadlineMs?: number; pollMs?: number } = {}
+  options: { deadlineMs?: number; pollMs?: number } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   const { deadlineMs = 15000, pollMs = 500 } = options;
   const startTime = Date.now();
-  
+
   while (Date.now() - startTime < deadlineMs) {
     const result = await probeGateway(url, token, pollMs);
     if (result.ok) return result;
-    await setTimeout(pollMs);
+    await new Promise((resolve) => globalThis.setTimeout(resolve, pollMs));
   }
-  
+
   return { ok: false, error: "Timeout waiting for gateway" };
 }
 
 export async function installSystemdService(
   port: number,
   token: string,
-  runtime: OnboardRuntime
+  runtime: OnboardRuntime,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const serviceName = "wopr-daemon.service";
-    const serviceDir = path.join(process.env.HOME || "~", ".config", "systemd", "user");
+    const homeDir = os.homedir();
+    const serviceDir = path.join(homeDir, ".config", "systemd", "user");
     const servicePath = path.join(serviceDir, serviceName);
-    
+
     // Ensure directory exists
     await fs.mkdir(serviceDir, { recursive: true });
-    
+
     const serviceContent = `[Unit]
 Description=WOPR Daemon
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=${process.execPath} ${process.argv[1]} daemon start
-Environment="WOPR_HOME=${process.env.WOPR_HOME || path.join(process.env.HOME || "~", ".wopr")}"
+ExecStart=${process.execPath} ${process.argv[1]} daemon run
+Environment="WOPR_HOME=${process.env.WOPR_HOME || path.join(homeDir, ".wopr")}"
 Environment="WOPR_GATEWAY_TOKEN=${token}"
+Environment="WOPR_PORT=${port}"
 Restart=on-failure
 RestartSec=5
 
 [Install]
 WantedBy=default.target
 `;
-    
+
     await fs.writeFile(servicePath, serviceContent, "utf-8");
     runtime.log(`Service file created: ${servicePath}`);
-    
+
     // Reload and enable
     await new Promise<void>((resolve, reject) => {
       const proc = spawn("systemctl", ["--user", "daemon-reload"], { stdio: "inherit" });
@@ -145,7 +145,7 @@ WantedBy=default.target
         else reject(new Error(`systemctl daemon-reload failed with code ${code}`));
       });
     });
-    
+
     await new Promise<void>((resolve, reject) => {
       const proc = spawn("systemctl", ["--user", "enable", serviceName], { stdio: "inherit" });
       proc.on("close", (code) => {
@@ -153,7 +153,7 @@ WantedBy=default.target
         else reject(new Error(`systemctl enable failed with code ${code}`));
       });
     });
-    
+
     await new Promise<void>((resolve, reject) => {
       const proc = spawn("systemctl", ["--user", "start", serviceName], { stdio: "inherit" });
       proc.on("close", (code) => {
@@ -161,7 +161,7 @@ WantedBy=default.target
         else reject(new Error(`systemctl start failed with code ${code}`));
       });
     });
-    
+
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err.message };
@@ -171,16 +171,17 @@ WantedBy=default.target
 export async function installLaunchdService(
   port: number,
   token: string,
-  runtime: OnboardRuntime
+  runtime: OnboardRuntime,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const plistName = "ai.wopr.daemon.plist";
-    const launchAgentsDir = path.join(process.env.HOME || "~", "Library", "LaunchAgents");
+    const homeDir = os.homedir();
+    const launchAgentsDir = path.join(homeDir, "Library", "LaunchAgents");
     const plistPath = path.join(launchAgentsDir, plistName);
-    
+
     // Ensure directory exists
     await fs.mkdir(launchAgentsDir, { recursive: true });
-    
+
     const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -192,30 +193,32 @@ export async function installLaunchdService(
         <string>${process.execPath}</string>
         <string>${process.argv[1]}</string>
         <string>daemon</string>
-        <string>start</string>
+        <string>run</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
         <key>WOPR_HOME</key>
-        <string>${process.env.WOPR_HOME || path.join(process.env.HOME || "~", ".wopr")}</string>
+        <string>${process.env.WOPR_HOME || path.join(homeDir, ".wopr")}</string>
         <key>WOPR_GATEWAY_TOKEN</key>
         <string>${token}</string>
+        <key>WOPR_PORT</key>
+        <string>${port}</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>${path.join(process.env.HOME || "~", "Library", "Logs", "wopr-daemon.log")}</string>
+    <string>${path.join(homeDir, "Library", "Logs", "wopr-daemon.log")}</string>
     <key>StandardErrorPath</key>
-    <string>${path.join(process.env.HOME || "~", "Library", "Logs", "wopr-daemon.error.log")}</string>
+    <string>${path.join(homeDir, "Library", "Logs", "wopr-daemon.error.log")}</string>
 </dict>
 </plist>
 `;
-    
+
     await fs.writeFile(plistPath, plistContent, "utf-8");
     runtime.log(`LaunchAgent created: ${plistPath}`);
-    
+
     // Load the service
     await new Promise<void>((resolve, reject) => {
       const proc = spawn("launchctl", ["load", plistPath], { stdio: "inherit" });
@@ -224,7 +227,7 @@ export async function installLaunchdService(
         else reject(new Error(`launchctl load failed with code ${code}`));
       });
     });
-    
+
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err.message };
@@ -235,7 +238,7 @@ export async function openBrowser(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     let command: string;
     let args: string[];
-    
+
     switch (process.platform) {
       case "darwin":
         command = "open";
@@ -249,7 +252,7 @@ export async function openBrowser(url: string): Promise<boolean> {
         command = "xdg-open";
         args = [url];
     }
-    
+
     const proc = spawn(command, args, { stdio: "ignore" });
     proc.on("close", (code) => resolve(code === 0));
     proc.on("error", () => resolve(false));
@@ -258,7 +261,7 @@ export async function openBrowser(url: string): Promise<boolean> {
 
 export async function applyWizardMetadata(
   cfg: OnboardConfig,
-  params: { command: string; mode?: string }
+  params: { command: string; mode?: string },
 ): Promise<OnboardConfig> {
   return {
     ...cfg,

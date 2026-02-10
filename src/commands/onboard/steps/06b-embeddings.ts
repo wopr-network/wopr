@@ -1,8 +1,9 @@
 /**
  * Step 6b: Embeddings provider setup (conditional on memory-semantic plugin)
  */
-import { select, note, text, spinner, confirm, pc } from "../prompts.js";
+
 import { getInstalledPlugins } from "../../../plugins.js";
+import { confirm, note, pc, select, spinner, text } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
 const SEMANTIC_PLUGIN_NAME = "wopr-plugin-memory-semantic";
@@ -27,12 +28,10 @@ async function getOllamaModels(baseUrl: string): Promise<string[]> {
   }
 }
 
-export const embeddingsStep: OnboardStep = async (ctx: OnboardContext) => {
+export const embeddingsStep: OnboardStep = async (_ctx: OnboardContext) => {
   // Only show if the semantic memory plugin is installed
   const installed = getInstalledPlugins();
-  const hasSemanticPlugin = installed.some(
-    (p) => p.name === SEMANTIC_PLUGIN_NAME || p.name === "memory-semantic"
-  );
+  const hasSemanticPlugin = installed.some((p) => p.name === SEMANTIC_PLUGIN_NAME || p.name === "memory-semantic");
 
   if (!hasSemanticPlugin) {
     return {};
@@ -52,11 +51,9 @@ export const embeddingsStep: OnboardStep = async (ctx: OnboardContext) => {
   const hasGoogleKey = !!(process.env.GOOGLE_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim());
 
   // Try Ollama at common locations
-  const ollamaUrls = [
-    process.env.OLLAMA_HOST,
-    "http://ollama:11434",
-    "http://localhost:11434",
-  ].filter(Boolean) as string[];
+  const ollamaUrls = [process.env.OLLAMA_HOST, "http://ollama:11434", "http://localhost:11434"].filter(
+    Boolean,
+  ) as string[];
 
   let ollamaUrl: string | null = null;
   for (const url of ollamaUrls) {
@@ -137,7 +134,7 @@ export const embeddingsStep: OnboardStep = async (ctx: OnboardContext) => {
           "",
           "The onboard config will be saved. Ollama will be used once it's running.",
         ].join("\n"),
-        "Ollama Setup"
+        "Ollama Setup",
       );
 
       // Let user specify the URL they'll use
@@ -157,9 +154,7 @@ export const embeddingsStep: OnboardStep = async (ctx: OnboardContext) => {
       s.stop(models.length > 0 ? `Found ${models.length} models` : "No models found");
 
       // Filter embedding models (heuristic: name contains "embed")
-      const embeddingModels = models.filter(
-        (m) => m.includes("embed") || m.includes("nomic") || m.includes("mxbai")
-      );
+      const embeddingModels = models.filter((m) => m.includes("embed") || m.includes("nomic") || m.includes("mxbai"));
 
       if (embeddingModels.length > 0) {
         const modelOptions = embeddingModels.map((m) => ({
@@ -211,7 +206,7 @@ export const embeddingsStep: OnboardStep = async (ctx: OnboardContext) => {
     ]
       .filter(Boolean)
       .join("\n"),
-    "Embeddings Config"
+    "Embeddings Config",
   );
 
   return {

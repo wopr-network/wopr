@@ -38,10 +38,7 @@ export async function spinner() {
   return p.spinner();
 }
 
-export async function confirm(options: {
-  message: string;
-  initialValue?: boolean;
-}): Promise<boolean> {
+export async function confirm(options: { message: string; initialValue?: boolean }): Promise<boolean> {
   const result = await p.confirm({
     message: options.message,
     initialValue: options.initialValue ?? false,
@@ -53,7 +50,7 @@ export async function text(options: {
   message: string;
   placeholder?: string;
   initialValue?: string;
-  validate?: (value: string) => string | void;
+  validate?: (value: string) => string | undefined;
 }): Promise<string> {
   const result = await p.text({
     message: options.message,
@@ -66,7 +63,7 @@ export async function text(options: {
 
 export async function password(options: {
   message: string;
-  validate?: (value: string) => string | void;
+  validate?: (value: string) => string | undefined;
 }): Promise<string> {
   const result = await p.password({
     message: options.message,
@@ -104,16 +101,20 @@ export async function multiselect<T>(options: {
 }
 
 export function printHeader(): void {
-  console.log(pc.cyan([
-    "",
-    "██╗    ██╗ ██████╗ ██████╗ ██████╗ ",
-    "██║    ██║██╔═══██╗██╔══██╗██╔══██╗",
-    "██║ █╗ ██║██║   ██║██████╔╝██████╔╝",
-    "██║███╗██║██║   ██║██╔═══╝ ██╔══██╗",
-    "╚███╔███╔╝╚██████╔╝██║     ██║  ██║",
-    " ╚══╝╚══╝  ╚═════╝ ╚═╝     ╚═╝  ╚═╝",
-    "",
-    "   🚀 WOPR - War Operations Planned Response",
-    "",
-  ].join("\n")));
+  console.log(
+    pc.cyan(
+      [
+        "",
+        "██╗    ██╗ ██████╗ ██████╗ ██████╗ ",
+        "██║    ██║██╔═══██╗██╔══██╗██╔══██╗",
+        "██║ █╗ ██║██║   ██║██████╔╝██████╔╝",
+        "██║███╗██║██║   ██║██╔═══╝ ██╔══██╗",
+        "╚███╔███╔╝╚██████╔╝██║     ██║  ██║",
+        " ╚══╝╚══╝  ╚═════╝ ╚═╝     ╚═╝  ╚═╝",
+        "",
+        "   🚀 WOPR - War Operations Planned Response",
+        "",
+      ].join("\n"),
+    ),
+  );
 }

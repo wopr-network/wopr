@@ -5,14 +5,10 @@
  * Hooks can transform messages, add metadata, log, or block injections.
  */
 
-import { spawn } from "child_process";
+import { spawn } from "node:child_process";
 import { logger } from "../logger.js";
-import {
-  type InjectionSource,
-  type HookConfig,
-  type SecurityConfig,
-} from "./types.js";
 import { getSecurityConfig } from "./policy.js";
+import type { InjectionSource } from "./types.js";
 
 // ============================================================================
 // Hook Types
@@ -68,13 +64,23 @@ export interface PostInjectResult {
 // ============================================================================
 
 /**
- * Run a shell command hook
+ * Run a shell command hook.
+ * Commands come from admin-controlled security config (security.json).
+ * Shell execution via sh -c is intentional to support pipes/redirects in hook scripts.
  */
-async function runCommandHook(
-  command: string,
-  context: HookContext
-): Promise<PreInjectResult | PostInjectResult> {
+async function runCommandHook(command: string, context: HookContext): Promise<PreInjectResult | PostInjectResult> {
+  if (!command || typeof command !== "string" || command.trim().length === 0) {
+    logger.warn("[hooks] Empty or invalid hook command, skipping");
+    return {};
+  }
   return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result: PreInjectResult | PostInjectResult) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
     const proc = spawn("sh", ["-c", command], {
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -97,29 +103,31 @@ async function runCommandHook(
     proc.on("close", (code) => {
       if (code !== 0) {
         logger.warn(`[hooks] Hook command failed: ${stderr}`);
-        resolve({ allow: true }); // Allow by default on hook failure
+        settle({ allow: true }); // Allow by default on hook failure
         return;
       }
 
       try {
         const result = JSON.parse(stdout);
-        resolve(result);
+        settle(result);
       } catch {
         logger.warn(`[hooks] Hook returned invalid JSON: ${stdout}`);
-        resolve({ allow: true });
+        settle({ allow: true });
       }
     });
 
     proc.on("error", (err) => {
       logger.warn(`[hooks] Hook command error: ${err.message}`);
-      resolve({ allow: true });
+      settle({ allow: true });
     });
 
     // Timeout after 5 seconds
     setTimeout(() => {
-      proc.kill();
-      logger.warn("[hooks] Hook timed out");
-      resolve({ allow: true });
+      if (!settled) {
+        proc.kill();
+        logger.warn("[hooks] Hook timed out");
+      }
+      settle({ allow: true });
     }, 5000);
   });
 }
@@ -127,13 +135,9 @@ async function runCommandHook(
 /**
  * Run all pre-inject hooks
  */
-export async function runPreInjectHooks(
-  context: HookContext
-): Promise<PreInjectResult> {
+export async function runPreInjectHooks(context: HookContext): Promise<PreInjectResult> {
   const config = getSecurityConfig();
-  const hooks = config.hooks?.filter(
-    (h) => h.type === "pre-inject" && h.enabled
-  ) || [];
+  const hooks = config.hooks?.filter((h) => h.type === "pre-inject" && h.enabled) || [];
 
   let currentMessage = context.message;
   let metadata: Record<string, unknown> = { ...context.metadata };
@@ -142,7 +146,7 @@ export async function runPreInjectHooks(
     const hookContext = { ...context, message: currentMessage, metadata };
 
     if (hook.command) {
-      const result = await runCommandHook(hook.command, hookContext) as PreInjectResult;
+      const result = (await runCommandHook(hook.command, hookContext)) as PreInjectResult;
 
       if (result.allow === false) {
         return {
@@ -171,14 +175,9 @@ export async function runPreInjectHooks(
 /**
  * Run all post-inject hooks
  */
-export async function runPostInjectHooks(
-  context: HookContext,
-  response: string
-): Promise<void> {
+export async function runPostInjectHooks(context: HookContext, response: string): Promise<void> {
   const config = getSecurityConfig();
-  const hooks = config.hooks?.filter(
-    (h) => h.type === "post-inject" && h.enabled
-  ) || [];
+  const hooks = config.hooks?.filter((h) => h.type === "post-inject" && h.enabled) || [];
 
   const postContext = {
     ...context,
@@ -222,11 +221,7 @@ export function addSourceMetadata(context: HookContext): PreInjectResult {
 /**
  * Built-in hook: Log injection for audit
  */
-export function auditLogHook(
-  context: HookContext,
-  allowed: boolean,
-  reason?: string
-): void {
+export function auditLogHook(context: HookContext, allowed: boolean, reason?: string): void {
   const config = getSecurityConfig();
 
   if (!config.audit?.enabled) return;
@@ -263,11 +258,7 @@ export function auditLogHook(
 /**
  * Create a hook context from injection parameters
  */
-export function createHookContext(
-  message: string,
-  source: InjectionSource,
-  targetSession: string
-): HookContext {
+export function createHookContext(message: string, source: InjectionSource, targetSession: string): HookContext {
   return {
     message,
     source,
@@ -286,7 +277,7 @@ export async function processInjection(
   targetSession: string,
   options?: {
     addMetadata?: boolean;
-  }
+  },
 ): Promise<{ allowed: boolean; message: string; reason?: string }> {
   const context = createHookContext(message, source, targetSession);
 

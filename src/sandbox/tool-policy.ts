@@ -4,13 +4,10 @@
  * Copied from OpenClaw with WOPR adaptations.
  */
 
-import type { SandboxToolPolicy, SandboxToolPolicyResolved, SandboxToolPolicySource } from "./types.js";
 import { DEFAULT_TOOL_ALLOW, DEFAULT_TOOL_DENY } from "./constants.js";
+import type { SandboxToolPolicy, SandboxToolPolicyResolved, SandboxToolPolicySource } from "./types.js";
 
-type CompiledPattern =
-  | { kind: "all" }
-  | { kind: "exact"; value: string }
-  | { kind: "regex"; value: RegExp };
+type CompiledPattern = { kind: "all" } | { kind: "exact"; value: string } | { kind: "regex"; value: RegExp };
 
 function compilePattern(pattern: string): CompiledPattern {
   const normalized = pattern.trim().toLowerCase();
@@ -34,9 +31,7 @@ function compilePatterns(patterns?: string[]): CompiledPattern[] {
   if (!Array.isArray(patterns)) {
     return [];
   }
-  return patterns
-    .map(compilePattern)
-    .filter((pattern) => pattern.kind !== "exact" || pattern.value);
+  return patterns.map(compilePattern).filter((pattern) => pattern.kind !== "exact" || pattern.value);
 }
 
 function matchesAny(name: string, patterns: CompiledPattern[]): boolean {
@@ -126,7 +121,7 @@ export function resolveSandboxToolPolicy(params: {
  */
 export function filterToolsByPolicy(
   tools: string[],
-  policy: SandboxToolPolicy
+  policy: SandboxToolPolicy,
 ): { allowed: string[]; denied: string[] } {
   const allowed: string[] = [];
   const denied: string[] = [];
