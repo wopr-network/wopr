@@ -44,6 +44,16 @@ export interface ForwardResult {
 }
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+function generateTrackingId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 8);
+  return `fwd-${timestamp}-${random}`;
+}
+
+// ============================================================================
 // Forward Functions
 // ============================================================================
 
@@ -87,7 +97,7 @@ export async function forwardRequest(
     return {
       success: false,
       error: `Session ${gatewaySession} is not a gateway`,
-      requestId: "",
+      requestId: generateTrackingId(),
     };
   }
 
@@ -165,13 +175,13 @@ export async function executeForward(
         requestId: request.requestId,
       };
     } finally {
-      clearContext(request.targetSession);
+      clearContext(forwardedContext.session);
     }
   } catch (err: any) {
     logger.error(`[forward] Forward ${request.requestId} failed: ${err.message}`);
     return {
       success: false,
-      error: err.message,
+      error: "Forward execution failed",
       requestId: request.requestId,
     };
   }
@@ -228,7 +238,7 @@ export async function routeThroughGateway(
     return {
       success: false,
       error: "No gateway available for this request",
-      requestId: "",
+      requestId: generateTrackingId(),
     };
   }
 
@@ -261,7 +271,7 @@ export async function handleGatewayForward(
     return {
       success: false,
       error: "Context mismatch",
-      requestId: "",
+      requestId: generateTrackingId(),
     };
   }
 

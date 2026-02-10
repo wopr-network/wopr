@@ -576,7 +576,6 @@ export class MemoryIndexManager {
   private ensureSchema() {
     const result = ensureMemoryIndexSchema({
       db: this.db,
-      embeddingCacheTable: "embedding_cache",
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
     });

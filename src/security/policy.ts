@@ -260,10 +260,11 @@ export function checkSessionAccess(source: InjectionSource, session: string): Po
   const policy = resolvePolicy(source, session);
 
   // Check minimum trust level
-  if (!meetsTrustLevel(source.trustLevel, "untrusted")) {
+  const minTrust = config.defaults.minTrustLevel || "untrusted";
+  if (!meetsTrustLevel(source.trustLevel, minTrust)) {
     return {
       allowed: false,
-      reason: `Trust level ${source.trustLevel} below minimum`,
+      reason: `Trust level ${source.trustLevel} below minimum (${minTrust})`,
     };
   }
 
@@ -320,11 +321,18 @@ export function checkCapability(source: InjectionSource, capability: Capability,
 export function checkToolAccess(source: InjectionSource, toolName: string, session?: string): PolicyCheckResult {
   const config = getSecurityConfig();
   const policy = resolvePolicy(source, session);
+  const isWarnMode = config.enforcement === "warn";
 
   // Check tool policy
   if (policy.tools.deny?.includes(toolName) || policy.tools.deny?.includes("*")) {
     // Unless explicitly allowed
     if (!policy.tools.allow?.includes(toolName)) {
+      if (isWarnMode) {
+        return {
+          allowed: true,
+          warning: `Tool ${toolName} is denied for ${source.trustLevel} (warn mode)`,
+        };
+      }
       return {
         allowed: false,
         reason: `Tool ${toolName} is denied for ${source.trustLevel}`,
@@ -336,19 +344,17 @@ export function checkToolAccess(source: InjectionSource, toolName: string, sessi
   const requiredCap = getToolCapability(toolName);
   if (requiredCap) {
     if (!hasCapability(policy.capabilities, requiredCap)) {
+      if (isWarnMode) {
+        return {
+          allowed: true,
+          warning: `Tool ${toolName} requires capability ${requiredCap} (warn mode)`,
+        };
+      }
       return {
         allowed: false,
         reason: `Tool ${toolName} requires capability ${requiredCap}`,
       };
     }
-  }
-
-  // Warn if enforcement is in warn mode
-  if (config.enforcement === "warn") {
-    return {
-      allowed: true,
-      warning: `Tool ${toolName} access would be denied in enforce mode`,
-    };
   }
 
   return { allowed: true };

@@ -64,10 +64,23 @@ export interface PostInjectResult {
 // ============================================================================
 
 /**
- * Run a shell command hook
+ * Run a shell command hook.
+ * Commands come from admin-controlled security config (security.json).
+ * Shell execution via sh -c is intentional to support pipes/redirects in hook scripts.
  */
 async function runCommandHook(command: string, context: HookContext): Promise<PreInjectResult | PostInjectResult> {
+  if (!command || typeof command !== "string" || command.trim().length === 0) {
+    logger.warn("[hooks] Empty or invalid hook command, skipping");
+    return { allow: true };
+  }
   return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result: PreInjectResult | PostInjectResult) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
     const proc = spawn("sh", ["-c", command], {
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -90,29 +103,31 @@ async function runCommandHook(command: string, context: HookContext): Promise<Pr
     proc.on("close", (code) => {
       if (code !== 0) {
         logger.warn(`[hooks] Hook command failed: ${stderr}`);
-        resolve({ allow: true }); // Allow by default on hook failure
+        settle({ allow: true }); // Allow by default on hook failure
         return;
       }
 
       try {
         const result = JSON.parse(stdout);
-        resolve(result);
+        settle(result);
       } catch {
         logger.warn(`[hooks] Hook returned invalid JSON: ${stdout}`);
-        resolve({ allow: true });
+        settle({ allow: true });
       }
     });
 
     proc.on("error", (err) => {
       logger.warn(`[hooks] Hook command error: ${err.message}`);
-      resolve({ allow: true });
+      settle({ allow: true });
     });
 
     // Timeout after 5 seconds
     setTimeout(() => {
-      proc.kill();
-      logger.warn("[hooks] Hook timed out");
-      resolve({ allow: true });
+      if (!settled) {
+        proc.kill();
+        logger.warn("[hooks] Hook timed out");
+      }
+      settle({ allow: true });
     }, 5000);
   });
 }

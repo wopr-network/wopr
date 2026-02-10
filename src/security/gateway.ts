@@ -380,6 +380,13 @@ export function cleanupExpiredRequests(): void {
       pendingRequests.delete(requestId);
     }
   }
+
+  // Evict expired rate limit entries
+  for (const [key, tracking] of rateLimitTracking) {
+    if (now >= tracking.resetAt) {
+      rateLimitTracking.delete(key);
+    }
+  }
 }
 
 // Run cleanup every minute
