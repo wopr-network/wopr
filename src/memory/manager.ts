@@ -361,7 +361,7 @@ export class MemoryIndexManager {
             absPath: entry.absPath,
             source: "sessions" as MemorySource,
             chunks: chunks.map((chunk) => ({
-              id: chunk.hash,
+              id: hashText(`sessions:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.text}`),
               text: chunk.text,
               hash: chunk.hash,
               startLine: chunk.startLine,
