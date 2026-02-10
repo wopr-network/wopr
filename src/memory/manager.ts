@@ -13,6 +13,7 @@ import {
   buildFileEntry,
   chunkMarkdown,
   ensureDir,
+  hashText,
   listMemoryFiles,
 } from "./internal.js";
 import { ensureMemoryIndexSchema } from "./schema.js";
@@ -156,9 +157,10 @@ export class MemoryIndexManager {
     this.fts = { enabled: true, available: false };
     this.ensureSchema();
 
-    // Subscribe FTS5 indexing as handler for memory:filesChanged
+    // Subscribe FTS5 indexing as handler for memory:filesChanged.
+    // Return the promise so the sequential event bus awaits completion.
     eventBus.on("memory:filesChanged", (event) => {
-      this.handleFilesChanged(event);
+      return this.handleFilesChanged(event);
     });
 
     this.dirty = true;
@@ -402,7 +404,9 @@ export class MemoryIndexManager {
           absPath: entry.absPath,
           source: params.source,
           chunks: chunks.map((chunk) => ({
-            id: chunk.hash,
+            // Stable ID unique per file location + content, preventing collisions
+            // when identical text appears in different files or line ranges.
+            id: hashText(`${params.source}:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.text}`),
             text: chunk.text,
             hash: chunk.hash,
             startLine: chunk.startLine,
@@ -429,10 +433,7 @@ export class MemoryIndexManager {
     return changes;
   }
 
-  private handleFilesChanged(event: { changes: MemoryFileChange[] }): void {
-    const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    const totalChunks = event.changes.reduce((sum, c) => sum + (c.chunks?.length || 0), 0);
-    console.log(`[handleFilesChanged] ${event.changes.length} changes, ${totalChunks} total chunks (heap=${heapMB()}MB)`);
+  private async handleFilesChanged(event: { changes: MemoryFileChange[] }): Promise<void> {
     for (const change of event.changes) {
       if (change.action === "delete") {
         this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(change.path, change.source);
@@ -449,7 +450,6 @@ export class MemoryIndexManager {
 
       // Upsert
       if (!change.chunks || change.chunks.length === 0) continue;
-      console.log(`[handleFilesChanged] upsert ${change.path}: ${change.chunks.length} chunks (heap=${heapMB()}MB)`);
 
       // Delete existing chunks for this file
       this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(change.path, change.source);
@@ -462,12 +462,12 @@ export class MemoryIndexManager {
       }
 
       const insertChunk = this.db.prepare(
-        `INSERT OR REPLACE INTO chunks (id, path, source, start_line, end_line, hash, model, text, updated_at)
+        `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const insertFts = this.fts.available
         ? this.db.prepare(
-            `INSERT OR REPLACE INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
+            `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
           )
         : null;
@@ -576,7 +576,6 @@ export class MemoryIndexManager {
   private ensureSchema() {
     const result = ensureMemoryIndexSchema({
       db: this.db,
-      embeddingCacheTable: "embedding_cache",
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
     });
