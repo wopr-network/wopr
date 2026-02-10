@@ -2,11 +2,10 @@
  * Configuration management for WOPR
  */
 
-import { readFile, writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { WOPR_HOME, CONFIG_FILE } from "../paths.js";
-
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { logger } from "../logger.js";
+import { CONFIG_FILE, WOPR_HOME } from "../paths.js";
 /**
  * Per-provider default settings
  */
@@ -229,7 +228,8 @@ export class ConfigManager {
 
   private merge(defaults: any, overrides: any): any {
     const result: any = { ...defaults };
-    for (const key in overrides) {
+    for (const key of Object.keys(overrides)) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
       if (overrides[key] !== null && typeof overrides[key] === "object" && !Array.isArray(overrides[key])) {
         result[key] = this.merge(defaults[key] || {}, overrides[key]);
       } else {

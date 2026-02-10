@@ -1,5 +1,5 @@
-import { join } from "path";
-import { homedir } from "os";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export const WOPR_HOME = process.env.WOPR_HOME || join(homedir(), "wopr");
 export const SESSIONS_DIR = join(WOPR_HOME, "sessions");

@@ -2,20 +2,19 @@
 export const PROTOCOL_VERSION = 2;
 export const MIN_PROTOCOL_VERSION = 1;
 
-// Re-export provider types for plugins
-export type { ModelProvider } from "./types/provider.js";
-
 // Re-export security types for plugins and external use
 export type {
-  TrustLevel,
   Capability,
   InjectionSource,
   InjectionSourceType,
-  SecurityPolicy,
-  SecurityConfig,
   SandboxConfig,
+  SecurityConfig,
   SecurityEvent,
+  SecurityPolicy,
+  TrustLevel,
 } from "./security/types.js";
+// Re-export provider types for plugins
+export type { ModelProvider } from "./types/provider.js";
 
 // Import InjectionSource for use within this file
 import type { InjectionSource as _InjectionSource } from "./security/types.js";
@@ -26,10 +25,10 @@ export interface Session {
   context?: string;
   created: number;
   provider?: {
-    name: string;              // "anthropic" | "openai" | etc.
-    model?: string;            // optional model override
-    fallback?: string[];       // fallback provider chain
-    options?: Record<string, unknown>;  // provider-specific options
+    name: string; // "anthropic" | "openai" | etc.
+    model?: string; // optional model override
+    fallback?: string[]; // fallback provider chain
+    options?: Record<string, unknown>; // provider-specific options
   };
 }
 
@@ -37,18 +36,18 @@ export interface Session {
 export type ConversationEntryType = "context" | "message" | "response" | "middleware";
 
 export interface ChannelRef {
-  id: string;              // Channel identifier (e.g., discord channel ID)
-  type: string;            // Channel type (e.g., "discord", "p2p")
-  name?: string;           // Optional human-friendly label
+  id: string; // Channel identifier (e.g., discord channel ID)
+  type: string; // Channel type (e.g., "discord", "p2p")
+  name?: string; // Optional human-friendly label
 }
 
 export interface ConversationEntry {
-  ts: number;              // Timestamp
-  from: string;            // Username or "WOPR" or "system"
-  senderId?: string;       // Unique sender identifier (e.g., Discord user ID)
-  content: string;         // Message content
+  ts: number; // Timestamp
+  from: string; // Username or "WOPR" or "system"
+  senderId?: string; // Unique sender identifier (e.g., Discord user ID)
+  content: string; // Message content
   type: ConversationEntryType;
-  channel?: ChannelRef;    // Optional channel metadata for traceability
+  channel?: ChannelRef; // Optional channel metadata for traceability
 }
 
 // Cron types
@@ -73,21 +72,21 @@ export interface CronHistoryEntry {
 
 // Identity types
 export interface Identity {
-  publicKey: string;      // Ed25519 for signing
+  publicKey: string; // Ed25519 for signing
   privateKey: string;
-  encryptPub: string;     // X25519 for encryption
+  encryptPub: string; // X25519 for encryption
   encryptPriv: string;
   created: number;
-  rotatedFrom?: string;   // Previous publicKey if rotated
+  rotatedFrom?: string; // Previous publicKey if rotated
   rotatedAt?: number;
 }
 
 // Agent persona identity (from IDENTITY.md)
 export interface AgentIdentity {
-  name?: string;          // Agent name (e.g., "WOPR")
-  creature?: string;      // What the agent is (e.g., "AI Assistant")
-  vibe?: string;          // Personality description
-  emoji?: string;         // Preferred emoji for reactions
+  name?: string; // Agent name (e.g., "WOPR")
+  creature?: string; // What the agent is (e.g., "AI Assistant")
+  vibe?: string; // Personality description
+  emoji?: string; // Preferred emoji for reactions
 }
 
 // User profile (from USER.md)
@@ -109,7 +108,7 @@ export interface KeyRotation {
   reason: "scheduled" | "compromise" | "upgrade";
   effectiveAt: number;
   gracePeriodMs: number;
-  sig: string;            // Signed with OLD key
+  sig: string; // Signed with OLD key
 }
 
 export interface KeyHistory {
@@ -123,61 +122,54 @@ export interface KeyHistory {
 // Trust types
 export interface AccessGrant {
   id: string;
-  peerKey: string;        // Ed25519 pubkey (current)
+  peerKey: string; // Ed25519 pubkey (current)
   peerEncryptPub?: string; // X25519 pubkey for encryption
   peerName?: string;
   sessions: string[];
   caps: string[];
   created: number;
   revoked?: boolean;
-  keyHistory?: KeyHistory[];  // Track key rotations
+  keyHistory?: KeyHistory[]; // Track key rotations
 }
 
 export interface Peer {
   id: string;
-  publicKey: string;      // Ed25519 for verifying signatures (current)
-  encryptPub?: string;    // X25519 for encryption (learned during claim)
+  publicKey: string; // Ed25519 for verifying signatures (current)
+  encryptPub?: string; // X25519 for encryption (learned during claim)
   name?: string;
   sessions: string[];
   caps: string[];
   added: number;
-  keyHistory?: KeyHistory[];  // Track key rotations
+  keyHistory?: KeyHistory[]; // Track key rotations
 }
 
 export interface InviteToken {
   v: 1;
-  iss: string;        // Issuer's public key
-  sub: string;        // Subject - who this token is FOR (their public key)
-  ses: string[];      // Sessions this grants access to
-  cap: string[];      // Capabilities (e.g., "inject")
-  exp: number;        // Expiration timestamp
+  iss: string; // Issuer's public key
+  sub: string; // Subject - who this token is FOR (their public key)
+  ses: string[]; // Sessions this grants access to
+  cap: string[]; // Capabilities (e.g., "inject")
+  exp: number; // Expiration timestamp
   nonce: string;
   sig: string;
 }
 
 // P2P message types
-export type P2PMessageType =
-  | "hello"
-  | "hello-ack"
-  | "inject"
-  | "claim"
-  | "ack"
-  | "reject"
-  | "key-rotation";
+export type P2PMessageType = "hello" | "hello-ack" | "inject" | "claim" | "ack" | "reject" | "key-rotation";
 
 export interface P2PMessage {
-  v: number;              // Protocol version
+  v: number; // Protocol version
   type: P2PMessageType;
   from: string;
-  encryptPub?: string;    // X25519 pubkey for encryption
-  ephemeralPub?: string;  // Ephemeral X25519 for PFS
+  encryptPub?: string; // X25519 pubkey for encryption
+  ephemeralPub?: string; // Ephemeral X25519 for PFS
   session?: string;
-  payload?: string;       // Message content (for inject) - encrypted
-  token?: string;         // Encoded token (for claim)
-  reason?: string;        // Rejection reason
-  versions?: number[];    // Supported versions (for hello)
-  version?: number;       // Negotiated version (for hello-ack)
-  keyRotation?: Omit<KeyRotation, "type">;  // Key rotation data
+  payload?: string; // Message content (for inject) - encrypted
+  token?: string; // Encoded token (for claim)
+  reason?: string; // Rejection reason
+  versions?: number[]; // Supported versions (for hello)
+  version?: number; // Negotiated version (for hello-ack)
+  keyRotation?: Omit<KeyRotation, "type">; // Key rotation data
   nonce: string;
   ts: number;
   sig: string;
@@ -185,8 +177,8 @@ export interface P2PMessage {
 
 // Ephemeral key pair for forward secrecy
 export interface EphemeralKeyPair {
-  publicKey: string;      // X25519 public
-  privateKey: string;     // X25519 private
+  publicKey: string; // X25519 public
+  privateKey: string; // X25519 private
   created: number;
   expiresAt: number;
 }
@@ -199,7 +191,7 @@ export interface RateLimitConfig {
 }
 
 export interface RateLimitState {
-  requests: number[];     // Timestamps of requests
+  requests: number[]; // Timestamps of requests
   blockedUntil?: number;
 }
 
@@ -212,7 +204,7 @@ export interface RateLimits {
 
 // Replay protection
 export interface ReplayState {
-  seenNonces: Map<string, number>;  // nonce -> timestamp
+  seenNonces: Map<string, number>; // nonce -> timestamp
   maxAgeMs: number;
 }
 
@@ -231,33 +223,33 @@ export interface Registry {
 
 // Discovery types
 export interface Profile {
-  id: string;             // Short key
-  publicKey: string;      // Full pubkey for identity
-  encryptPub: string;     // X25519 for encryption
-  content: any;           // AI-generated, freeform - whatever it wants to say
-  topics: string[];       // Topics currently active in
+  id: string; // Short key
+  publicKey: string; // Full pubkey for identity
+  encryptPub: string; // X25519 for encryption
+  content: any; // AI-generated, freeform - whatever it wants to say
+  topics: string[]; // Topics currently active in
   updated: number;
-  sig: string;            // Signed by identity key
+  sig: string; // Signed by identity key
 }
 
 export type DiscoveryMessageType =
-  | "announce"            // Broadcast presence + profile to topic
-  | "withdraw"            // Leaving topic
-  | "profile-request"     // Ask for someone's full profile
-  | "profile-response"    // Send profile
-  | "connect-request"     // Ask to establish mutual trust
-  | "connect-response";   // Accept/reject connection
+  | "announce" // Broadcast presence + profile to topic
+  | "withdraw" // Leaving topic
+  | "profile-request" // Ask for someone's full profile
+  | "profile-response" // Send profile
+  | "connect-request" // Ask to establish mutual trust
+  | "connect-response"; // Accept/reject connection
 
 export interface DiscoveryMessage {
   v: 1;
   type: DiscoveryMessageType;
-  from: string;           // Sender's pubkey
-  encryptPub?: string;    // For encryption
-  topic?: string;         // Topic this relates to
-  profile?: Profile;      // For announce/profile-response
-  reason?: string;        // For rejection or context
-  accepted?: boolean;     // For connect-response
-  sessions?: string[];    // Sessions offered (for connect-response accept)
+  from: string; // Sender's pubkey
+  encryptPub?: string; // For encryption
+  topic?: string; // Topic this relates to
+  profile?: Profile; // For announce/profile-response
+  reason?: string; // For rejection or context
+  accepted?: boolean; // For connect-response
+  sessions?: string[]; // Sessions offered (for connect-response accept)
   nonce: string;
   ts: number;
   sig: string;
@@ -267,7 +259,7 @@ export interface DiscoveryMessage {
 export interface TopicState {
   topic: string;
   joined: number;
-  peers: Map<string, Profile>;  // pubkey -> profile
+  peers: Map<string, Profile>; // pubkey -> profile
 }
 
 // ============================================================================
@@ -293,7 +285,7 @@ export interface A2AToolResult {
 export interface A2AToolDefinition {
   name: string;
   description: string;
-  inputSchema: Record<string, unknown>;  // JSON Schema format
+  inputSchema: Record<string, unknown>; // JSON Schema format
   handler: (args: Record<string, unknown>) => Promise<A2AToolResult>;
 }
 
@@ -335,8 +327,8 @@ export interface StreamMessage {
   type: "text" | "tool_use" | "complete" | "error" | "system";
   content: string;
   toolName?: string;
-  subtype?: string;  // For system messages: "init", "compact_boundary", "status", etc.
-  metadata?: Record<string, unknown>;  // For system message metadata (e.g., compact_metadata)
+  subtype?: string; // For system messages: "init", "compact_boundary", "status", etc.
+  metadata?: Record<string, unknown>; // For system message metadata (e.g., compact_metadata)
 }
 
 export type StreamCallback = (msg: StreamMessage) => void;
@@ -379,21 +371,21 @@ export interface ChannelAdapter {
 
 // Web UI Extension - plugins register navigation links to extend the UI
 export interface WebUiExtension {
-  id: string;           // Unique identifier (scoped to plugin)
-  title: string;        // Display name in UI
-  url: string;          // URL to open (can be relative or absolute)
+  id: string; // Unique identifier (scoped to plugin)
+  title: string; // Display name in UI
+  url: string; // URL to open (can be relative or absolute)
   description?: string; // Optional tooltip/description
-  category?: string;    // Optional grouping (e.g., "core", "integrations", "tools")
+  category?: string; // Optional grouping (e.g., "core", "integrations", "tools")
 }
 
 // UI Component Extension - plugins export SolidJS components that render inline
 export interface UiComponentExtension {
-  id: string;           // Unique identifier (scoped to plugin)
-  title: string;        // Display name
+  id: string; // Unique identifier (scoped to plugin)
+  title: string; // Display name
   // URL to the ES module that exports the component as default
   // The module should export: export default function MyComponent(props) { ... }
   moduleUrl: string;
-  slot: 'sidebar' | 'settings' | 'statusbar' | 'chat-header' | 'chat-footer';
+  slot: "sidebar" | "settings" | "statusbar" | "chat-header" | "chat-footer";
   description?: string;
 }
 
@@ -416,7 +408,7 @@ export interface PluginUiComponentProps {
 
 export interface MultimodalMessage {
   text: string;
-  images?: string[];  // URLs of images
+  images?: string[]; // URLs of images
 }
 
 // Config schema for provider/plugin configuration UI
@@ -605,30 +597,21 @@ export interface WOPREventBus {
    * @param handler - Handler function
    * @returns Unsubscribe function
    */
-  on<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): () => void;
+  on<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): () => void;
 
   /**
    * Subscribe to an event once
    * @param event - Event name
    * @param handler - Handler function
    */
-  once<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): void;
+  once<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void;
 
   /**
    * Unsubscribe from an event
    * @param event - Event name
    * @param handler - Handler function to remove
    */
-  off<T extends keyof WOPREventMap>(
-    event: T,
-    handler: EventHandler<WOPREventMap[T]>
-  ): void;
+  off<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void;
 
   /**
    * Emit an event (for custom inter-plugin events)
@@ -636,20 +619,14 @@ export interface WOPREventBus {
    * @param event - Event name
    * @param payload - Event payload
    */
-  emit<T extends keyof WOPREventMap>(
-    event: T,
-    payload: WOPREventMap[T]
-  ): Promise<void>;
+  emit<T extends keyof WOPREventMap>(event: T, payload: WOPREventMap[T]): Promise<void>;
 
   /**
    * Emit a custom event (for inter-plugin communication)
    * @param event - Custom event name (use plugin: prefix)
    * @param payload - Event payload
    */
-  emitCustom(
-    event: string,
-    payload: any
-  ): Promise<void>;
+  emitCustom(event: string, payload: any): Promise<void>;
 
   /**
    * Get number of listeners for an event
@@ -684,11 +661,21 @@ export interface HookOptions {
 /**
  * Hook handler types
  */
-export type MessageIncomingHandler = (event: MutableHookEvent<{ message: string; from: string; channel?: any }>) => void | Promise<void>;
-export type MessageOutgoingHandler = (event: MutableHookEvent<{ response: string; from: string; channel?: any }>) => void | Promise<void>;
+export type MessageIncomingHandler = (
+  event: MutableHookEvent<{ message: string; from: string; channel?: any }>,
+) => void | Promise<void>;
+export type MessageOutgoingHandler = (
+  event: MutableHookEvent<{ response: string; from: string; channel?: any }>,
+) => void | Promise<void>;
 export type SessionCreateHandler = (event: { session: string; config?: any }) => void | Promise<void>;
-export type SessionDestroyHandler = (event: { session: string; history: any[]; reason?: string }) => void | Promise<void>;
-export type ChannelMessageHandler = (event: MutableHookEvent<{ channel: any; message: string; from: string; metadata?: any }>) => void | Promise<void>;
+export type SessionDestroyHandler = (event: {
+  session: string;
+  history: any[];
+  reason?: string;
+}) => void | Promise<void>;
+export type ChannelMessageHandler = (
+  event: MutableHookEvent<{ channel: any; message: string; from: string; metadata?: any }>,
+) => void | Promise<void>;
 
 /**
  * Hook manager - typed hooks for core lifecycle events
@@ -737,7 +724,11 @@ export interface WOPRPluginContext {
 
   // Log a message to conversation history without triggering a response
   // Useful for capturing context from messages not directed at the bot
-  logMessage(session: string, message: string, options?: { from?: string; senderId?: string; channel?: ChannelRef }): void;
+  logMessage(
+    session: string,
+    message: string,
+    options?: { from?: string; senderId?: string; channel?: ChannelRef },
+  ): void;
 
   // Agent persona identity (from IDENTITY.md workspace file)
   getAgentIdentity(): AgentIdentity | Promise<AgentIdentity>;
@@ -755,16 +746,16 @@ export interface WOPRPluginContext {
   /**
    * Event bus for reactive plugin composition.
    * Exposes primitives - plugins compose their own behaviors.
-   * 
+   *
    * @example
    * // Subscribe to session creation
    * ctx.events.on('session:create', ({ session, config }) => {
    *   ctx.logger.info(`Session ${session} created`);
    * });
-   * 
+   *
    * // Emit custom events for inter-plugin communication
    * ctx.events.emit('myplugin:custom', { data: 'value' });
-   * 
+   *
    * // Subscribe once
    * ctx.events.once('session:destroy', ({ session }) => {
    *   ctx.logger.info(`Session ${session} destroyed`);
@@ -775,13 +766,13 @@ export interface WOPRPluginContext {
   /**
    * Register a hook - shorthand for common event patterns.
    * Hooks are typed event handlers for core lifecycle.
-   * 
+   *
    * @example
    * // Hook before message injection (can modify message)
    * ctx.hooks.on('session:beforeInject', async (event) => {
    *   event.message = event.message.toUpperCase(); // mutate
    * });
-   * 
+   *
    * // Hook after response (read-only)
    * ctx.hooks.on('session:afterInject', (event) => {
    *   analytics.track(event.session, event.response.length);
@@ -861,9 +852,7 @@ export interface WOPRPluginContext {
 
   // Access to plugin directory
   getPluginDir(): string;
-
 }
-
 
 export interface PluginLogger {
   info(message: string, ...args: any[]): void;
@@ -905,12 +894,12 @@ export const EXIT_VERSION_MISMATCH = 5;
  * Context passed to channel command handlers
  */
 export interface ChannelCommandContext {
-  channel: string;           // Channel identifier (e.g., Discord channel ID)
-  channelType: string;       // Channel type (e.g., "discord", "slack")
-  sender: string;            // Username/ID of sender
-  args: string[];            // Command arguments
-  reply: (msg: string) => Promise<void>;  // Reply to the channel
-  getBotUsername: () => string;           // Get the bot's username in this channel
+  channel: string; // Channel identifier (e.g., Discord channel ID)
+  channelType: string; // Channel type (e.g., "discord", "slack")
+  sender: string; // Username/ID of sender
+  args: string[]; // Command arguments
+  reply: (msg: string) => Promise<void>; // Reply to the channel
+  getBotUsername: () => string; // Get the bot's username in this channel
 }
 
 /**
@@ -929,7 +918,7 @@ export interface ChannelMessageContext {
  * A command that can be registered on channel providers
  */
 export interface ChannelCommand {
-  name: string;                    // Command name (e.g., "friend")
+  name: string; // Command name (e.g., "friend")
   description: string;
   handler: (ctx: ChannelCommandContext) => Promise<void>;
 }
@@ -948,7 +937,7 @@ export interface ChannelMessageParser {
  * to other plugins for registering protocol-level commands and parsers.
  */
 export interface ChannelProvider {
-  id: string;                      // "discord", "slack", "telegram"
+  id: string; // "discord", "slack", "telegram"
 
   // Command registration
   registerCommand(cmd: ChannelCommand): void;

@@ -8,23 +8,27 @@ import { logger } from "./logger.js";
  * that makes HTTP calls and formats output.
  */
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync } from "fs";
-import { execSync } from "child_process";
-import { join } from "path";
-
-import { WOPR_HOME, SESSIONS_DIR, SKILLS_DIR, LOG_FILE, PID_FILE } from "./paths.js";
-import { WoprClient } from "./client.js";
-import { parseTimeSpec } from "./core/cron.js";
-import { config } from "./core/config.js";
-import { EXIT_OK, EXIT_INVALID } from "./types.js";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import {
-  generatePKCE, buildAuthUrl, exchangeCode, saveOAuthTokens, saveApiKey,
-  loadAuth, clearAuth, loadClaudeCodeCredentials
+  buildAuthUrl,
+  clearAuth,
+  exchangeCode,
+  generatePKCE,
+  loadAuth,
+  loadClaudeCodeCredentials,
+  saveApiKey,
+  saveOAuthTokens,
 } from "./auth.js";
+import { WoprClient } from "./client.js";
+import { config } from "./core/config.js";
+import { parseTimeSpec } from "./core/cron.js";
 import { providerRegistry } from "./core/providers.js";
+import { LOG_FILE, PID_FILE, SESSIONS_DIR, SKILLS_DIR, WOPR_HOME } from "./paths.js";
 
 // Ensure directories exist
-[WOPR_HOME, SESSIONS_DIR, SKILLS_DIR].forEach(dir => {
+[WOPR_HOME, SESSIONS_DIR, SKILLS_DIR].forEach((dir) => {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
@@ -44,7 +48,7 @@ async function requireDaemon(): Promise<void> {
 
 function getDaemonPid(): number | null {
   if (!existsSync(PID_FILE)) return null;
-  const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim());
+  const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
   try {
     process.kill(pid, 0);
     return pid;
@@ -157,7 +161,7 @@ Install plugins for additional functionality:
 
 // ==================== Main ====================
 
-const [,, command, subcommand, ...args] = process.argv;
+const [, , command, subcommand, ...args] = process.argv;
 
 // Helper to parse flags
 function parseFlags(args: string[]): { flags: Record<string, string | boolean>; positional: string[] } {
@@ -215,7 +219,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
 
         // If no credential provided, prompt for it
         if (!credential) {
-          const readline = await import("readline/promises");
+          const readline = await import("node:readline/promises");
           const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
@@ -373,16 +377,16 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
         if (flags.provider) {
           const providerConfig = {
             name: flags.provider as string,
-            fallback: flags.fallback ? (flags.fallback as string).split(",").map(s => s.trim()) : undefined,
+            fallback: flags.fallback ? (flags.fallback as string).split(",").map((s) => s.trim()) : undefined,
           };
           const { SESSIONS_DIR } = await import("./paths.js");
-          const providerFile = (await import("path")).join(SESSIONS_DIR, `${name}.provider.json`);
-          (await import("fs/promises")).writeFile(providerFile, JSON.stringify(providerConfig, null, 2));
+          const providerFile = (await import("node:path")).join(SESSIONS_DIR, `${name}.provider.json`);
+          await (await import("node:fs/promises")).writeFile(providerFile, JSON.stringify(providerConfig, null, 2));
 
           logger.info(
             `Created session "${name}" with provider: ${flags.provider}${
               flags.fallback ? ` (fallback: ${flags.fallback})` : ""
-            }`
+            }`,
           );
         } else {
           logger.info(`Created session "${name}"`);
@@ -403,7 +407,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
         // Verify session exists
         try {
           await client.getSession(sessionName);
-        } catch (error) {
+        } catch (_error) {
           logger.error(`Session not found: ${sessionName}`);
           process.exit(1);
         }
@@ -415,13 +419,13 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           providerConfig.model = flags.model as string;
         }
         if (flags.fallback) {
-          providerConfig.fallback = (flags.fallback as string).split(",").map(s => s.trim());
+          providerConfig.fallback = (flags.fallback as string).split(",").map((s) => s.trim());
         }
 
         // Save provider config
         const { SESSIONS_DIR } = await import("./paths.js");
-        const providerFile = (await import("path")).join(SESSIONS_DIR, `${sessionName}.provider.json`);
-        await (await import("fs/promises")).writeFile(providerFile, JSON.stringify(providerConfig, null, 2));
+        const providerFile = (await import("node:path")).join(SESSIONS_DIR, `${sessionName}.provider.json`);
+        await (await import("node:fs/promises")).writeFile(providerFile, JSON.stringify(providerConfig, null, 2));
 
         const extras: string[] = [];
         if (flags.model) extras.push(`model: ${flags.model}`);
@@ -429,7 +433,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
         logger.info(
           `Updated session "${sessionName}" provider to: ${providerId}${
             extras.length > 0 ? ` (${extras.join(", ")})` : ""
-          }`
+          }`,
         );
         break;
       }
@@ -490,13 +494,10 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           logger.info(`\n--- Conversation History (last ${history.count} entries) ---`);
           for (const entry of history.entries) {
             const timestamp = new Date(entry.ts).toLocaleTimeString();
-            const prefix = entry.type === "context" ? "[context]" :
-                          entry.type === "response" ? "[WOPR]" :
-                          `[${entry.from}]`;
+            const prefix =
+              entry.type === "context" ? "[context]" : entry.type === "response" ? "[WOPR]" : `[${entry.from}]`;
             // Truncate long messages for readability
-            const content = entry.content.length > 200 ?
-              entry.content.substring(0, 200) + "..." :
-              entry.content;
+            const content = entry.content.length > 200 ? `${entry.content.substring(0, 200)}...` : entry.content;
             logger.info(`${timestamp} ${prefix}: ${content}`);
           }
           logger.info(`--- End History ---`);
@@ -524,7 +525,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
         const userNameFlag = args.indexOf("--user-name");
         const agentName = agentNameFlag >= 0 ? args[agentNameFlag + 1] : undefined;
         const userName = userNameFlag >= 0 ? args[userNameFlag + 1] : undefined;
-        
+
         // Call daemon API to initialize self-doc files
         try {
           const result = await client.initSessionDocs(sessionName, { agentName, userName });
@@ -532,7 +533,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           for (const file of result.created) {
             logger.info(`  - ${file}`);
           }
-          logger.info("\nEdit these files in ~/.wopr/sessions/" + sessionName + "/");
+          logger.info(`\nEdit these files in ~/.wopr/sessions/${sessionName}/`);
           logger.info("They will be automatically loaded into context on each injection.");
         } catch (err: any) {
           logger.error(`Failed to init docs: ${err.message}`);
@@ -650,9 +651,15 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
     switch (subcommand) {
       case "add": {
         const flags = { now: false, once: false };
-        const filtered = args.filter(a => {
-          if (a === "--now") { flags.now = true; return false; }
-          if (a === "--once") { flags.once = true; return false; }
+        const filtered = args.filter((a) => {
+          if (a === "--now") {
+            flags.now = true;
+            return false;
+          }
+          if (a === "--once") {
+            flags.once = true;
+            return false;
+          }
           return true;
         });
         if (filtered.length < 4) {
@@ -811,11 +818,12 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
         logger.info(pid ? `Daemon running (PID ${pid})` : "Daemon not running");
         break;
       }
-      case "run":
+      case "run": {
         // Run the daemon directly (used by daemon start)
         const { startDaemon } = await import("./daemon/index.js");
         await startDaemon();
         break;
+      }
       case "logs":
         if (existsSync(LOG_FILE)) {
           logger.info(readFileSync(LOG_FILE, "utf-8"));
@@ -857,7 +865,10 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
         }
       } else if (auth.type === "api_key") {
         logger.info("Auth: API Key");
-        logger.info(`Key: ${auth.apiKey?.substring(0, 12)}...`);
+        if (auth.apiKey) {
+          const masked = auth.apiKey.length > 4 ? `...${auth.apiKey.slice(-4)}` : "****";
+          logger.info(`Key: ${masked}`);
+        }
       }
     } else if (subcommand === "login") {
       const pkce = generatePKCE();
@@ -869,8 +880,8 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
       logger.info(authUrl);
       logger.info("\nWaiting for authentication...");
 
-      const http = await import("http");
-      const url = await import("url");
+      const http = await import("node:http");
+      const url = await import("node:url");
 
       const server = http.createServer(async (req, res) => {
         const parsed = url.parse(req.url || "", true);
@@ -909,14 +920,17 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
 
       server.listen(9876, () => {
         const open = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-        execSync(`${open} "${authUrl}"`, { stdio: "ignore" });
+        execFileSync(open, [authUrl], { stdio: "ignore" });
       });
 
-      setTimeout(() => {
-        logger.error("\nTimeout waiting for authentication");
-        server.close();
-        process.exit(1);
-      }, 5 * 60 * 1000);
+      setTimeout(
+        () => {
+          logger.error("\nTimeout waiting for authentication");
+          server.close();
+          process.exit(1);
+        },
+        5 * 60 * 1000,
+      );
     } else if (subcommand === "api-key") {
       if (!args[0]) {
         logger.error("Usage: wopr auth api-key <your-api-key>");
@@ -926,7 +940,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
       logger.info("API key saved");
     } else if (subcommand === "logout") {
       clearAuth();
-      logger.info("Logged out");
+      logger.info("Logged out (WOPR credentials cleared; Claude Code OAuth credentials are managed separately)");
     } else {
       help();
     }
@@ -1058,7 +1072,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
     }
   } else if (command === "init") {
     // Interactive onboarding wizard
-    const readline = await import("readline/promises");
+    const readline = await import("node:readline/promises");
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -1073,7 +1087,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
     // Daemon settings
     logger.info("Daemon Settings:");
     const port = await rl.question(`  Port [${existing.daemon.port}]: `);
-    if (port) config.setValue("daemon.port", parseInt(port) || existing.daemon.port);
+    if (port) config.setValue("daemon.port", parseInt(port, 10) || existing.daemon.port);
 
     const host = await rl.question(`  Host [${existing.daemon.host}]: `);
     if (host) config.setValue("daemon.host", host);
@@ -1095,7 +1109,9 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
       config.setValue("oauth.clientId", clientId);
       const clientSecret = await rl.question("  Client Secret: ");
       if (clientSecret) config.setValue("oauth.clientSecret", clientSecret);
-      const redirectUri = await rl.question(`  Redirect URI [${existing.oauth.redirectUri || "http://localhost:3333/callback"}]: `);
+      const redirectUri = await rl.question(
+        `  Redirect URI [${existing.oauth.redirectUri || "http://localhost:3333/callback"}]: `,
+      );
       config.setValue("oauth.redirectUri", redirectUri || "http://localhost:3333/callback");
     }
 
@@ -1112,7 +1128,11 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
     // Discovery
     logger.info("\nDiscovery:");
     const topics = await rl.question(`  Auto-join topics (comma-separated) [${existing.discovery.topics.join(",")}]: `);
-    if (topics) config.setValue("discovery.topics", topics.split(",").map(t => t.trim()));
+    if (topics)
+      config.setValue(
+        "discovery.topics",
+        topics.split(",").map((t) => t.trim()),
+      );
 
     const autoJoin = await rl.question(`  Auto-join on startup? (y/n) [${existing.discovery.autoJoin ? "y" : "n"}]: `);
     if (autoJoin) config.setValue("discovery.autoJoin", autoJoin.toLowerCase() === "y");
@@ -1175,7 +1195,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           logger.info(`  Enabled: ${m.enabled ? "yes" : "no"}`);
           logger.info(`  Incoming hook: ${m.hasIncoming ? "yes" : "no"}`);
           logger.info(`  Outgoing hook: ${m.hasOutgoing ? "yes" : "no"}`);
-        } catch (err: any) {
+        } catch (_err: any) {
           logger.error(`Middleware not found: ${args[0]}`);
           process.exit(1);
         }
@@ -1206,7 +1226,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           process.exit(1);
         }
         const priority = parseInt(args[1], 10);
-        if (isNaN(priority)) {
+        if (Number.isNaN(priority)) {
           logger.error("Priority must be a number");
           process.exit(1);
         }
@@ -1247,7 +1267,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           logger.info(`Context provider: ${p.name}`);
           logger.info(`  Priority: ${p.priority}`);
           logger.info(`  Enabled: ${p.enabled ? "yes" : "no"}`);
-        } catch (err: any) {
+        } catch (_err: any) {
           logger.error(`Context provider not found: ${args[0]}`);
           process.exit(1);
         }
@@ -1278,7 +1298,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           process.exit(1);
         }
         const priority = parseInt(args[1], 10);
-        if (isNaN(priority)) {
+        if (Number.isNaN(priority)) {
           logger.error("Priority must be a number");
           process.exit(1);
         }
@@ -1315,7 +1335,7 @@ async function tryPluginCommand(command: string, args: string[]): Promise<boolea
   if (!command) return false;
 
   const { getInstalledPlugins, loadPlugin, getLoadedPlugin } = await import("./plugins.js");
-  const installed = getInstalledPlugins().filter(p => p.enabled);
+  const installed = getInstalledPlugins().filter((p) => p.enabled);
 
   // First, load ALL enabled plugins to ensure providers/extensions are registered
   // This is necessary because provider plugins (TTS, STT) register during init
@@ -1338,7 +1358,7 @@ async function tryPluginCommand(command: string, args: string[]): Promise<boolea
     if (!loaded) continue;
 
     if (loaded.plugin.commands) {
-      const cmd = loaded.plugin.commands.find(c => c.name === command);
+      const cmd = loaded.plugin.commands.find((c) => c.name === command);
       if (cmd) {
         await cmd.handler(loaded.context, args);
         return true;

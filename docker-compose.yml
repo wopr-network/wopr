@@ -22,20 +22,16 @@ services:
       - /run
       - /run/lock
     volumes:
-      # WOPR data
-      - wopr-data:/data
-      # Full OS persistence - volumes auto-init from image on first run
-      - wopr-usr:/usr
-      - wopr-etc:/etc
-      - wopr-var-lib:/var/lib
-      - wopr-var-cache:/var/cache
-      - wopr-opt:/opt
-      - wopr-home:/home/node
-      # Claude credentials - bind mount overlays inside wopr-home volume
-      - ~/.claude:/home/node/.claude
-      # External mounts
-      - ~/malice:/tmp/malice:rw
-      # Docker socket for container management
+      # Bind mounts — host paths, Docker can never recreate these
+      - ${HOME}/wopr-volumes/data:/data
+      - ${HOME}/wopr-volumes/usr:/usr
+      - ${HOME}/wopr-volumes/etc:/etc
+      - ${HOME}/wopr-volumes/var-lib:/var/lib
+      - ${HOME}/wopr-volumes/var-cache:/var/cache
+      - ${HOME}/wopr-volumes/opt:/opt
+      - ${HOME}/wopr-volumes/home-node:/home/node
+      - ${HOME}/.claude:/home/node/.claude
+      - ${HOME}/malice:/tmp/malice:rw
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - WOPR_HOME=/data
@@ -53,7 +49,7 @@ services:
     networks:
       - wopr-net
     volumes:
-      - ollama-data:/root/.ollama
+      - ${HOME}/wopr-volumes/ollama:/root/.ollama
     deploy:
       resources:
         reservations:
@@ -67,12 +63,4 @@ services:
       - OLLAMA_MODEL=qwen3-embedding:0.6b
     entrypoint: /bin/sh -c "ollama serve & sleep 5 && ollama pull $$OLLAMA_MODEL && wait"
 
-volumes:
-  wopr-data:
-  wopr-usr:
-  wopr-etc:
-  wopr-var-lib:
-  wopr-var-cache:
-  wopr-opt:
-  wopr-home:
-  ollama-data:
+# No named volumes — all bind mounts to ${HOME}/wopr-volumes/

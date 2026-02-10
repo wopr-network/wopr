@@ -3,10 +3,10 @@ import { logger } from "../logger.js";
  * Skill registry management
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
-import { join } from "path";
-import { execSync } from "child_process";
-import { WOPR_HOME, REGISTRIES_FILE } from "../paths.js";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { REGISTRIES_FILE, WOPR_HOME } from "../paths.js";
 import type { Registry, SkillPointer } from "../types.js";
 import { parseSkillFrontmatter } from "./skills.js";
 
@@ -20,14 +20,14 @@ export function saveRegistries(registries: Registry[]): void {
 }
 
 export function addRegistry(name: string, url: string): void {
-  const registries = getRegistries().filter(r => r.name !== name);
+  const registries = getRegistries().filter((r) => r.name !== name);
   registries.push({ name, url });
   saveRegistries(registries);
 }
 
 export function removeRegistry(name: string): boolean {
   const registries = getRegistries();
-  const filtered = registries.filter(r => r.name !== name);
+  const filtered = registries.filter((r) => r.name !== name);
   if (filtered.length === registries.length) return false;
   saveRegistries(filtered);
   return true;
@@ -42,12 +42,17 @@ export async function fetchRegistryIndex(url: string, searchQuery?: string): Pro
     return await fetchGitHubSkills(owner, repo, path, searchQuery);
   }
 
-  if (url.includes("github.com") && !url.includes("/raw/")) {
-    const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)(?:\/tree\/[^\/]+\/(.+))?/);
-    if (match) {
-      const [, owner, repo, path] = match;
-      return await fetchGitHubSkills(owner, repo, path || "skills", searchQuery);
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "github.com" && !url.includes("/raw/")) {
+      const match = parsed.pathname.match(/^\/([^/]+)\/([^/]+)(?:\/tree\/[^/]+\/(.+))?/);
+      if (match) {
+        const [, owner, repo, path] = match;
+        return await fetchGitHubSkills(owner, repo, path || "skills", searchQuery);
+      }
     }
+  } catch {
+    // Not a valid URL, continue to generic fetch
   }
 
   try {
@@ -76,7 +81,7 @@ async function fetchGitHubSkills(
   owner: string,
   repo: string,
   path: string,
-  searchQuery?: string
+  searchQuery?: string,
 ): Promise<SkillPointer[]> {
   const token = process.env.GITHUB_TOKEN;
 
@@ -88,10 +93,9 @@ async function fetchGitHubSkills(
 
     try {
       for (let page = 1; page <= 6; page++) {
-        const res = await fetch(
-          `https://api.github.com/search/code?q=${q}&per_page=100&page=${page}`,
-          { headers: { Authorization: `token ${token}` } }
-        );
+        const res = await fetch(`https://api.github.com/search/code?q=${q}&per_page=100&page=${page}`, {
+          headers: { Authorization: `token ${token}` },
+        });
         if (!res.ok) break;
         const data = await res.json();
         if (!data.items?.length) break;
@@ -106,7 +110,9 @@ async function fetchGitHubSkills(
         }
         if (data.items.length < 100) break;
       }
-    } catch { /* fall through to clone */ }
+    } catch {
+      /* fall through to clone */
+    }
 
     if (skills.length > 0) return skills;
   }
@@ -117,15 +123,19 @@ async function fetchGitHubSkills(
     logger.info(`Caching ${owner}/${repo}...`);
     mkdirSync(join(WOPR_HOME, ".cache"), { recursive: true });
     try {
-      execSync(`git clone --depth 1 https://github.com/${owner}/${repo}.git "${cacheDir}"`, { stdio: "pipe" });
+      execFileSync("git", ["clone", "--depth", "1", `https://github.com/${owner}/${repo}.git`, cacheDir], {
+        stdio: "pipe",
+      });
     } catch {
       logger.error(`Failed to clone ${owner}/${repo}`);
       return [];
     }
   } else {
     try {
-      execSync(`git -C "${cacheDir}" pull --depth 1`, { stdio: "pipe" });
-    } catch { /* ignore */ }
+      execFileSync("git", ["-C", cacheDir, "pull", "--depth", "1"], { stdio: "pipe" });
+    } catch {
+      /* ignore */
+    }
   }
 
   const skills: SkillPointer[] = [];
@@ -153,7 +163,7 @@ async function fetchGitHubSkills(
           skills.push({
             name: entry.name,
             description: frontmatter.description || "",
-            source: `github:${owner}/${repo}/${subdir.replace(cacheDir + "/", "")}`,
+            source: `github:${owner}/${repo}/${subdir.replace(`${cacheDir}/`, "")}`,
           });
         }
       } else {

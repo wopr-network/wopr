@@ -2,9 +2,9 @@
  * Cron job management
  */
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { CRONS_FILE, CRON_HISTORY_FILE } from "../paths.js";
-import type { CronJob, CronHistoryEntry } from "../types.js";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { CRON_HISTORY_FILE, CRONS_FILE } from "../paths.js";
+import type { CronHistoryEntry, CronJob } from "../types.js";
 
 const MAX_HISTORY_ENTRIES = 1000; // Keep last 1000 entries
 
@@ -19,21 +19,21 @@ export function saveCrons(crons: CronJob[]): void {
 export function addCron(job: CronJob): void {
   const crons = getCrons();
   // Remove existing job with same name
-  const filtered = crons.filter(c => c.name !== job.name);
+  const filtered = crons.filter((c) => c.name !== job.name);
   filtered.push(job);
   saveCrons(filtered);
 }
 
 export function removeCron(name: string): boolean {
   const crons = getCrons();
-  const filtered = crons.filter(c => c.name !== name);
+  const filtered = crons.filter((c) => c.name !== name);
   if (filtered.length === crons.length) return false;
   saveCrons(filtered);
   return true;
 }
 
 export function getCron(name: string): CronJob | undefined {
-  return getCrons().find(c => c.name === name);
+  return getCrons().find((c) => c.name === name);
 }
 
 export function parseCronSchedule(schedule: string): {
@@ -41,31 +41,42 @@ export function parseCronSchedule(schedule: string): {
   hour: number[];
   day: number[];
   month: number[];
-  weekday: number[]
+  weekday: number[];
 } {
   const parts = schedule.split(" ");
   if (parts.length !== 5) throw new Error("Invalid cron schedule");
 
-  const parse = (part: string, max: number): number[] => {
-    if (part === "*") return Array.from({ length: max }, (_, i) => i);
+  const parse = (part: string, min: number, max: number): number[] => {
+    if (part === "*") return Array.from({ length: max - min + 1 }, (_, i) => min + i);
     if (part.startsWith("*/")) {
-      const step = parseInt(part.slice(2));
-      return Array.from({ length: max }, (_, i) => i).filter(i => i % step === 0);
+      const step = parseInt(part.slice(2), 10);
+      if (!Number.isFinite(step) || step <= 0) throw new Error(`Invalid step: ${part}`);
+      return Array.from({ length: max - min + 1 }, (_, i) => min + i).filter((v) => (v - min) % step === 0);
     }
-    if (part.includes(",")) return part.split(",").map(Number);
+    if (part.includes(",")) {
+      const values = part.split(",").map(Number);
+      for (const v of values) {
+        if (!Number.isFinite(v) || v < min || v > max) throw new Error(`Value out of range: ${v}`);
+      }
+      return values;
+    }
     if (part.includes("-")) {
       const [start, end] = part.split("-").map(Number);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start < min || end > max || start > end)
+        throw new Error(`Invalid range: ${part}`);
       return Array.from({ length: end - start + 1 }, (_, i) => start + i);
     }
-    return [parseInt(part)];
+    const value = parseInt(part, 10);
+    if (!Number.isFinite(value) || value < min || value > max) throw new Error(`Value out of range: ${value}`);
+    return [value];
   };
 
   return {
-    minute: parse(parts[0], 60),
-    hour: parse(parts[1], 24),
-    day: parse(parts[2], 32),
-    month: parse(parts[3], 13),
-    weekday: parse(parts[4], 7),
+    minute: parse(parts[0], 0, 59),
+    hour: parse(parts[1], 0, 23),
+    day: parse(parts[2], 1, 31),
+    month: parse(parts[3], 1, 12),
+    weekday: parse(parts[4], 0, 6),
   };
 }
 
@@ -91,7 +102,7 @@ export function parseTimeSpec(spec: string): number {
   if (spec.startsWith("+")) {
     const match = spec.match(/^\+(\d+)([smhd])$/);
     if (match) {
-      const val = parseInt(match[1]);
+      const val = parseInt(match[1], 10);
       const unit = match[2];
       const mult = { s: 1000, m: 60000, h: 3600000, d: 86400000 }[unit]!;
       return now + val * mult;
@@ -99,7 +110,7 @@ export function parseTimeSpec(spec: string): number {
   }
 
   if (/^\d{10,13}$/.test(spec)) {
-    const ts = parseInt(spec);
+    const ts = parseInt(spec, 10);
     return ts < 1e12 ? ts * 1000 : ts;
   }
 
@@ -112,7 +123,7 @@ export function parseTimeSpec(spec: string): number {
   }
 
   const parsed = Date.parse(spec);
-  if (!isNaN(parsed)) return parsed;
+  if (!Number.isNaN(parsed)) return parsed;
 
   throw new Error(`Invalid time spec: ${spec}`);
 }
@@ -145,25 +156,25 @@ export function getCronHistory(options?: {
 
   // Filter by name
   if (options?.name) {
-    history = history.filter(h => h.name === options.name);
+    history = history.filter((h) => h.name === options.name);
   }
 
   // Filter by session
   if (options?.session) {
-    history = history.filter(h => h.session === options.session);
+    history = history.filter((h) => h.session === options.session);
   }
 
   // Filter by time
   if (options?.since) {
     const since = options.since;
-    history = history.filter(h => h.timestamp >= since);
+    history = history.filter((h) => h.timestamp >= since);
   }
 
   // Filter by success/failure
   if (options?.successOnly) {
-    history = history.filter(h => h.success);
+    history = history.filter((h) => h.success);
   } else if (options?.failedOnly) {
-    history = history.filter(h => !h.success);
+    history = history.filter((h) => !h.success);
   }
 
   // Sort by timestamp descending (most recent first)
@@ -205,9 +216,9 @@ export function clearCronHistory(options?: { name?: string; session?: string }):
   const originalLength = history.length;
 
   if (options?.name) {
-    history = history.filter(h => h.name !== options.name);
+    history = history.filter((h) => h.name !== options.name);
   } else if (options?.session) {
-    history = history.filter(h => h.session !== options.session);
+    history = history.filter((h) => h.session !== options.session);
   } else {
     history = [];
   }
