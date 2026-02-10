@@ -7,14 +7,7 @@
 
 import { logger } from "../../logger.js";
 import { SessionQueue } from "./SessionQueue.js";
-import type {
-  InjectOptions,
-  InjectResult,
-  MultimodalMessage,
-  QueueStats,
-  QueueEvent,
-  QueueEventHandler,
-} from "./types.js";
+import type { InjectOptions, InjectResult, MultimodalMessage, QueueEventHandler, QueueStats } from "./types.js";
 
 export class QueueManager {
   private queues = new Map<string, SessionQueue>();
@@ -25,7 +18,7 @@ export class QueueManager {
     sessionKey: string,
     message: string | MultimodalMessage,
     options: InjectOptions | undefined,
-    abortSignal: AbortSignal
+    abortSignal: AbortSignal,
   ) => Promise<InjectResult>;
 
   /**
@@ -37,8 +30,8 @@ export class QueueManager {
       sessionKey: string,
       message: string | MultimodalMessage,
       options: InjectOptions | undefined,
-      abortSignal: AbortSignal
-    ) => Promise<InjectResult>
+      abortSignal: AbortSignal,
+    ) => Promise<InjectResult>,
   ): void {
     this.executeInject = executor;
     logger.info("[queue-manager] Executor set");
@@ -80,7 +73,7 @@ export class QueueManager {
   async inject(
     sessionKey: string,
     message: string | MultimodalMessage,
-    options?: InjectOptions
+    options?: InjectOptions,
   ): Promise<InjectResult> {
     const queue = this.getQueue(sessionKey);
     return queue.enqueue(message, options);
@@ -186,7 +179,7 @@ export class QueueManager {
    * Clean up inactive queues (no pending work, idle for a while)
    * Call periodically to prevent memory leaks
    */
-  cleanup(maxIdleMs: number = 5 * 60 * 1000): number {
+  cleanup(_maxIdleMs: number = 5 * 60 * 1000): number {
     let cleaned = 0;
     for (const [sessionKey, queue] of this.queues) {
       const stats = queue.getStats();

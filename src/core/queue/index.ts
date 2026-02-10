@@ -8,16 +8,16 @@
  * - Event monitoring
  */
 
-export { SessionQueue } from "./SessionQueue.js";
 export { QueueManager, queueManager } from "./QueueManager.js";
+export { SessionQueue } from "./SessionQueue.js";
 export type {
+  ActiveInject,
   InjectOptions,
   InjectResult,
   MultimodalMessage,
   QueuedInject,
-  ActiveInject,
-  QueueStats,
   QueueEvent,
-  QueueEventType,
   QueueEventHandler,
+  QueueEventType,
+  QueueStats,
 } from "./types.js";

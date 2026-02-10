@@ -7,14 +7,14 @@
 
 import { logger } from "../../logger.js";
 import type {
-  QueuedInject,
   ActiveInject,
-  InjectResult,
   InjectOptions,
+  InjectResult,
   MultimodalMessage,
-  QueueStats,
+  QueuedInject,
   QueueEvent,
   QueueEventHandler,
+  QueueStats,
 } from "./types.js";
 
 let injectIdCounter = 0;
@@ -34,7 +34,7 @@ export class SessionQueue {
     sessionKey: string,
     message: string | MultimodalMessage,
     options: InjectOptions | undefined,
-    abortSignal: AbortSignal
+    abortSignal: AbortSignal,
   ) => Promise<InjectResult>;
 
   constructor(
@@ -43,7 +43,7 @@ export class SessionQueue {
       sessionKey: string,
       message: string | MultimodalMessage,
       options: InjectOptions | undefined,
-      abortSignal: AbortSignal
+      abortSignal: AbortSignal,
     ) => Promise<InjectResult>,
   ) {
     this.sessionKey = sessionKey;
@@ -53,10 +53,7 @@ export class SessionQueue {
   /**
    * Add an inject request to the queue
    */
-  enqueue(
-    message: string | MultimodalMessage,
-    options?: InjectOptions
-  ): Promise<InjectResult> {
+  enqueue(message: string | MultimodalMessage, options?: InjectOptions): Promise<InjectResult> {
     return new Promise((resolve, reject) => {
       const id = generateInjectId();
       const abortController = new AbortController();
@@ -74,7 +71,7 @@ export class SessionQueue {
       };
 
       // Insert by priority (higher priority first)
-      const insertIndex = this.queue.findIndex(q => q.priority < item.priority);
+      const insertIndex = this.queue.findIndex((q) => q.priority < item.priority);
       if (insertIndex === -1) {
         this.queue.push(item);
       } else {
@@ -161,7 +158,7 @@ export class SessionQueue {
           this.sessionKey,
           item.message,
           item.options,
-          item.abortController.signal
+          item.abortController.signal,
         );
 
         this.emit({
@@ -182,8 +179,7 @@ export class SessionQueue {
         item.resolve(result);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        const isCancelled = item.abortController.signal.aborted ||
-          errorMsg.toLowerCase().includes("cancel");
+        const isCancelled = item.abortController.signal.aborted || errorMsg.toLowerCase().includes("cancel");
 
         this.emit({
           type: isCancelled ? "cancel" : "error",
@@ -276,9 +272,7 @@ export class SessionQueue {
       queueDepth: this.queue.length,
       isProcessing: this.processing,
       activeInjectId: this.active?.id,
-      activeInjectDuration: this.active
-        ? Date.now() - this.active.startTime
-        : undefined,
+      activeInjectDuration: this.active ? Date.now() - this.active.startTime : undefined,
       oldestQueuedAt: this.queue[0]?.queuedAt,
     };
   }

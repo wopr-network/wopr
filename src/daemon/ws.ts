@@ -44,7 +44,9 @@ function handleMessage(ws: WS, msg: any): void {
       const sessions = msg.sessions as string[] | undefined;
       if (sessions && Array.isArray(sessions)) {
         const subs = subscriptions.get(ws)!;
-        sessions.forEach(s => subs.add(s));
+        for (const s of sessions) {
+          subs.add(s);
+        }
         ws.send(JSON.stringify({ type: "subscribed", sessions }));
       } else if (msg.session) {
         subscriptions.get(ws)!.add(msg.session);
@@ -57,7 +59,9 @@ function handleMessage(ws: WS, msg: any): void {
       const sessions = msg.sessions as string[] | undefined;
       if (sessions && Array.isArray(sessions)) {
         const subs = subscriptions.get(ws)!;
-        sessions.forEach(s => subs.delete(s));
+        for (const s of sessions) {
+          subs.delete(s);
+        }
         ws.send(JSON.stringify({ type: "unsubscribed", sessions }));
       } else if (msg.session) {
         subscriptions.get(ws)!.delete(msg.session);
@@ -106,12 +110,7 @@ export function broadcastStream(session: string, from: string, message: StreamMe
 /**
  * Broadcast an injection completion to all subscribed clients
  */
-export function broadcastInjection(
-  session: string,
-  from: string,
-  message: string,
-  response: string
-): void {
+export function broadcastInjection(session: string, from: string, message: string, response: string): void {
   const event = {
     type: "injection",
     session,

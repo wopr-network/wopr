@@ -2,23 +2,23 @@
  * Sessions API routes
  */
 
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import { writeFileSync, existsSync, mkdirSync } from "fs";
-import { join } from "path";
 import {
-  getSessions,
-  listSessions,
-  getSessionContext,
-  setSessionContext,
   deleteSession,
+  getSessionContext,
+  getSessions,
   inject,
+  listSessions,
+  logMessage,
   readConversationLog,
-  logMessage
+  setSessionContext,
 } from "../../core/sessions.js";
 import { SESSIONS_DIR } from "../../paths.js";
-import { broadcastStream, broadcastInjection } from "../ws.js";
 import { createInjectionSource } from "../../security/index.js";
+import { broadcastInjection, broadcastStream } from "../ws.js";
 
 export const sessionsRouter = new Hono();
 
@@ -72,11 +72,14 @@ sessionsRouter.post("/", async (c) => {
   const defaultContext = context || `You are WOPR session "${name}".`;
   setSessionContext(name, defaultContext);
 
-  return c.json({
-    name,
-    context: defaultContext,
-    created: true,
-  }, 201);
+  return c.json(
+    {
+      name,
+      context: defaultContext,
+      created: true,
+    },
+    201,
+  );
 });
 
 // Update session context
@@ -125,7 +128,7 @@ sessionsRouter.post("/:name/inject", async (c) => {
       c.header("Cache-Control", "no-cache");
       c.header("Connection", "keep-alive");
 
-      let fullResponse = "";
+      let _fullResponse = "";
 
       const result = await inject(name, message, {
         silent: true,
@@ -146,17 +149,19 @@ sessionsRouter.post("/:name/inject", async (c) => {
           broadcastStream(name, from, msg);
 
           if (msg.type === "text") {
-            fullResponse += msg.content;
+            _fullResponse += msg.content;
           }
         },
       });
 
       // Send completion event
-      stream.write(`data: ${JSON.stringify({
-        type: "done",
-        sessionId: result.sessionId,
-        cost: result.cost,
-      })}\n\n`);
+      stream.write(
+        `data: ${JSON.stringify({
+          type: "done",
+          sessionId: result.sessionId,
+          cost: result.cost,
+        })}\n\n`,
+      );
 
       // Broadcast injection completion
       broadcastInjection(name, from, message, result.response);
@@ -207,24 +212,24 @@ sessionsRouter.post("/:name/init-docs", async (c) => {
   const name = c.req.param("name");
   const body = await c.req.json();
   const { agentName, userName } = body;
-  
+
   // Check session exists
   const sessions = getSessions();
   const context = getSessionContext(name);
   if (!sessions[name] && !context) {
     return c.json({ error: "Session not found" }, 404);
   }
-  
+
   // Create self-doc files
   const sessionDir = join(SESSIONS_DIR, name);
-  
+
   // Ensure directory exists
   if (!existsSync(sessionDir)) {
     mkdirSync(sessionDir, { recursive: true });
   }
-  
+
   const createdFiles: string[] = [];
-  
+
   // SOUL.md - Personality and boundaries
   const soulPath = join(sessionDir, "SOUL.md");
   if (!existsSync(soulPath)) {
@@ -251,14 +256,14 @@ context. Search for it. *Then* ask if you're stuck.
     writeFileSync(soulPath, soul);
     createdFiles.push("SOUL.md");
   }
-  
+
   // IDENTITY.md - Agent self-definition
   const identityPath = join(sessionDir, "IDENTITY.md");
   if (!existsSync(identityPath)) {
     const identity = `# IDENTITY.md - About Yourself
 
 ## Identity
-**Name:** ${agentName || name + " Assistant"}
+**Name:** ${agentName || `${name} Assistant`}
 **Vibe:** Helpful, concise, occasionally witty
 **Emoji:** 🤖
 **Version:** 1.0
@@ -275,7 +280,7 @@ remembers context across conversations, and can be extended through plugins.
     writeFileSync(identityPath, identity);
     createdFiles.push("IDENTITY.md");
   }
-  
+
   // AGENTS.md - Session instructions
   const agentsPath = join(sessionDir, "AGENTS.md");
   if (!existsSync(agentsPath)) {
@@ -307,7 +312,7 @@ Do not ask permission to read these files. Just do it.
     writeFileSync(agentsPath, agents);
     createdFiles.push("AGENTS.md");
   }
-  
+
   // USER.md - User profile
   const userPath = join(sessionDir, "USER.md");
   if (!existsSync(userPath)) {
@@ -328,7 +333,7 @@ Do not ask permission to read these files. Just do it.
     writeFileSync(userPath, user);
     createdFiles.push("USER.md");
   }
-  
+
   // MEMORY.md - Long-term memory (empty initially)
   const memoryPath = join(sessionDir, "MEMORY.md");
   if (!existsSync(memoryPath)) {
@@ -344,7 +349,7 @@ Do not ask permission to read these files. Just do it.
     writeFileSync(memoryPath, memory);
     createdFiles.push("MEMORY.md");
   }
-  
+
   return c.json({
     session: name,
     created: createdFiles,

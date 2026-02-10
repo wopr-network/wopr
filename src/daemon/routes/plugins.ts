@@ -3,24 +3,24 @@
  */
 
 import { Hono } from "hono";
+import { providerRegistry } from "../../core/providers.js";
+import { getSessions, inject } from "../../core/sessions.js";
 import {
-  installPlugin,
-  removePlugin,
-  enablePlugin,
-  disablePlugin,
-  listPlugins,
-  searchPlugins,
   addRegistry,
-  removeRegistry,
-  listRegistries,
-  getWebUiExtensions,
-  getUiComponents,
+  disablePlugin,
+  enablePlugin,
   getPluginExtension,
+  getUiComponents,
+  getWebUiExtensions,
+  installPlugin,
+  listPlugins,
+  listRegistries,
   loadPlugin,
+  removePlugin,
+  removeRegistry,
+  searchPlugins,
   unloadPlugin,
 } from "../../plugins.js";
-import { inject, getSessions } from "../../core/sessions.js";
-import { providerRegistry } from "../../core/providers.js";
 import type { PluginInjectOptions } from "../../types.js";
 
 export const pluginsRouter = new Hono();
@@ -40,14 +40,23 @@ function createInjectors() {
 pluginsRouter.get("/", (c) => {
   const plugins = listPlugins();
   return c.json({
-    plugins: plugins.map((p: { name: string; version: string; description?: string; source: string; enabled: boolean; installedAt: number }) => ({
-      name: p.name,
-      version: p.version,
-      description: p.description || null,
-      source: p.source,
-      enabled: p.enabled,
-      installedAt: p.installedAt,
-    })),
+    plugins: plugins.map(
+      (p: {
+        name: string;
+        version: string;
+        description?: string;
+        source: string;
+        enabled: boolean;
+        installedAt: number;
+      }) => ({
+        name: p.name,
+        version: p.version,
+        description: p.description || null,
+        source: p.source,
+        enabled: p.enabled,
+        installedAt: p.installedAt,
+      }),
+    ),
   });
 });
 
@@ -84,17 +93,20 @@ pluginsRouter.post("/", async (c) => {
     // Run health check for any newly registered providers
     await providerRegistry.checkHealth();
 
-    return c.json({
-      installed: true,
-      plugin: {
-        name: plugin.name,
-        version: plugin.version,
-        description: plugin.description,
-        source: plugin.source,
-        enabled: true,
-        loaded: true,
+    return c.json(
+      {
+        installed: true,
+        plugin: {
+          name: plugin.name,
+          version: plugin.version,
+          description: plugin.description,
+          source: plugin.source,
+          enabled: true,
+          loaded: true,
+        },
       },
-    }, 201);
+      201,
+    );
   } catch (err: any) {
     return c.json({ error: err.message }, 400);
   }
