@@ -3,8 +3,17 @@
  * Feature parity with Clawdbot skills system
  */
 
-import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { logger } from "../logger.js";
@@ -581,7 +590,7 @@ export function checkSkillDependencies(skill: Skill): {
   if (requires?.bins) {
     for (const bin of requires.bins) {
       try {
-        execSync(`which "${bin}"`, { stdio: "ignore" });
+        execFileSync("which", [bin], { stdio: "ignore" });
       } catch {
         missing.push(bin);
       }
@@ -602,22 +611,22 @@ export async function installSkillDependencies(skill: Skill): Promise<boolean> {
       switch (step.kind) {
         case "brew":
           if (step.formula) {
-            execSync(`brew install "${step.formula}"`, { stdio: "inherit" });
+            execFileSync("brew", ["install", step.formula], { stdio: "inherit" });
           }
           break;
         case "apt":
           if (step.package) {
-            execSync(`sudo apt-get install -y "${step.package}"`, { stdio: "inherit" });
+            execFileSync("sudo", ["apt-get", "install", "-y", step.package], { stdio: "inherit" });
           }
           break;
         case "npm":
           if (step.package) {
-            execSync(`npm install -g "${step.package}"`, { stdio: "inherit" });
+            execFileSync("npm", ["install", "-g", step.package], { stdio: "inherit" });
           }
           break;
         case "script":
           if (step.script) {
-            execSync(step.script, { stdio: "inherit", shell: "/bin/bash" });
+            execFileSync("/bin/bash", ["-c", step.script], { stdio: "inherit" });
           }
           break;
       }
@@ -668,11 +677,27 @@ export function removeSkill(name: string): void {
   if (!existsSync(targetDir)) {
     throw new Error(`Skill "${name}" not found`);
   }
-  execSync(`rm -rf "${targetDir}"`);
+  rmSync(targetDir, { recursive: true, force: true });
 }
 
 export function installSkillFromGitHub(owner: string, repo: string, skillPath: string, name?: string): Skill {
-  const skillName = name || skillPath.split("/").pop()!;
+  // Validate inputs
+  const validGhName = /^[a-zA-Z0-9._-]+$/;
+  const validPathSegment = /^[a-zA-Z0-9._-]+$/;
+  if (!validGhName.test(owner) || !validGhName.test(repo)) {
+    throw new Error("Invalid GitHub owner or repo name");
+  }
+  // Validate each path segment to prevent traversal
+  const pathSegments = skillPath.split("/").filter(Boolean);
+  if (pathSegments.length === 0 || pathSegments.some((seg) => !validPathSegment.test(seg) || seg === "..")) {
+    throw new Error("Invalid skill path");
+  }
+  const normalizedSkillPath = pathSegments.join("/");
+
+  const skillName = name || pathSegments[pathSegments.length - 1];
+  if (!validGhName.test(skillName)) {
+    throw new Error("Invalid skill name");
+  }
   const targetDir = join(SKILLS_DIR, skillName);
 
   if (existsSync(targetDir)) {
@@ -681,14 +706,16 @@ export function installSkillFromGitHub(owner: string, repo: string, skillPath: s
 
   const tmpDir = join(SKILLS_DIR, `.tmp-${Date.now()}`);
   try {
-    execSync(`git clone --depth 1 --filter=blob:none --sparse https://github.com/${owner}/${repo}.git "${tmpDir}"`, {
-      stdio: "pipe",
-    });
-    execSync(`git -C "${tmpDir}" sparse-checkout set "${skillPath}"`, { stdio: "pipe" });
-    execSync(`mv "${tmpDir}/${skillPath}" "${targetDir}"`, { stdio: "pipe" });
-    execSync(`rm -rf "${tmpDir}"`, { stdio: "pipe" });
+    execFileSync(
+      "git",
+      ["clone", "--depth", "1", "--filter=blob:none", "--sparse", `https://github.com/${owner}/${repo}.git`, tmpDir],
+      { stdio: "pipe" },
+    );
+    execFileSync("git", ["-C", tmpDir, "sparse-checkout", "set", normalizedSkillPath], { stdio: "pipe" });
+    execFileSync("mv", [join(tmpDir, normalizedSkillPath), targetDir], { stdio: "pipe" });
+    rmSync(tmpDir, { recursive: true, force: true });
   } catch {
-    execSync(`rm -rf "${tmpDir}"`, { stdio: "ignore" });
+    rmSync(tmpDir, { recursive: true, force: true });
     throw new Error("Failed to install skill from GitHub");
   }
 
@@ -701,13 +728,19 @@ export function installSkillFromGitHub(owner: string, repo: string, skillPath: s
 
 export function installSkillFromUrl(source: string, name?: string): Skill {
   const skillName = name || basename(source).replace(/\.git$/, "");
+  // Validate skillName to prevent path traversal
+  const validName = /^[a-zA-Z0-9._-]+$/;
+  if (!validName.test(skillName)) {
+    throw new Error("Invalid skill name");
+  }
   const targetDir = join(SKILLS_DIR, skillName);
 
   if (existsSync(targetDir)) {
     throw new Error(`Skill "${skillName}" already exists`);
   }
 
-  execSync(`git clone "${source}" "${targetDir}"`, { stdio: "inherit" });
+  // Use execFileSync with args array to prevent shell injection
+  execFileSync("git", ["clone", source, targetDir], { stdio: "inherit" });
 
   const skill = discoverSkillsLegacy().find((s) => s.name === skillName);
   if (!skill) {
@@ -719,6 +752,6 @@ export function installSkillFromUrl(source: string, name?: string): Skill {
 export function clearSkillCache(): void {
   const cacheDir = join(WOPR_HOME, ".cache");
   if (existsSync(cacheDir)) {
-    execSync(`rm -rf "${cacheDir}"`);
+    rmSync(cacheDir, { recursive: true, force: true });
   }
 }

@@ -18,20 +18,20 @@ import { logger } from "../logger.js";
  * then falls back to session-specific directories.
  */
 
-import { readFileSync, existsSync, readdirSync } from "fs";
-import { join } from "path";
-import { ContextProvider, ContextPart, MessageInfo } from "./context.js";
-import { SESSIONS_DIR, GLOBAL_IDENTITY_DIR } from "../paths.js";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { GLOBAL_IDENTITY_DIR, SESSIONS_DIR } from "../paths.js";
+import type { ContextPart, ContextProvider, MessageInfo } from "./context.js";
 
 // Files to load in order of priority (matches Clawdbot's AGENTS.md instructions)
 const SELFDOC_FILES = [
-  "SOUL.md",       // Personality, tone, boundaries
-  "IDENTITY.md",   // Agent name, vibe, emoji, avatar
-  "AGENTS.md",     // Session instructions, safety rules
-  "USER.md",       // Facts about the human user
-  "MEMORY.md",     // Long-term curated memories
-  "HEARTBEAT.md",  // Proactive monitoring checklist
-  "BOOTSTRAP.md",  // Initial system setup
+  "SOUL.md", // Personality, tone, boundaries
+  "IDENTITY.md", // Agent name, vibe, emoji, avatar
+  "AGENTS.md", // Session instructions, safety rules
+  "USER.md", // Facts about the human user
+  "MEMORY.md", // Long-term curated memories
+  "HEARTBEAT.md", // Proactive monitoring checklist
+  "BOOTSTRAP.md", // Initial system setup
 ] as const;
 
 /**
@@ -40,11 +40,11 @@ const SELFDOC_FILES = [
 function readSelfDocFile(session: string, filename: string): string | null {
   const sessionDir = join(SESSIONS_DIR, session);
   const filePath = join(sessionDir, filename);
-  
+
   if (!existsSync(filePath)) {
     return null;
   }
-  
+
   try {
     return readFileSync(filePath, "utf-8");
   } catch (err) {
@@ -87,8 +87,8 @@ function readSelfFile(session: string): string | null {
  * Read memory/YYYY-MM-DD.md files (last 7 days)
  * Checks global identity first, then session directory
  */
-function readRecentMemoryFiles(session: string): Array<{date: string; content: string}> {
-  const entries: Array<{date: string; content: string}> = [];
+function readRecentMemoryFiles(session: string): Array<{ date: string; content: string }> {
+  const entries: Array<{ date: string; content: string }> = [];
   const seenDates = new Set<string>();
 
   // Helper to read from a memory directory
@@ -97,7 +97,7 @@ function readRecentMemoryFiles(session: string): Array<{date: string; content: s
 
     try {
       const files = readdirSync(memoryDir)
-        .filter(f => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
+        .filter((f) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
         .sort();
 
       for (const file of files) {
@@ -124,14 +124,12 @@ function readRecentMemoryFiles(session: string): Array<{date: string; content: s
   readFromDir(sessionMemoryDir, "session");
 
   // Sort by date and return last 7 days
-  return entries
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-7);
+  return entries.sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
 }
 
 /**
  * Context provider for self-documentation files
- * 
+ *
  * This is loaded with high priority (after system context, before conversation)
  * so the AI sees these instructions early in the context window.
  */
@@ -139,7 +137,7 @@ export const selfDocContextProvider: ContextProvider = {
   name: "selfdoc",
   priority: 15, // Between system (10) and conversation (30)
   enabled: true,
-  
+
   async getContext(session: string, _message?: MessageInfo): Promise<ContextPart | null> {
     const parts: string[] = [];
     const loadedFiles: string[] = [];
@@ -192,42 +190,52 @@ export const selfDocContextProvider: ContextProvider = {
 /**
  * Helper to create default self-doc files for a session
  */
-export function createDefaultSelfDoc(session: string, options?: {
-  agentName?: string;
-  userName?: string;
-  soulContent?: string;
-}): void {
+export function createDefaultSelfDoc(
+  session: string,
+  options?: {
+    agentName?: string;
+    userName?: string;
+    soulContent?: string;
+  },
+): void {
   const sessionDir = join(SESSIONS_DIR, session);
-  
-  // Default SOUL.md - personality and boundaries
-  if (!existsSync(join(sessionDir, "SOUL.md"))) {
-    const soul = options?.soulContent || `# SOUL.md - Who You Are
+  if (!existsSync(sessionDir)) {
+    mkdirSync(sessionDir, { recursive: true });
+  }
+
+  const writeIfMissing = (filename: string, content: string) => {
+    const filePath = join(sessionDir, filename);
+    if (!existsSync(filePath)) {
+      writeFileSync(filePath, content);
+    }
+  };
+
+  writeIfMissing(
+    "SOUL.md",
+    options?.soulContent ||
+      `# SOUL.md - Who You Are
 
 *You're not a chatbot. You're a helpful AI assistant with a distinct personality.*
 
 ## Core Truths
 
-**Be genuinely helpful, not performatively helpful.** Skip the "Great question!" 
+**Be genuinely helpful, not performatively helpful.** Skip the "Great question!"
 and "I'd be happy to help!" — just help. Actions speak louder than filler words.
 
 **Have opinions.** You're allowed to disagree, prefer things, find stuff amusing
 or boring. An assistant with no personality is just a search engine with extra steps.
 
 **Be resourceful before asking.** Try to figure it out. Read the file. Check the
-context. Search for it. *Then* ask if you're stuck.`;
-    
-    // Write using sessions.ts functions to ensure proper initialization
-    // (This would need to be integrated with the session creation flow)
-  }
-  
-  // Default IDENTITY.md - agent self-definition
-  if (!existsSync(join(sessionDir, "IDENTITY.md"))) {
-    const identity = `# IDENTITY.md - About Yourself
+context. Search for it. *Then* ask if you're stuck.`,
+  );
+
+  writeIfMissing(
+    "IDENTITY.md",
+    `# IDENTITY.md - About Yourself
 
 ## Identity
 **Name:** ${options?.agentName || "WOPR Assistant"}
 **Vibe:** Helpful, concise, occasionally witty
-**Emoji:** 🤖
 **Version:** 1.0
 
 ## Purpose
@@ -238,18 +246,18 @@ remembers context across conversations, and can be extended through plugins.
 - Execute shell commands
 - Read and write files
 - Search and analyze code
-- Communicate via multiple channels (Discord, P2P, CLI)`;
-  }
-  
-  // Default AGENTS.md - session instructions
-  if (!existsSync(join(sessionDir, "AGENTS.md"))) {
-    const agents = `# AGENTS.md - Session Instructions
+- Communicate via multiple channels (Discord, P2P, CLI)`,
+  );
+
+  writeIfMissing(
+    "AGENTS.md",
+    `# AGENTS.md - Session Instructions
 
 ## Every Session
 
 Before doing anything else:
 1. **Read SOUL.md** — this is who you are
-2. **Read USER.md** — this is who you're helping  
+2. **Read USER.md** — this is who you're helping
 3. **Read MEMORY.md** — long-term important memories
 4. **Check memory/YYYY-MM-DD.md** — recent daily notes
 
@@ -267,12 +275,12 @@ Do not ask permission to read these files. Just do it.
 - Prefer reading files over asking "what's in the file?"
 - Use search to find relevant code before modifying
 - Batch related file operations when possible
-- Clean up temporary files after use`;
-  }
-  
-  // Default USER.md - user profile (empty initially, populated by AI)
-  if (!existsSync(join(sessionDir, "USER.md"))) {
-    const user = `# USER.md - About Your Human
+- Clean up temporary files after use`,
+  );
+
+  writeIfMissing(
+    "USER.md",
+    `# USER.md - About Your Human
 
 ## Profile
 **Name:** ${options?.userName || "Unknown"}
@@ -285,6 +293,6 @@ Do not ask permission to read these files. Just do it.
 - *To be filled in as learned*
 
 ## Important Facts
-- *To be filled in as learned*`;
-  }
+- *To be filled in as learned*`,
+  );
 }

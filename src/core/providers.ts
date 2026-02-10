@@ -1,4 +1,5 @@
 import { logger } from "../logger.js";
+
 /**
  * Provider Registry & Management System
  *
@@ -6,18 +7,17 @@ import { logger } from "../logger.js";
  * for multiple model providers.
  */
 
-import {
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type {
   ModelProvider,
-  ModelClient,
   ProviderConfig,
   ProviderCredentials,
-  ResolvedProvider,
   ProviderRegistration,
+  ResolvedProvider,
 } from "../types/provider.js";
-import { readFile, writeFile } from "fs/promises";
-import { existsSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
 
 /**
  * Provider Registry
@@ -80,7 +80,7 @@ export class ProviderRegistry {
 
     // Ensure directory exists
     const dir = join(homedir(), ".wopr");
-    await (await import("fs")).promises.mkdir(dir, { recursive: true });
+    await (await import("node:fs")).promises.mkdir(dir, { recursive: true });
 
     await writeFile(this.credentialsPath, JSON.stringify(creds, null, 2));
   }
@@ -95,11 +95,7 @@ export class ProviderRegistry {
   /**
    * Store a credential
    */
-  async setCredential(
-    providerId: string,
-    credential: string,
-    metadata?: Record<string, unknown>
-  ): Promise<void> {
+  async setCredential(providerId: string, credential: string, metadata?: Record<string, unknown>): Promise<void> {
     // Validate provider exists
     const provider = this.providers.get(providerId);
     if (!provider) {
@@ -155,7 +151,7 @@ export class ProviderRegistry {
         const cred = this.credentials.get(reg.provider.id);
         const credType = reg.provider.getCredentialType?.() || "api-key";
         logger.info(`[provider-registry] ${reg.provider.id}: credType=${credType}, hasCred=${!!cred}`);
-        
+
         // For OAuth providers, skip credential check
         if (!cred && credType !== "oauth") {
           reg.available = false;
@@ -206,7 +202,7 @@ export class ProviderRegistry {
 
       const cred = this.credentials.get(providerName);
       const credType = reg.provider.getCredentialType?.() || "api-key";
-      
+
       // For OAuth providers, skip credential check
       if (!cred && credType !== "oauth") {
         errors.push(`No credentials for provider: ${providerName}`);
@@ -224,7 +220,7 @@ export class ProviderRegistry {
         };
       } catch (error) {
         errors.push(
-          `Failed to create client for ${providerName}: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to create client for ${providerName}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -238,10 +234,10 @@ export class ProviderRegistry {
   private static instance: ProviderRegistry;
 
   static getInstance(): ProviderRegistry {
-    if (!this.instance) {
-      this.instance = new ProviderRegistry();
+    if (!ProviderRegistry.instance) {
+      ProviderRegistry.instance = new ProviderRegistry();
     }
-    return this.instance;
+    return ProviderRegistry.instance;
   }
 }
 

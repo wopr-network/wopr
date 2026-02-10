@@ -1,11 +1,12 @@
 import { logger } from "../logger.js";
+
 /**
  * Skill registry management
  */
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { REGISTRIES_FILE, WOPR_HOME } from "../paths.js";
 import type { Registry, SkillPointer } from "../types.js";
 import { parseSkillFrontmatter } from "./skills.js";
@@ -42,6 +43,7 @@ export async function fetchRegistryIndex(url: string, searchQuery?: string): Pro
     return await fetchGitHubSkills(owner, repo, path, searchQuery);
   }
 
+  // Parse URL to check if the host is exactly github.com
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "github.com" && !url.includes("/raw/")) {
@@ -163,7 +165,7 @@ async function fetchGitHubSkills(
           skills.push({
             name: entry.name,
             description: frontmatter.description || "",
-            source: `github:${owner}/${repo}/${subdir.replace(`${cacheDir}/`, "")}`,
+            source: `github:${owner}/${repo}/${relative(cacheDir, subdir).replace(/\\/g, "/")}`,
           });
         }
       } else {

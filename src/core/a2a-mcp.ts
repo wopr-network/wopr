@@ -7,7 +7,7 @@
 
 import { exec } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, normalize, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
@@ -66,16 +66,16 @@ function listAllMemoryFiles(sessionDir: string): string[] {
 
   // Add global memory files first
   if (existsSync(GLOBAL_MEMORY_DIR)) {
-    readdirSync(GLOBAL_MEMORY_DIR)
-      .filter((f) => f.endsWith(".md"))
-      .forEach((f) => files.add(f));
+    for (const f of readdirSync(GLOBAL_MEMORY_DIR).filter((f) => f.endsWith(".md"))) {
+      files.add(f);
+    }
   }
 
   // Add session memory files (may override global)
   if (existsSync(sessionMemoryDir)) {
-    readdirSync(sessionMemoryDir)
-      .filter((f) => f.endsWith(".md"))
-      .forEach((f) => files.add(f));
+    for (const f of readdirSync(sessionMemoryDir).filter((f) => f.endsWith(".md"))) {
+      files.add(f);
+    }
   }
 
   return Array.from(files);
@@ -272,13 +272,17 @@ export function getA2AMcpServer(sessionName: string): any {
       {
         limit: z.number().optional().describe("Maximum number of sessions to return (default: 50)"),
       },
-      async (_args) => {
+      async (args) => {
         if (!getSessions) throw new Error("Session functions not initialized");
         const sessions = getSessions();
-        const sessionList = Object.keys(sessions).map((key) => ({
+        let sessionList = Object.keys(sessions).map((key) => ({
           name: key,
           id: sessions[key],
         }));
+        const limit = args.limit ?? 50;
+        if (limit > 0 && sessionList.length > limit) {
+          sessionList = sessionList.slice(0, limit);
+        }
         return {
           content: [
             { type: "text", text: JSON.stringify({ sessions: sessionList, count: sessionList.length }, null, 2) },
@@ -619,9 +623,9 @@ export function getA2AMcpServer(sessionName: string): any {
           // Collect daily files from both global and session memory
           const dailyFiles: { name: string; path: string }[] = [];
           if (existsSync(GLOBAL_MEMORY_DIR)) {
-            readdirSync(GLOBAL_MEMORY_DIR)
-              .filter((f) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
-              .forEach((f) => dailyFiles.push({ name: f, path: join(GLOBAL_MEMORY_DIR, f) }));
+            for (const f of readdirSync(GLOBAL_MEMORY_DIR).filter((f) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))) {
+              dailyFiles.push({ name: f, path: join(GLOBAL_MEMORY_DIR, f) });
+            }
           }
           const sessionMemoryDir = join(sessionDir, "memory");
           if (existsSync(sessionMemoryDir)) {
@@ -1888,7 +1892,6 @@ export function getA2AMcpServer(sessionName: string): any {
           let workDir = cwd ? join(cwd) : sessionDir;
 
           // Normalize the path to resolve ../ and other traversal attempts
-          const { resolve, normalize } = require("node:path");
           workDir = resolve(normalize(workDir));
 
           // Allowed base directories
@@ -1900,7 +1903,7 @@ export function getA2AMcpServer(sessionName: string): any {
           // Check if workDir is within any allowed base directory
           const isAllowed = allowedBases.some((base) => {
             const normalizedBase = resolve(normalize(base));
-            return workDir.startsWith(`${normalizedBase}/`) || workDir === normalizedBase;
+            return workDir.startsWith(normalizedBase + sep) || workDir === normalizedBase;
           });
 
           if (!isAllowed) {
