@@ -13,6 +13,7 @@ import {
   buildFileEntry,
   chunkMarkdown,
   ensureDir,
+  hashText,
   listMemoryFiles,
 } from "./internal.js";
 import { ensureMemoryIndexSchema } from "./schema.js";
@@ -156,9 +157,10 @@ export class MemoryIndexManager {
     this.fts = { enabled: true, available: false };
     this.ensureSchema();
 
-    // Subscribe FTS5 indexing as handler for memory:filesChanged
+    // Subscribe FTS5 indexing as handler for memory:filesChanged.
+    // Return the promise so the sequential event bus awaits completion.
     eventBus.on("memory:filesChanged", (event) => {
-      this.handleFilesChanged(event);
+      return this.handleFilesChanged(event);
     });
 
     this.dirty = true;
@@ -429,10 +431,7 @@ export class MemoryIndexManager {
     return changes;
   }
 
-  private handleFilesChanged(event: { changes: MemoryFileChange[] }): void {
-    const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    const totalChunks = event.changes.reduce((sum, c) => sum + (c.chunks?.length || 0), 0);
-    console.log(`[handleFilesChanged] ${event.changes.length} changes, ${totalChunks} total chunks (heap=${heapMB()}MB)`);
+  private async handleFilesChanged(event: { changes: MemoryFileChange[] }): Promise<void> {
     for (const change of event.changes) {
       if (change.action === "delete") {
         this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(change.path, change.source);
@@ -449,7 +448,6 @@ export class MemoryIndexManager {
 
       // Upsert
       if (!change.chunks || change.chunks.length === 0) continue;
-      console.log(`[handleFilesChanged] upsert ${change.path}: ${change.chunks.length} chunks (heap=${heapMB()}MB)`);
 
       // Delete existing chunks for this file
       this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(change.path, change.source);
@@ -475,9 +473,12 @@ export class MemoryIndexManager {
       this.db.exec("BEGIN");
       try {
         for (const chunk of change.chunks) {
+          // Compute stable ID unique per source+path+location+content.
+          // Done here once rather than in each callsite that emits the event.
+          const chunkId = hashText(`${change.source}:${change.path}:${chunk.startLine}:${chunk.endLine}:${chunk.text}`);
           const now = Date.now();
           insertChunk.run(
-            chunk.id,
+            chunkId,
             change.path,
             change.source,
             chunk.startLine,
@@ -490,7 +491,7 @@ export class MemoryIndexManager {
           if (insertFts) {
             insertFts.run(
               chunk.text,
-              chunk.id,
+              chunkId,
               change.path,
               change.source,
               "fts5",
@@ -576,7 +577,6 @@ export class MemoryIndexManager {
   private ensureSchema() {
     const result = ensureMemoryIndexSchema({
       db: this.db,
-      embeddingCacheTable: "embedding_cache",
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
     });
