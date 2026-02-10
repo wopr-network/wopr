@@ -5,17 +5,17 @@
 
 import { spawn } from "node:child_process";
 import { logger } from "../logger.js";
-import type { SandboxConfig, SandboxDockerConfig, SandboxWorkspaceAccess } from "./types.js";
 import { computeSandboxConfigHash } from "./config-hash.js";
 import { DEFAULT_SANDBOX_IMAGE } from "./constants.js";
-import { readRegistry, updateRegistry, findRegistryEntry } from "./registry.js";
+import { findRegistryEntry, updateRegistry } from "./registry.js";
 import { resolveSandboxScopeKey, slugifySessionKey } from "./shared.js";
+import type { SandboxConfig, SandboxDockerConfig, SandboxWorkspaceAccess } from "./types.js";
 
 const HOT_CONTAINER_WINDOW_MS = 5 * 60 * 1000;
 
 export function execDocker(
   args: string[],
-  opts?: { allowFailure?: boolean }
+  opts?: { allowFailure?: boolean },
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve, reject) => {
     const child = spawn("docker", args, {
@@ -75,9 +75,7 @@ export async function ensureDockerImage(image: string): Promise<void> {
   throw new Error(`Sandbox image not found: ${image}. Build or pull it first.`);
 }
 
-export async function dockerContainerState(
-  name: string
-): Promise<{ exists: boolean; running: boolean }> {
+export async function dockerContainerState(name: string): Promise<{ exists: boolean; running: boolean }> {
   const result = await execDocker(["inspect", "-f", "{{.State.Running}}", name], {
     allowFailure: true,
   });
@@ -98,10 +96,7 @@ function normalizeDockerLimit(value?: string | number): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function formatUlimitValue(
-  name: string,
-  value: string | number | { soft?: number; hard?: number }
-): string | null {
+function formatUlimitValue(name: string, value: string | number | { soft?: number; hard?: number }): string | null {
   if (!name.trim()) {
     return null;
   }
@@ -255,10 +250,9 @@ async function createSandboxContainer(params: {
 }
 
 async function readContainerConfigHash(containerName: string): Promise<string | null> {
-  const result = await execDocker(
-    ["inspect", "-f", '{{ index .Config.Labels "wopr.configHash" }}', containerName],
-    { allowFailure: true }
-  );
+  const result = await execDocker(["inspect", "-f", '{{ index .Config.Labels "wopr.configHash" }}', containerName], {
+    allowFailure: true,
+  });
   if (result.code !== 0) {
     return null;
   }
@@ -303,14 +297,12 @@ export async function ensureSandboxContainer(params: {
 
     if (hashMismatch) {
       const lastUsedAtMs = registryEntry?.lastUsedAtMs;
-      const isHot =
-        running &&
-        (typeof lastUsedAtMs !== "number" || now - lastUsedAtMs < HOT_CONTAINER_WINDOW_MS);
+      const isHot = running && (typeof lastUsedAtMs !== "number" || now - lastUsedAtMs < HOT_CONTAINER_WINDOW_MS);
 
       if (isHot) {
         logger.warn(
           `[sandbox] Config changed for ${containerName} (recently used). ` +
-          `Run 'wopr sandbox recreate ${params.sessionKey}' to apply changes.`
+            `Run 'wopr sandbox recreate ${params.sessionKey}' to apply changes.`,
         );
       } else {
         logger.info(`[sandbox] Config changed for ${containerName}, recreating...`);
@@ -359,7 +351,7 @@ export async function execInContainer(
     workdir?: string;
     env?: Record<string, string>;
     timeout?: number;
-  }
+  },
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const args = ["exec", "-i"];
 

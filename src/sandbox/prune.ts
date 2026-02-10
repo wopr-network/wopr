@@ -5,9 +5,9 @@
  */
 
 import { logger } from "../logger.js";
-import type { SandboxConfig } from "./types.js";
 import { dockerContainerState, execDocker } from "./docker.js";
 import { readRegistry, removeRegistryEntry } from "./registry.js";
+import type { SandboxConfig } from "./types.js";
 
 let lastPruneAtMs = 0;
 

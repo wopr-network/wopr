@@ -5,13 +5,6 @@
  */
 
 import { config as woprConfig } from "../core/config.js";
-import type {
-  SandboxConfig,
-  SandboxDockerConfig,
-  SandboxPruneConfig,
-  SandboxScope,
-  SandboxWorkspaceAccess,
-} from "./types.js";
 import {
   DEFAULT_SANDBOX_CONTAINER_PREFIX,
   DEFAULT_SANDBOX_IDLE_HOURS,
@@ -22,6 +15,13 @@ import {
   DEFAULT_TOOL_ALLOW,
   DEFAULT_TOOL_DENY,
 } from "./constants.js";
+import type {
+  SandboxConfig,
+  SandboxDockerConfig,
+  SandboxPruneConfig,
+  SandboxScope,
+  SandboxWorkspaceAccess,
+} from "./types.js";
 
 /**
  * Get sandbox config from WOPR config.
@@ -30,10 +30,7 @@ function getWoprSandboxConfig(): Partial<SandboxConfig> | undefined {
   return (woprConfig as any).sandbox;
 }
 
-export function resolveSandboxScope(params: {
-  scope?: SandboxScope;
-  perSession?: boolean;
-}): SandboxScope {
+export function resolveSandboxScope(params: { scope?: SandboxScope; perSession?: boolean }): SandboxScope {
   if (params.scope) {
     return params.scope;
   }
@@ -52,11 +49,9 @@ export function resolveSandboxDockerConfig(params: {
 
   const env = session?.env
     ? { ...(global?.env ?? { LANG: "C.UTF-8" }), ...session.env }
-    : global?.env ?? { LANG: "C.UTF-8" };
+    : (global?.env ?? { LANG: "C.UTF-8" });
 
-  const ulimits = session?.ulimits
-    ? { ...global?.ulimits, ...session.ulimits }
-    : global?.ulimits;
+  const ulimits = session?.ulimits ? { ...global?.ulimits, ...session.ulimits } : global?.ulimits;
 
   const binds = [...(global?.binds ?? []), ...(session?.binds ?? [])];
 
@@ -99,10 +94,7 @@ export function resolveSandboxPruneConfig(params: {
 /**
  * Resolve the complete sandbox configuration for a session.
  */
-export function resolveSandboxConfig(params?: {
-  sessionName?: string;
-  trustLevel?: string;
-}): SandboxConfig {
+export function resolveSandboxConfig(params?: { sessionName?: string; trustLevel?: string }): SandboxConfig {
   const woprSandbox = getWoprSandboxConfig();
 
   // Determine mode based on trust level
@@ -147,10 +139,7 @@ export function resolveSandboxConfig(params?: {
 /**
  * Check if a session should be sandboxed.
  */
-export function shouldSandbox(params: {
-  sessionName: string;
-  trustLevel?: string;
-}): boolean {
+export function shouldSandbox(params: { sessionName: string; trustLevel?: string }): boolean {
   const cfg = resolveSandboxConfig(params);
 
   if (cfg.mode === "off") {

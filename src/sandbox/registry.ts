@@ -4,7 +4,7 @@
  * Copied from OpenClaw with WOPR adaptations.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { SANDBOX_REGISTRY_PATH, SANDBOX_STATE_DIR } from "./constants.js";
 
 export type SandboxRegistryEntry = {
@@ -40,7 +40,7 @@ function writeRegistry(registry: SandboxRegistry): void {
   if (!existsSync(SANDBOX_STATE_DIR)) {
     mkdirSync(SANDBOX_STATE_DIR, { recursive: true });
   }
-  writeFileSync(SANDBOX_REGISTRY_PATH, JSON.stringify(registry, null, 2) + "\n", "utf-8");
+  writeFileSync(SANDBOX_REGISTRY_PATH, `${JSON.stringify(registry, null, 2)}\n`, "utf-8");
 }
 
 export function updateRegistry(entry: SandboxRegistryEntry): void {
