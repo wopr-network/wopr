@@ -11,6 +11,7 @@ import type { InjectOptions, InjectResult, MultimodalMessage, QueueEventHandler,
 
 export class QueueManager {
   private queues = new Map<string, SessionQueue>();
+  private lastActivityMs = new Map<string, number>();
   private globalEventHandlers = new Set<QueueEventHandler>();
 
   /** Function to execute an inject - set via setExecutor */
@@ -63,6 +64,7 @@ export class QueueManager {
       this.queues.set(sessionKey, queue);
       logger.info({ msg: "[queue-manager] Created queue for session", sessionKey });
     }
+    this.lastActivityMs.set(sessionKey, Date.now());
     return queue;
   }
 
@@ -179,15 +181,18 @@ export class QueueManager {
    * Clean up inactive queues (no pending work, idle for a while)
    * Call periodically to prevent memory leaks
    */
-  cleanup(_maxIdleMs: number = 5 * 60 * 1000): number {
+  cleanup(maxIdleMs: number = 5 * 60 * 1000): number {
     let cleaned = 0;
+    const now = Date.now();
     for (const [sessionKey, queue] of this.queues) {
       const stats = queue.getStats();
       if (!stats.isProcessing && stats.queueDepth === 0) {
-        // Queue is idle - could add timestamp tracking for smarter cleanup
-        // For now, just remove truly empty queues
-        this.queues.delete(sessionKey);
-        cleaned++;
+        const lastActivity = this.lastActivityMs.get(sessionKey) ?? 0;
+        if (now - lastActivity >= maxIdleMs) {
+          this.queues.delete(sessionKey);
+          this.lastActivityMs.delete(sessionKey);
+          cleaned++;
+        }
       }
     }
     if (cleaned > 0) {

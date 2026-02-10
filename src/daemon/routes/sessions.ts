@@ -128,8 +128,6 @@ sessionsRouter.post("/:name/inject", async (c) => {
       c.header("Cache-Control", "no-cache");
       c.header("Connection", "keep-alive");
 
-      let _fullResponse = "";
-
       const result = await inject(name, message, {
         silent: true,
         from,
@@ -147,10 +145,6 @@ sessionsRouter.post("/:name/inject", async (c) => {
 
           // Broadcast to WebSocket clients
           broadcastStream(name, from, msg);
-
-          if (msg.type === "text") {
-            _fullResponse += msg.content;
-          }
         },
       });
 

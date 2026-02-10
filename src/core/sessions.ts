@@ -421,13 +421,14 @@ async function executeInjectInternal(
     const senderPrefix = from && from !== "cli" && from !== "unknown" ? `${from}: ` : "";
     const prefixedMessage = senderPrefix + processedMessage;
 
-    // DEBUG: Log what we're sending to Claude
-    logger.info({
-      msg: "DEBUG sender prefix",
-      from,
-      senderPrefix: senderPrefix || "(empty)",
-      messagePreview: prefixedMessage.slice(0, 100),
-    });
+    if (!silent) {
+      logger.debug({
+        msg: "sender prefix",
+        from,
+        senderPrefix: senderPrefix || "(empty)",
+        messagePreview: prefixedMessage.slice(0, 100),
+      });
+    }
 
     const fullMessage =
       assembled.context && !isSlashCommand ? `${assembled.context}\n\n${prefixedMessage}` : prefixedMessage;
@@ -656,6 +657,7 @@ async function executeInjectInternal(
               for (const block of msg.message.content) {
                 if (block.type === "text") {
                   collected.push(block.text);
+                  await emitSessionResponseChunk(name, messageText, collected.join(""), from, block.text);
                 } else if (block.type === "tool_use") {
                   if (!silent) logger.info(`[tool] ${block.name}`);
                   const streamMsg: StreamMessage = { type: "tool_use", content: "", toolName: block.name };
