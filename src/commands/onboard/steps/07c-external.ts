@@ -3,8 +3,9 @@
  *
  * Sets up external webhook access via Tailscale Funnel.
  */
-import { confirm, note, spinner, pc } from "../prompts.js";
+
 import { execSync } from "node:child_process";
+import { confirm, note, pc, spinner } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
 function exec(cmd: string): { stdout: string; success: boolean } {
@@ -41,7 +42,7 @@ function checkTailscale(): { installed: boolean; connected: boolean; hostname?: 
   }
 }
 
-export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
+export const externalStep: OnboardStep = async (_ctx: OnboardContext) => {
   // Skip if user doesn't want external access
   const wantExternal = await confirm({
     message: "Set up external webhook access (for GitHub, etc)?",
@@ -49,12 +50,12 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
   });
 
   if (!wantExternal) {
-    await note([
-      "Skipping external access setup.",
-      "",
-      "You can set this up later:",
-      pc.cyan("  wopr funnel expose 7438"),
-    ].join("\n"), "External Access");
+    await note(
+      ["Skipping external access setup.", "", "You can set this up later:", pc.cyan("  wopr funnel expose 7438")].join(
+        "\n",
+      ),
+      "External Access",
+    );
     return {};
   }
 
@@ -66,32 +67,38 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
 
   if (!ts.installed) {
     s.stop("Tailscale not installed");
-    await note([
-      "Tailscale is required for external webhook access.",
-      "",
-      "Install Tailscale:",
-      pc.cyan("  curl -fsSL https://tailscale.com/install.sh | sh"),
-      "",
-      "Or visit: https://tailscale.com/download",
-      "",
-      "After installing, run:",
-      pc.cyan("  tailscale up"),
-      pc.cyan("  wopr onboard  # re-run this wizard"),
-    ].join("\n"), "Tailscale Required");
+    await note(
+      [
+        "Tailscale is required for external webhook access.",
+        "",
+        "Install Tailscale:",
+        pc.cyan("  curl -fsSL https://tailscale.com/install.sh | sh"),
+        "",
+        "Or visit: https://tailscale.com/download",
+        "",
+        "After installing, run:",
+        pc.cyan("  tailscale up"),
+        pc.cyan("  wopr onboard  # re-run this wizard"),
+      ].join("\n"),
+      "Tailscale Required",
+    );
     return {};
   }
 
   if (!ts.connected) {
     s.stop("Tailscale not connected");
-    await note([
-      "Tailscale is installed but not connected.",
-      "",
-      "Connect to your tailnet:",
-      pc.cyan("  tailscale up"),
-      "",
-      "Then re-run this wizard:",
-      pc.cyan("  wopr onboard"),
-    ].join("\n"), "Tailscale Not Connected");
+    await note(
+      [
+        "Tailscale is installed but not connected.",
+        "",
+        "Connect to your tailnet:",
+        pc.cyan("  tailscale up"),
+        "",
+        "Then re-run this wizard:",
+        pc.cyan("  wopr onboard"),
+      ].join("\n"),
+      "Tailscale Not Connected",
+    );
     return {};
   }
 
@@ -104,20 +111,23 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
   const funnelTest = exec("tailscale funnel status");
   if (!funnelTest.success || funnelTest.stdout.includes("not enabled")) {
     s.stop("Funnel not enabled");
-    await note([
-      "Tailscale Funnel needs to be enabled in your tailnet.",
-      "",
-      "1. Go to https://login.tailscale.com/admin/acls",
-      "2. Add this to your ACL policy:",
-      pc.cyan(`  "nodeAttrs": [
+    await note(
+      [
+        "Tailscale Funnel needs to be enabled in your tailnet.",
+        "",
+        "1. Go to https://login.tailscale.com/admin/acls",
+        "2. Add this to your ACL policy:",
+        pc.cyan(`  "nodeAttrs": [
     {
       "target": ["*"],
       "attr": ["funnel"]
     }
   ]`),
-      "",
-      "Then re-run this wizard.",
-    ].join("\n"), "Enable Funnel");
+        "",
+        "Then re-run this wizard.",
+      ].join("\n"),
+      "Enable Funnel",
+    );
     return {};
   }
 
@@ -126,13 +136,16 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
   const funnelResult = exec(`tailscale funnel ${webhookPort}`);
   if (!funnelResult.success) {
     s.stop("Failed to enable funnel");
-    await note([
-      "Could not enable Tailscale Funnel.",
-      "",
-      `Error: ${funnelResult.stdout}`,
-      "",
-      "Check your Tailscale configuration and try again.",
-    ].join("\n"), "Funnel Error");
+    await note(
+      [
+        "Could not enable Tailscale Funnel.",
+        "",
+        `Error: ${funnelResult.stdout}`,
+        "",
+        "Check your Tailscale configuration and try again.",
+      ].join("\n"),
+      "Funnel Error",
+    );
     return {};
   }
 
@@ -140,16 +153,19 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
 
   const webhookUrl = `https://${ts.hostname}/hooks`;
 
-  await note([
-    "External access configured!",
-    "",
-    `Webhook URL: ${pc.green(webhookUrl)}`,
-    "",
-    "This URL is now publicly accessible and can receive",
-    "webhooks from GitHub, Stripe, or any external service.",
-    "",
-    pc.dim("The funnel plugin will auto-start with the daemon."),
-  ].join("\n"), "External Access Ready");
+  await note(
+    [
+      "External access configured!",
+      "",
+      `Webhook URL: ${pc.green(webhookUrl)}`,
+      "",
+      "This URL is now publicly accessible and can receive",
+      "webhooks from GitHub, Stripe, or any external service.",
+      "",
+      pc.dim("The funnel plugin will auto-start with the daemon."),
+    ].join("\n"),
+    "External Access Ready",
+  );
 
   return {
     external: {

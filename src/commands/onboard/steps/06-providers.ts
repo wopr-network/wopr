@@ -8,11 +8,12 @@
  * 4. Let user choose auth method if multiple available
  * 5. Configure credentials based on chosen method
  */
-import { select, password, note, spinner, confirm, pc } from "../prompts.js";
-import { AVAILABLE_PROVIDERS } from "../types.js";
-import { installPlugin } from "../../../plugins.js";
+
 import { providerRegistry } from "../../../core/providers.js";
+import { installPlugin } from "../../../plugins.js";
+import { confirm, note, password, pc, select, spinner } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
+import { AVAILABLE_PROVIDERS } from "../types.js";
 
 export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
   const isQuickstart = ctx.opts.flow === "quickstart";
@@ -21,14 +22,12 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
   const existingProvider = ctx.nextConfig.provider?.primary;
 
   if (existingProvider && isQuickstart) {
-    await note([
-      `Using existing provider: ${existingProvider}`,
-    ].join("\n"), "AI Provider");
+    await note([`Using existing provider: ${existingProvider}`].join("\n"), "AI Provider");
     return {};
   }
 
   // Build provider options from available plugins
-  const options = AVAILABLE_PROVIDERS.map(p => ({
+  const options = AVAILABLE_PROVIDERS.map((p) => ({
     value: p.id,
     label: p.name,
   }));
@@ -45,14 +44,14 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
   });
 
   if (providerId === "skip") {
-    await note([
-      "You can configure a provider later with:",
-      pc.cyan("  wopr configure --provider"),
-    ].join("\n"), "Provider Skipped");
+    await note(
+      ["You can configure a provider later with:", pc.cyan("  wopr configure --provider")].join("\n"),
+      "Provider Skipped",
+    );
     return {};
   }
 
-  const providerInfo = AVAILABLE_PROVIDERS.find(p => p.id === providerId)!;
+  const providerInfo = AVAILABLE_PROVIDERS.find((p) => p.id === providerId)!;
 
   // Install provider plugin
   const s = await spinner();
@@ -72,13 +71,13 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
   }
 
   // Query the installed provider for its capabilities
-  const provider = providerRegistry.listProviders().find(p => p.id === providerId);
+  const provider = providerRegistry.listProviders().find((p) => p.id === providerId);
 
   if (!provider) {
-    await note([
-      "Provider plugin installed but not yet loaded.",
-      "Restart the daemon to activate it.",
-    ].join("\n"), "Note");
+    await note(
+      ["Provider plugin installed but not yet loaded.", "Restart the daemon to activate it."].join("\n"),
+      "Note",
+    );
     return {
       provider: {
         primary: providerId,
@@ -100,19 +99,18 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
 
   // If plugin exposes auth methods, let user choose
   if (authMethods.length > 0) {
-    const availableMethods = authMethods.filter((m: any) => m.available);
-    const unavailableMethods = authMethods.filter((m: any) => !m.available);
+    const _availableMethods = authMethods.filter((m: any) => m.available);
+    const _unavailableMethods = authMethods.filter((m: any) => !m.available);
 
     // In quickstart, auto-select the active method if credentials exist
     if (isQuickstart && hasCredentials) {
       selectedAuthMethod = activeAuth;
       const method = authMethods.find((m: any) => m.id === activeAuth);
       if (method) {
-        await note([
-          pc.green(`✓ Using ${method.name}`),
-          "",
-          ...(method.setupInstructions || []),
-        ].join("\n"), "Authentication");
+        await note(
+          [pc.green(`✓ Using ${method.name}`), "", ...(method.setupInstructions || [])].join("\n"),
+          "Authentication",
+        );
       }
     } else {
       // Show all auth options
@@ -133,13 +131,18 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
       if (chosenMethod) {
         if (!chosenMethod.available) {
           // Show setup instructions
-          await note([
-            `${chosenMethod.name} requires setup:`,
-            "",
-            ...(chosenMethod.setupInstructions || []),
-            "",
-            chosenMethod.docsUrl ? `Docs: ${pc.cyan(chosenMethod.docsUrl)}` : "",
-          ].filter(Boolean).join("\n"), "Setup Required");
+          await note(
+            [
+              `${chosenMethod.name} requires setup:`,
+              "",
+              ...(chosenMethod.setupInstructions || []),
+              "",
+              chosenMethod.docsUrl ? `Docs: ${pc.cyan(chosenMethod.docsUrl)}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            "Setup Required",
+          );
         }
 
         // If this method requires input (like API key)
@@ -170,16 +173,15 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
                 throw new Error("Provider setup cancelled");
               }
             }
-          } catch (err) {
+          } catch (_err) {
             s2.stop("Validation skipped");
           }
         } else if (chosenMethod.available) {
           // Show confirmation for available no-input methods (like OAuth)
-          await note([
-            pc.green(`✓ ${chosenMethod.name} ready`),
-            "",
-            ...(chosenMethod.setupInstructions || []),
-          ].join("\n"), "Authentication");
+          await note(
+            [pc.green(`✓ ${chosenMethod.name} ready`), "", ...(chosenMethod.setupInstructions || [])].join("\n"),
+            "Authentication",
+          );
         }
       }
     }
@@ -217,13 +219,18 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
     model = providerImpl?.defaultModel || models[0];
   }
 
-  await note([
-    `Provider: ${providerInfo.name}`,
-    model ? `Model: ${model}` : "",
-    `Auth: ${selectedAuthMethod}`,
-    "",
-    pc.green("✓ Ready to use"),
-  ].filter(Boolean).join("\n"), "Provider Configured");
+  await note(
+    [
+      `Provider: ${providerInfo.name}`,
+      model ? `Model: ${model}` : "",
+      `Auth: ${selectedAuthMethod}`,
+      "",
+      pc.green("✓ Ready to use"),
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    "Provider Configured",
+  );
 
   // Return config
   return {

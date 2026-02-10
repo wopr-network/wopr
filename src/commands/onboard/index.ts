@@ -1,12 +1,10 @@
 /**
  * WOPR Onboard Wizard
- * 
+ *
  * Interactive setup wizard for WOPR.
  * Run with: wopr onboard
  */
 import { p, pc } from "./prompts.js";
-import type { OnboardOptions, OnboardRuntime, OnboardConfig, OnboardContext } from "./types.js";
-
 // Import steps
 import { welcomeStep } from "./steps/01-welcome.js";
 import { securityStep } from "./steps/02-security.js";
@@ -23,6 +21,7 @@ import { githubStep } from "./steps/07d-github.js";
 import { skillsStep } from "./steps/08-skills.js";
 import { daemonStep } from "./steps/09-daemon.js";
 import { finalizeStep } from "./steps/10-finalize.js";
+import type { OnboardContext, OnboardOptions, OnboardRuntime } from "./types.js";
 
 const steps = [
   welcomeStep,
@@ -34,9 +33,9 @@ const steps = [
   providersStep,
   embeddingsStep,
   channelsStep,
-  voiceStep,      // Voice setup after channels
-  externalStep,   // External access (Tailscale Funnel)
-  githubStep,     // GitHub webhook integration
+  voiceStep, // Voice setup after channels
+  externalStep, // External access (Tailscale Funnel)
+  githubStep, // GitHub webhook integration
   skillsStep,
   daemonStep,
   finalizeStep,
@@ -48,11 +47,11 @@ export async function runOnboardWizard(
     log: console.log,
     error: console.error,
     exit: process.exit,
-  }
+  },
 ): Promise<void> {
   // Ensure cleanup on exit
   p.intro(pc.cyan("WOPR Onboarding"));
-  
+
   // Build context
   const ctx: OnboardContext = {
     opts,
@@ -60,12 +59,12 @@ export async function runOnboardWizard(
     baseConfig: {},
     nextConfig: {},
   };
-  
+
   try {
     // Run each step
     for (const step of steps) {
       const updates = await step(ctx);
-      
+
       // Merge updates into nextConfig
       if (updates) {
         ctx.nextConfig = {
@@ -74,14 +73,14 @@ export async function runOnboardWizard(
         };
       }
     }
-    
+
     runtime.exit(0);
   } catch (err: any) {
     if (err.name === "WizardCancelledError") {
       p.cancel(pc.red(err.message || "Onboarding cancelled."));
       runtime.exit(0);
     }
-    
+
     p.log.error(pc.red(`Onboarding failed: ${err.message}`));
     runtime.error(err.message);
     runtime.exit(1);
@@ -91,11 +90,11 @@ export async function runOnboardWizard(
 // CLI handler
 export async function onboardCommand(args: string[]): Promise<void> {
   const opts: OnboardOptions = {};
-  
+
   // Parse args
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     switch (arg) {
       case "--quickstart":
       case "-q":
@@ -138,7 +137,7 @@ export async function onboardCommand(args: string[]): Promise<void> {
         break;
     }
   }
-  
+
   await runOnboardWizard(opts);
 }
 
@@ -171,4 +170,4 @@ Examples:
 `);
 }
 
-export { OnboardOptions, OnboardRuntime, OnboardConfig } from "./types.js";
+export { OnboardConfig, OnboardOptions, OnboardRuntime } from "./types.js";
