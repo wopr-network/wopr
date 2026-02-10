@@ -5,25 +5,23 @@
  * by combining global config, trust level defaults, and source-specific grants.
  */
 
-import { readFileSync, existsSync, writeFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { logger } from "../logger.js";
 import {
-  type TrustLevel,
   type Capability,
-  type InjectionSource,
-  type SecurityPolicy,
-  type SecurityConfig,
-  type SandboxConfig,
-  type ToolPolicy,
-  DEFAULT_SECURITY_CONFIG,
   DEFAULT_SANDBOX_BY_TRUST,
-  CAPABILITY_PROFILES,
-  hasCapability,
-  meetsTrustLevel,
-  getToolCapability,
+  DEFAULT_SECURITY_CONFIG,
   getSessionAccess,
+  getToolCapability,
+  hasCapability,
+  type InjectionSource,
   matchesAnyAccessPattern,
+  meetsTrustLevel,
+  type SandboxConfig,
+  type SecurityConfig,
+  type ToolPolicy,
+  type TrustLevel,
 } from "./types.js";
 
 // ============================================================================
@@ -82,10 +80,7 @@ export function saveSecurityConfig(config: SecurityConfig): void {
 /**
  * Merge configs (deep merge with defaults)
  */
-function mergeConfigs(
-  defaults: SecurityConfig,
-  overrides: Partial<SecurityConfig>
-): SecurityConfig {
+function mergeConfigs(defaults: SecurityConfig, overrides: Partial<SecurityConfig>): SecurityConfig {
   return {
     ...defaults,
     ...overrides,
@@ -163,10 +158,7 @@ export interface ResolvedPolicy {
 /**
  * Resolve the effective policy for an injection source
  */
-export function resolvePolicy(
-  source: InjectionSource,
-  targetSession?: string
-): ResolvedPolicy {
+export function resolvePolicy(source: InjectionSource, targetSession?: string): ResolvedPolicy {
   const config = getSecurityConfig();
   const trustLevel = source.trustLevel;
 
@@ -224,12 +216,11 @@ export function resolvePolicy(
   }
 
   // Check if this is a gateway session
-  const isGateway =
-    config.gateways?.sessions?.includes(targetSession || "") || false;
+  const isGateway = config.gateways?.sessions?.includes(targetSession || "") || false;
   const canForward = isGateway && hasCapability(capabilities, "cross.inject");
 
   // Get forward rules if gateway
-  let forwardRules = undefined;
+  let forwardRules: ResolvedPolicy["forwardRules"];
   if (isGateway && config.gateways?.forwardRules?.[targetSession || ""]) {
     forwardRules = config.gateways.forwardRules[targetSession || ""];
   }
@@ -264,10 +255,7 @@ export interface PolicyCheckResult {
 /**
  * Check if a source is allowed to inject into a session
  */
-export function checkSessionAccess(
-  source: InjectionSource,
-  session: string
-): PolicyCheckResult {
+export function checkSessionAccess(source: InjectionSource, session: string): PolicyCheckResult {
   const config = getSecurityConfig();
   const policy = resolvePolicy(source, session);
 
@@ -312,11 +300,7 @@ export function checkSessionAccess(
 /**
  * Check if a source is allowed to use a specific capability
  */
-export function checkCapability(
-  source: InjectionSource,
-  capability: Capability,
-  session?: string
-): PolicyCheckResult {
+export function checkCapability(source: InjectionSource, capability: Capability, session?: string): PolicyCheckResult {
   const policy = resolvePolicy(source, session);
 
   // Check if capability is granted
@@ -333,11 +317,7 @@ export function checkCapability(
 /**
  * Check if a source is allowed to use a specific tool
  */
-export function checkToolAccess(
-  source: InjectionSource,
-  toolName: string,
-  session?: string
-): PolicyCheckResult {
+export function checkToolAccess(source: InjectionSource, toolName: string, session?: string): PolicyCheckResult {
   const config = getSecurityConfig();
   const policy = resolvePolicy(source, session);
 
@@ -377,10 +357,7 @@ export function checkToolAccess(
 /**
  * Check if a source needs sandbox execution
  */
-export function checkSandboxRequired(
-  source: InjectionSource,
-  session?: string
-): SandboxConfig | null {
+export function checkSandboxRequired(source: InjectionSource, session?: string): SandboxConfig | null {
   const policy = resolvePolicy(source, session);
 
   if (policy.sandbox.enabled) {
@@ -393,20 +370,13 @@ export function checkSandboxRequired(
 /**
  * Filter available tools based on source policy
  */
-export function filterToolsByPolicy(
-  source: InjectionSource,
-  availableTools: string[],
-  session?: string
-): string[] {
+export function filterToolsByPolicy(source: InjectionSource, availableTools: string[], session?: string): string[] {
   const config = getSecurityConfig();
   const policy = resolvePolicy(source, session);
 
   return availableTools.filter((toolName) => {
     // Check tool policy
-    if (
-      policy.tools.deny?.includes(toolName) ||
-      policy.tools.deny?.includes("*")
-    ) {
+    if (policy.tools.deny?.includes(toolName) || policy.tools.deny?.includes("*")) {
       if (!policy.tools.allow?.includes(toolName)) {
         return false;
       }
@@ -417,9 +387,7 @@ export function filterToolsByPolicy(
     if (requiredCap && !hasCapability(policy.capabilities, requiredCap)) {
       // In warn mode, still include but log
       if (config.enforcement === "warn") {
-        logger.warn(
-          `[security] Tool ${toolName} would be denied: requires ${requiredCap}`
-        );
+        logger.warn(`[security] Tool ${toolName} would be denied: requires ${requiredCap}`);
         return true;
       }
       return false;
@@ -467,9 +435,7 @@ export function sessionAllowsUntrusted(session: string): boolean {
   const config = getSecurityConfig();
   const accessPatterns = getSessionAccess(config, session);
   // Check if any pattern would allow untrusted
-  return accessPatterns.some(
-    (p) => p === "*" || p === "trust:untrusted"
-  );
+  return accessPatterns.some((p) => p === "*" || p === "trust:untrusted");
 }
 
 /**
@@ -500,7 +466,7 @@ export function getGatewayRules(session: string): ResolvedPolicy["forwardRules"]
 export function canSessionForward(
   sourceSession: string,
   targetSession: string,
-  source: InjectionSource
+  source: InjectionSource,
 ): PolicyCheckResult {
   const config = getSecurityConfig();
 
@@ -530,11 +496,7 @@ export function canSessionForward(
 /**
  * @deprecated Use canSessionForward instead
  */
-export function canGatewayForward(
-  gatewaySession: string,
-  targetSession: string,
-  action?: string
-): PolicyCheckResult {
+export function canGatewayForward(gatewaySession: string, targetSession: string, action?: string): PolicyCheckResult {
   const config = getSecurityConfig();
 
   // Legacy: check old gateway rules

@@ -7,157 +7,143 @@
  * - Layer 3: Sandbox (Where) - Docker isolation
  */
 
-// Export all types
+// Export context functions
 export {
-  // Trust levels
-  type TrustLevel,
-  TRUST_LEVEL_ORDER,
-  compareTrustLevel,
-  meetsTrustLevel,
-
-  // Capabilities
-  type Capability,
-  CAPABILITY_PROFILES,
-  hasCapability,
-  expandCapabilities,
-
-  // Injection source
-  type InjectionSourceType,
-  type InjectionSource,
-  DEFAULT_TRUST_BY_SOURCE,
-  createInjectionSource,
-
-  // Sandbox
-  type SandboxNetworkMode,
-  type SandboxConfig,
-  DEFAULT_SANDBOX_BY_TRUST,
-
-  // Policy
-  type ToolPolicy,
-  type SecurityPolicy,
-  type SecurityConfig,
-  DEFAULT_SECURITY_CONFIG,
-
-  // Session config (new)
-  type AccessPattern,
-  type SessionConfig,
-  type HookConfig,
-  matchesAccessPattern,
-  matchesAnyAccessPattern,
-  getSessionConfig,
-  getSessionAccess,
-
-  // Session indexable (transcript visibility in memory search)
-  DEFAULT_INDEXABLE_BY_TRUST,
-  getSessionIndexable,
-  canIndexSession,
-
-  // Events
-  type SecurityEventType,
-  type SecurityEvent,
-
-  // Tool mapping
-  TOOL_CAPABILITY_MAP,
-  getToolCapability,
-} from "./types.js";
-
-// Export policy functions
+  clearContext,
+  createApiContext,
+  createCliContext,
+  createCronContext,
+  createDaemonContext,
+  createP2PContext,
+  createP2PDiscoveryContext,
+  createPluginContext,
+  createSecurityContext,
+  getContext,
+  SecurityContext,
+  storeContext,
+  withSecurityContext,
+} from "./context.js";
+// Export forward functions
 export {
-  initSecurity,
-  getSecurityConfig,
-  saveSecurityConfig,
-  resolvePolicy,
-  checkSessionAccess,
-  checkCapability,
-  checkToolAccess,
-  checkSandboxRequired,
-  filterToolsByPolicy,
-  isEnforcementEnabled,
-  shouldLogSecurityEvent,
-  // New session access helpers
-  sessionAllowsUntrusted,
-  canSessionForward,
-  // Legacy (deprecated)
-  isGatewaySession,
-  getGatewayRules,
-  canGatewayForward,
-  type ResolvedPolicy,
-  type PolicyCheckResult,
-} from "./policy.js";
-
+  approveAndExecute,
+  executeForward,
+  type ForwardResult,
+  forwardRequest,
+  gatewayToolDefinitions,
+  handleGatewayForward,
+  routeThroughGateway,
+} from "./forward.js";
+// Export gateway functions
+export {
+  approveRequest,
+  canForwardTo,
+  completeRequest,
+  createForwardedContext,
+  createForwardRequest,
+  type ForwardRequest,
+  findGatewayForSource,
+  type GatewayForwardRules,
+  getForwardRules,
+  getPendingRequests,
+  isGateway,
+  queueForApproval,
+  rejectRequest,
+  requiresGateway,
+  validateForwardRequest,
+} from "./gateway.js";
 // Export hooks
 export {
-  type HookContext,
-  type PreInjectResult,
-  type PostInjectResult,
-  runPreInjectHooks,
-  runPostInjectHooks,
   addSourceMetadata,
   auditLogHook,
   createHookContext,
+  type HookContext,
+  type PostInjectResult,
+  type PreInjectResult,
   processInjection,
+  runPostInjectHooks,
+  runPreInjectHooks,
 } from "./hooks.js";
-
-// Export context functions
+// Export policy functions
 export {
-  SecurityContext,
-  createSecurityContext,
-  createCliContext,
-  createDaemonContext,
-  createPluginContext,
-  createCronContext,
-  createP2PContext,
-  createP2PDiscoveryContext,
-  createApiContext,
-  storeContext,
-  getContext,
-  clearContext,
-  withSecurityContext,
-} from "./context.js";
-
+  canGatewayForward,
+  canSessionForward,
+  checkCapability,
+  checkSandboxRequired,
+  checkSessionAccess,
+  checkToolAccess,
+  filterToolsByPolicy,
+  getGatewayRules,
+  getSecurityConfig,
+  initSecurity,
+  isEnforcementEnabled,
+  // Legacy (deprecated)
+  isGatewaySession,
+  type PolicyCheckResult,
+  type ResolvedPolicy,
+  resolvePolicy,
+  saveSecurityConfig,
+  // New session access helpers
+  sessionAllowsUntrusted,
+  shouldLogSecurityEvent,
+} from "./policy.js";
 // Export sandbox functions
 export {
-  isDockerAvailable,
-  isSandboxImageAvailable,
   buildSandboxImage,
-  createSandbox,
-  execInSandbox,
-  destroySandbox,
-  getSandboxStatus,
-  listSandboxes,
   cleanupAllSandboxes,
+  createSandbox,
+  destroySandbox,
+  execInSandbox,
   // New security-aware sandbox functions
   getSandboxForSession,
+  getSandboxStatus,
+  isDockerAvailable,
+  isSandboxImageAvailable,
   isSessionSandboxed,
+  listSandboxes,
   type SandboxContext,
 } from "./sandbox.js";
-
-// Export gateway functions
+// Export all types
 export {
-  isGateway,
-  getForwardRules,
-  canForwardTo,
-  createForwardRequest,
-  validateForwardRequest,
-  queueForApproval,
-  approveRequest,
-  rejectRequest,
-  completeRequest,
-  getPendingRequests,
-  createForwardedContext,
-  findGatewayForSource,
-  requiresGateway,
-  type ForwardRequest,
-  type GatewayForwardRules,
-} from "./gateway.js";
-
-// Export forward functions
-export {
-  forwardRequest,
-  executeForward,
-  approveAndExecute,
-  routeThroughGateway,
-  handleGatewayForward,
-  gatewayToolDefinitions,
-  type ForwardResult,
-} from "./forward.js";
+  // Session config (new)
+  type AccessPattern,
+  CAPABILITY_PROFILES,
+  // Capabilities
+  type Capability,
+  canIndexSession,
+  compareTrustLevel,
+  createInjectionSource,
+  // Session indexable (transcript visibility in memory search)
+  DEFAULT_INDEXABLE_BY_TRUST,
+  DEFAULT_SANDBOX_BY_TRUST,
+  DEFAULT_SECURITY_CONFIG,
+  DEFAULT_TRUST_BY_SOURCE,
+  expandCapabilities,
+  getSessionAccess,
+  getSessionConfig,
+  getSessionIndexable,
+  getToolCapability,
+  type HookConfig,
+  hasCapability,
+  type InjectionSource,
+  // Injection source
+  type InjectionSourceType,
+  matchesAccessPattern,
+  matchesAnyAccessPattern,
+  meetsTrustLevel,
+  type SandboxConfig,
+  // Sandbox
+  type SandboxNetworkMode,
+  type SecurityConfig,
+  type SecurityEvent,
+  // Events
+  type SecurityEventType,
+  type SecurityPolicy,
+  type SessionConfig,
+  // Tool mapping
+  TOOL_CAPABILITY_MAP,
+  // Policy
+  type ToolPolicy,
+  TRUST_LEVEL_ORDER,
+  // Trust levels
+  type TrustLevel,
+} from "./types.js";

@@ -36,10 +36,7 @@ export function compareTrustLevel(a: TrustLevel, b: TrustLevel): number {
 /**
  * Check if trust level meets minimum requirement
  */
-export function meetsTrustLevel(
-  actual: TrustLevel,
-  required: TrustLevel
-): boolean {
+export function meetsTrustLevel(actual: TrustLevel, required: TrustLevel): boolean {
   return TRUST_LEVEL_ORDER[actual] >= TRUST_LEVEL_ORDER[required];
 }
 
@@ -84,33 +81,15 @@ export const CAPABILITY_PROFILES: Record<string, Capability[]> = {
     "event.emit",
     "a2a.call",
   ],
-  "semi-trusted": [
-    "inject",
-    "inject.tools",
-    "session.history",
-    "memory.read",
-    "config.read",
-    "a2a.call",
-  ],
+  "semi-trusted": ["inject", "inject.tools", "session.history", "memory.read", "config.read", "a2a.call"],
   untrusted: ["inject"], // Can only send messages, no tools
-  gateway: [
-    "inject",
-    "inject.tools",
-    "cross.inject",
-    "cross.read",
-    "session.history",
-    "memory.read",
-    "a2a.call",
-  ],
+  gateway: ["inject", "inject.tools", "cross.inject", "cross.read", "session.history", "memory.read", "a2a.call"],
 };
 
 /**
  * Check if a capability set includes a specific capability
  */
-export function hasCapability(
-  capabilities: Capability[],
-  required: Capability
-): boolean {
+export function hasCapability(capabilities: Capability[], required: Capability): boolean {
   // Wildcard grants everything
   if (capabilities.includes("*")) {
     return true;
@@ -222,25 +201,24 @@ export interface InjectionSource {
 /**
  * Default trust levels by source type
  */
-export const DEFAULT_TRUST_BY_SOURCE: Record<InjectionSourceType, TrustLevel> =
-  {
-    cli: "owner",
-    daemon: "owner",
-    p2p: "untrusted", // P2P defaults to untrusted until granted
-    "p2p.discovery": "untrusted", // Discovered peers are always untrusted
-    plugin: "trusted", // Plugins are trusted by installation
-    cron: "owner", // Cron jobs run as owner
-    api: "semi-trusted", // API requires auth but limited scope
-    gateway: "semi-trusted", // Gateway forwarded requests
-    internal: "owner", // Internal calls are owner
-  };
+export const DEFAULT_TRUST_BY_SOURCE: Record<InjectionSourceType, TrustLevel> = {
+  cli: "owner",
+  daemon: "owner",
+  p2p: "untrusted", // P2P defaults to untrusted until granted
+  "p2p.discovery": "untrusted", // Discovered peers are always untrusted
+  plugin: "trusted", // Plugins are trusted by installation
+  cron: "owner", // Cron jobs run as owner
+  api: "semi-trusted", // API requires auth but limited scope
+  gateway: "semi-trusted", // Gateway forwarded requests
+  internal: "owner", // Internal calls are owner
+};
 
 /**
  * Create an injection source with defaults
  */
 export function createInjectionSource(
   type: InjectionSourceType,
-  overrides?: Partial<InjectionSource>
+  overrides?: Partial<InjectionSource>,
 ): InjectionSource {
   return {
     type,
@@ -539,7 +517,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       sandbox: { enabled: false, network: "host" },
     },
     trusted: {
-      capabilities: CAPABILITY_PROFILES["trusted"],
+      capabilities: CAPABILITY_PROFILES.trusted,
       sandbox: { enabled: false, network: "host" },
     },
     "semi-trusted": {
@@ -548,7 +526,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
       tools: { deny: ["config.write", "inject.exec"] },
     },
     untrusted: {
-      capabilities: CAPABILITY_PROFILES["untrusted"],
+      capabilities: CAPABILITY_PROFILES.untrusted,
       sandbox: { enabled: true, network: "none" },
       tools: { deny: ["*"] }, // No tools for untrusted
     },
@@ -699,10 +677,7 @@ export function getToolCapability(toolName: string): Capability | undefined {
  * - "p2p:<publicKey>" - matches specific P2P peer
  * - "type:<sourceType>" - matches by source type
  */
-export function matchesAccessPattern(
-  source: InjectionSource,
-  pattern: AccessPattern
-): boolean {
+export function matchesAccessPattern(source: InjectionSource, pattern: AccessPattern): boolean {
   // Wildcard matches everything
   if (pattern === "*") {
     return true;
@@ -741,30 +716,21 @@ export function matchesAccessPattern(
 /**
  * Check if an injection source matches any of the access patterns
  */
-export function matchesAnyAccessPattern(
-  source: InjectionSource,
-  patterns: AccessPattern[]
-): boolean {
+export function matchesAnyAccessPattern(source: InjectionSource, patterns: AccessPattern[]): boolean {
   return patterns.some((pattern) => matchesAccessPattern(source, pattern));
 }
 
 /**
  * Get the session configuration for a session
  */
-export function getSessionConfig(
-  config: SecurityConfig,
-  sessionName: string
-): SessionConfig | undefined {
+export function getSessionConfig(config: SecurityConfig, sessionName: string): SessionConfig | undefined {
   return config.sessions?.[sessionName];
 }
 
 /**
  * Get the effective access patterns for a session
  */
-export function getSessionAccess(
-  config: SecurityConfig,
-  sessionName: string
-): AccessPattern[] {
+export function getSessionAccess(config: SecurityConfig, sessionName: string): AccessPattern[] {
   const sessionConfig = getSessionConfig(config, sessionName);
 
   // Session-specific access rules take precedence
@@ -794,7 +760,7 @@ export function getSessionAccess(
 export function getSessionIndexable(
   config: SecurityConfig,
   sessionName: string,
-  trustLevel: TrustLevel = "owner"
+  trustLevel: TrustLevel = "owner",
 ): AccessPattern[] {
   const sessionConfig = getSessionConfig(config, sessionName);
 
@@ -815,11 +781,7 @@ export function getSessionIndexable(
  * @param patterns - The searcher's indexable patterns
  * @returns true if the searcher can see the target's transcripts
  */
-export function canIndexSession(
-  searcherSession: string,
-  targetSession: string,
-  patterns: AccessPattern[]
-): boolean {
+export function canIndexSession(searcherSession: string, targetSession: string, patterns: AccessPattern[]): boolean {
   for (const pattern of patterns) {
     // Wildcard matches all sessions
     if (pattern === "*") {

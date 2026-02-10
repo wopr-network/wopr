@@ -6,18 +6,18 @@
  */
 
 import { logger } from "../logger.js";
-import type { SandboxConfig as LegacySandboxConfig } from "./types.js";
-import { getContext } from "./context.js";
 import {
-  resolveSandboxContext,
+  execDocker,
   execInContainer,
   listRegistryEntries,
   pruneAllSandboxes,
-  removeSandboxContainer,
   removeRegistryEntry,
-  execDocker,
+  removeSandboxContainer,
+  resolveSandboxContext,
   type SandboxContext,
 } from "../sandbox/index.js";
+import { getContext } from "./context.js";
+import type { SandboxConfig as LegacySandboxConfig } from "./types.js";
 
 // Re-export new sandbox types
 export type { SandboxContext } from "../sandbox/index.js";
@@ -29,9 +29,7 @@ export type { SandboxContext } from "../sandbox/index.js";
 /**
  * Resolve sandbox context for a session based on its security context.
  */
-export async function getSandboxForSession(
-  sessionName: string
-): Promise<SandboxContext | null> {
+export async function getSandboxForSession(sessionName: string): Promise<SandboxContext | null> {
   // Get the security context for this session
   const ctx = getContext(sessionName);
   const trustLevel = ctx?.source?.trustLevel ?? "owner";
@@ -54,7 +52,7 @@ export async function execInSandbox(
     timeout?: number;
     workDir?: string;
     env?: Record<string, string>;
-  }
+  },
 ): Promise<{ stdout: string; stderr: string; exitCode: number } | null> {
   const sandbox = await getSandboxForSession(sessionName);
   if (!sandbox) {
@@ -108,7 +106,7 @@ export async function isSandboxImageAvailable(): Promise<boolean> {
 /**
  * Build the sandbox Docker image
  */
-export async function buildSandboxImage(force = false): Promise<void> {
+export async function buildSandboxImage(_force = false): Promise<void> {
   const { ensureDockerImage, DEFAULT_SANDBOX_IMAGE } = await import("../sandbox/index.js");
   await ensureDockerImage(DEFAULT_SANDBOX_IMAGE);
 }
@@ -118,8 +116,8 @@ export async function buildSandboxImage(force = false): Promise<void> {
  */
 export async function createSandbox(
   sessionName: string,
-  config: LegacySandboxConfig,
-  workspacePath?: string
+  _config: LegacySandboxConfig,
+  _workspacePath?: string,
 ): Promise<{ containerId: string; sessionName: string; status: string }> {
   const sandbox = await getSandboxForSession(sessionName);
   if (!sandbox) {
@@ -149,7 +147,7 @@ export async function destroySandbox(sessionName: string): Promise<void> {
  * Get sandbox status (legacy API)
  */
 export async function getSandboxStatus(
-  sessionName: string
+  sessionName: string,
 ): Promise<{ containerId: string; sessionName: string; status: string } | null> {
   const sandbox = await getSandboxForSession(sessionName);
   if (!sandbox) {
@@ -226,13 +224,7 @@ export function generateSeccompProfile(): string {
       },
       // Block dangerous system calls
       {
-        names: [
-          "reboot",
-          "sethostname",
-          "setdomainname",
-          "kexec_load",
-          "kexec_file_load",
-        ],
+        names: ["reboot", "sethostname", "setdomainname", "kexec_load", "kexec_file_load"],
         action: "SCMP_ACT_ERRNO",
         args: [],
       },
@@ -243,10 +235,7 @@ export function generateSeccompProfile(): string {
 }
 
 // Keep MCP socket bridge placeholder for future
-export async function createMcpSocketBridge(
-  sessionName: string,
-  socketPath: string
-): Promise<void> {
+export async function createMcpSocketBridge(_sessionName: string, socketPath: string): Promise<void> {
   logger.info(`[sandbox] MCP socket bridge placeholder at ${socketPath}`);
   // TODO: Implement full MCP socket bridge
 }

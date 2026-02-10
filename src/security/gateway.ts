@@ -12,19 +12,9 @@
  */
 
 import { logger } from "../logger.js";
-import {
-  type InjectionSource,
-  type TrustLevel,
-  type Capability,
-  createInjectionSource,
-} from "./types.js";
-import {
-  getSecurityConfig,
-  isGatewaySession,
-  getGatewayRules,
-  canGatewayForward,
-} from "./policy.js";
-import { SecurityContext, createSecurityContext } from "./context.js";
+import { createSecurityContext, type SecurityContext } from "./context.js";
+import { canGatewayForward, getGatewayRules, getSecurityConfig, isGatewaySession } from "./policy.js";
+import { createInjectionSource, type InjectionSource } from "./types.js";
 
 // ============================================================================
 // Gateway Configuration
@@ -92,8 +82,7 @@ export interface ForwardRequest {
 const pendingRequests: Map<string, ForwardRequest> = new Map();
 
 /** Rate limit tracking */
-const rateLimitTracking: Map<string, { count: number; resetAt: number }> =
-  new Map();
+const rateLimitTracking: Map<string, { count: number; resetAt: number }> = new Map();
 
 // ============================================================================
 // Gateway Functions
@@ -109,9 +98,7 @@ export function isGateway(sessionName: string): boolean {
 /**
  * Get the forward rules for a gateway session
  */
-export function getForwardRules(
-  sessionName: string
-): GatewayForwardRules | null {
+export function getForwardRules(sessionName: string): GatewayForwardRules | null {
   const rules = getGatewayRules(sessionName);
   return rules ?? null;
 }
@@ -119,10 +106,7 @@ export function getForwardRules(
 /**
  * Check if a gateway can forward to a target session
  */
-export function canForwardTo(
-  gatewaySession: string,
-  targetSession: string
-): boolean {
+export function canForwardTo(gatewaySession: string, targetSession: string): boolean {
   const result = canGatewayForward(gatewaySession, targetSession);
   return result.allowed;
 }
@@ -135,7 +119,7 @@ export function createForwardRequest(
   targetSession: string,
   message: string,
   originalSource: InjectionSource,
-  actionType?: string
+  actionType?: string,
 ): ForwardRequest {
   const requestId = generateRequestId();
 
@@ -158,7 +142,7 @@ export function createForwardRequest(
  */
 export function validateForwardRequest(
   request: ForwardRequest,
-  gatewayContext: SecurityContext
+  gatewayContext: SecurityContext,
 ): { valid: boolean; reason?: string } {
   // Check gateway has forward capability
   if (!gatewayContext.canForward()) {
@@ -228,18 +212,21 @@ export function queueForApproval(request: ForwardRequest): void {
 
   logger.info(
     `[gateway] Request ${request.requestId} queued for approval: ` +
-      `${request.sourceSession} -> ${request.targetSession}`
+      `${request.sourceSession} -> ${request.targetSession}`,
   );
 
   // Set expiration (requests expire after 5 minutes)
-  setTimeout(() => {
-    const req = pendingRequests.get(request.requestId);
-    if (req && req.status === "pending") {
-      req.status = "expired";
-      pendingRequests.delete(request.requestId);
-      logger.info(`[gateway] Request ${request.requestId} expired`);
-    }
-  }, 5 * 60 * 1000);
+  setTimeout(
+    () => {
+      const req = pendingRequests.get(request.requestId);
+      if (req && req.status === "pending") {
+        req.status = "expired";
+        pendingRequests.delete(request.requestId);
+        logger.info(`[gateway] Request ${request.requestId} expired`);
+      }
+    },
+    5 * 60 * 1000,
+  );
 }
 
 /**
@@ -260,10 +247,7 @@ export function approveRequest(requestId: string): ForwardRequest | null {
 /**
  * Reject a pending forward request
  */
-export function rejectRequest(
-  requestId: string,
-  reason: string
-): ForwardRequest | null {
+export function rejectRequest(requestId: string, reason: string): ForwardRequest | null {
   const request = pendingRequests.get(requestId);
   if (!request || request.status !== "pending") {
     return null;
@@ -281,10 +265,7 @@ export function rejectRequest(
 /**
  * Complete a forward request with response
  */
-export function completeRequest(
-  requestId: string,
-  response: string
-): ForwardRequest | null {
+export function completeRequest(requestId: string, response: string): ForwardRequest | null {
   const request = pendingRequests.get(requestId);
   if (!request) {
     return null;
@@ -320,9 +301,7 @@ export function getPendingRequests(gatewaySession?: string): ForwardRequest[] {
  * - Is semi-trusted (reduced from original trust)
  * - Carries the original requester identity
  */
-export function createForwardedContext(
-  request: ForwardRequest
-): SecurityContext {
+export function createForwardedContext(request: ForwardRequest): SecurityContext {
   const forwardedSource = createInjectionSource("gateway", {
     trustLevel: "semi-trusted",
     identity: {
@@ -337,10 +316,7 @@ export function createForwardedContext(
 /**
  * Determine the appropriate gateway for an untrusted source
  */
-export function findGatewayForSource(
-  source: InjectionSource,
-  requestedSession: string
-): string | null {
+export function findGatewayForSource(_source: InjectionSource, requestedSession: string): string | null {
   const config = getSecurityConfig();
   const gateways = config.gateways?.sessions ?? [];
 
@@ -357,10 +333,7 @@ export function findGatewayForSource(
 /**
  * Check if a source must go through a gateway
  */
-export function requiresGateway(
-  source: InjectionSource,
-  targetSession: string
-): boolean {
+export function requiresGateway(source: InjectionSource, targetSession: string): boolean {
   // Owner and trusted sources don't need gateway
   if (source.trustLevel === "owner" || source.trustLevel === "trusted") {
     return false;
@@ -402,10 +375,7 @@ export function cleanupExpiredRequests(): void {
   const expireTime = 5 * 60 * 1000; // 5 minutes
 
   for (const [requestId, request] of pendingRequests) {
-    if (
-      request.status === "pending" &&
-      now - request.timestamp > expireTime
-    ) {
+    if (request.status === "pending" && now - request.timestamp > expireTime) {
       request.status = "expired";
       pendingRequests.delete(requestId);
     }
