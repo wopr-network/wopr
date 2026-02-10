@@ -435,6 +435,11 @@ export class MemoryIndexManager {
   }
 
   private async handleFilesChanged(event: { changes: MemoryFileChange[] }): Promise<void> {
+    const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    const totalChunks = event.changes.reduce((sum, c) => sum + (c.chunks?.length || 0), 0);
+    logger.debug(
+      `[handleFilesChanged] ${event.changes.length} changes, ${totalChunks} total chunks (heap=${heapMB()}MB)`,
+    );
     for (const change of event.changes) {
       if (change.action === "delete") {
         this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(change.path, change.source);
@@ -443,7 +448,7 @@ export class MemoryIndexManager {
           try {
             this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`).run(change.path, change.source);
           } catch (err) {
-            console.warn(`[memory] FTS delete failed for ${change.path}: ${err}`);
+            logger.warn(`[memory] FTS delete failed for ${change.path}: ${err}`);
           }
         }
         continue;
@@ -458,7 +463,7 @@ export class MemoryIndexManager {
         try {
           this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`).run(change.path, change.source);
         } catch (err) {
-          console.warn(`[memory] FTS delete failed for ${change.path}: ${err}`);
+          logger.warn(`[memory] FTS delete failed for ${change.path}: ${err}`);
         }
       }
 
@@ -492,15 +497,7 @@ export class MemoryIndexManager {
             now,
           );
           if (insertFts) {
-            insertFts.run(
-              chunk.text,
-              chunkId,
-              change.path,
-              change.source,
-              "fts5",
-              chunk.startLine,
-              chunk.endLine,
-            );
+            insertFts.run(chunk.text, chunkId, change.path, change.source, "fts5", chunk.startLine, chunk.endLine);
           }
         }
 

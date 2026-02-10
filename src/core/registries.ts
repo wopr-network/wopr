@@ -43,6 +43,7 @@ export async function fetchRegistryIndex(url: string, searchQuery?: string): Pro
     return await fetchGitHubSkills(owner, repo, path, searchQuery);
   }
 
+  // Parse URL to check if the host is exactly github.com
   try {
     const parsed = new URL(url);
     if (parsed.hostname === "github.com" && !url.includes("/raw/")) {
