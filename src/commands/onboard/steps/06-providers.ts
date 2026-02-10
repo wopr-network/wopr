@@ -99,9 +99,6 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
 
   // If plugin exposes auth methods, let user choose
   if (authMethods.length > 0) {
-    const _availableMethods = authMethods.filter((m: any) => m.available);
-    const _unavailableMethods = authMethods.filter((m: any) => !m.available);
-
     // In quickstart, auto-select the active method if credentials exist
     if (isQuickstart && hasCredentials) {
       selectedAuthMethod = activeAuth;

@@ -7,6 +7,10 @@ import { confirm, multiselect, note, pc, spinner } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
 export const voiceStep: OnboardStep = async (ctx: OnboardContext) => {
+  if (ctx.opts.skipPlugins) {
+    return {};
+  }
+
   const isQuickstart = ctx.opts.flow === "quickstart";
 
   // Ask if user wants voice features
@@ -158,8 +162,8 @@ export const voiceStep: OnboardStep = async (ctx: OnboardContext) => {
 
     s.start(`Installing ${pluginName}...`);
     try {
-      // Install from GitHub if we have a URL, otherwise try npm
-      const source = plugin.url ? `github:TSavo/${pluginName}` : pluginName;
+      // Install from GitHub if we have a URL, otherwise use npm package name
+      const source = (plugin as any).url || (plugin as any).npm || pluginName;
       await installPlugin(source);
       installed.push(pluginName);
       s.stop(`${pluginName} installed`);

@@ -3,7 +3,7 @@
  */
 
 import { config } from "../../../core/config.js";
-import { applyWizardMetadata, openBrowser } from "../helpers.js";
+import { DEFAULT_WORKSPACE, applyWizardMetadata, openBrowser } from "../helpers.js";
 import { confirm, note, outro, pc } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
@@ -42,7 +42,6 @@ export const finalizeStep: OnboardStep = async (ctx: OnboardContext) => {
   const port = finalConfig.gateway?.port || 3000;
   const token = finalConfig.gateway?.auth?.token;
   const webUiUrl = `http://127.0.0.1:${port}`;
-  const authedUrl = token ? `${webUiUrl}?token=${encodeURIComponent(token)}` : webUiUrl;
 
   // Build sandbox status
   const sandboxStatus = finalConfig.sandbox?.enabled
@@ -65,12 +64,12 @@ export const finalizeStep: OnboardStep = async (ctx: OnboardContext) => {
       `${pc.green("✓")} Gateway configured`,
       "",
       `Web UI: ${webUiUrl}`,
-      token ? `Web UI (with token): ${authedUrl}` : "",
+      token ? pc.dim("Auth token will be required on first visit.") : "",
       "",
       pc.dim("Next steps:"),
       "  • Open the Web UI to start chatting",
-      "  • Edit ~/.wopr/workspace/IDENTITY.md to customize your agent",
-      "  • Edit ~/.wopr/workspace/SOUL.md to set boundaries",
+      `  • Edit ${finalConfig.workspace || DEFAULT_WORKSPACE}/IDENTITY.md to customize your agent`,
+      `  • Edit ${finalConfig.workspace || DEFAULT_WORKSPACE}/SOUL.md to set boundaries`,
     ]
       .filter(Boolean)
       .join("\n"),
@@ -80,7 +79,7 @@ export const finalizeStep: OnboardStep = async (ctx: OnboardContext) => {
   // Check for BOOTSTRAP.md
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
-  const bootstrapPath = path.join(finalConfig.workspace || "~/.wopr/workspace", "BOOTSTRAP.md");
+  const bootstrapPath = path.join(finalConfig.workspace || DEFAULT_WORKSPACE, "BOOTSTRAP.md");
 
   let hasBootstrap = false;
   try {
@@ -116,12 +115,12 @@ export const finalizeStep: OnboardStep = async (ctx: OnboardContext) => {
     });
 
     if (openNow) {
-      const opened = await openBrowser(authedUrl);
+      const opened = await openBrowser(webUiUrl);
       if (opened) {
         ctx.runtime.log("Browser opened!");
       } else {
         await note(
-          ["Could not open browser automatically.", "", `Please open: ${authedUrl}`].join("\n"),
+          ["Could not open browser automatically.", "", `Please open: ${webUiUrl}`].join("\n"),
           "Open Web UI",
         );
       }

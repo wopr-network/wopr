@@ -117,6 +117,12 @@ export async function onboardCommand(args: string[]): Promise<void> {
       case "--skip-plugins":
         opts.skipPlugins = true;
         break;
+      case "--skip-external":
+        opts.skipExternal = true;
+        break;
+      case "--skip-github":
+        opts.skipGithub = true;
+        break;
       case "--skip-daemon":
         opts.skipDaemon = true;
         break;
@@ -157,6 +163,8 @@ Options:
       --skip-channels   Skip channel/plugin setup
       --skip-skills     Skip skills setup
       --skip-plugins    Skip plugin installation
+      --skip-external   Skip external access setup
+      --skip-github     Skip GitHub integration
       --skip-daemon     Skip daemon/service setup
       --skip-ui         Skip WebUI open prompts
       --accept-risk     Accept security warning automatically

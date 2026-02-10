@@ -4,13 +4,14 @@
  * Sets up external webhook access via Tailscale Funnel.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { confirm, note, pc, spinner } from "../prompts.js";
+import { DEFAULT_PORT } from "../helpers.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
-function exec(cmd: string): { stdout: string; success: boolean } {
+function execFile(cmd: string, args: string[]): { stdout: string; success: boolean } {
   try {
-    const stdout = execSync(cmd, { encoding: "utf-8", timeout: 10000 }).trim();
+    const stdout = execFileSync(cmd, args, { encoding: "utf-8", timeout: 10000 }).trim();
     return { stdout, success: true };
   } catch {
     return { stdout: "", success: false };
@@ -19,13 +20,13 @@ function exec(cmd: string): { stdout: string; success: boolean } {
 
 function checkTailscale(): { installed: boolean; connected: boolean; hostname?: string } {
   // Check if installed
-  const which = exec("which tailscale");
+  const which = execFile("which", ["tailscale"]);
   if (!which.success) {
     return { installed: false, connected: false };
   }
 
   // Check if connected
-  const status = exec("tailscale status --json");
+  const status = execFile("tailscale", ["status", "--json"]);
   if (!status.success) {
     return { installed: true, connected: false };
   }
@@ -42,7 +43,11 @@ function checkTailscale(): { installed: boolean; connected: boolean; hostname?: 
   }
 }
 
-export const externalStep: OnboardStep = async (_ctx: OnboardContext) => {
+export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
+  if (ctx.opts.skipExternal) {
+    return {};
+  }
+
   // Skip if user doesn't want external access
   const wantExternal = await confirm({
     message: "Set up external webhook access (for GitHub, etc)?",
@@ -51,7 +56,7 @@ export const externalStep: OnboardStep = async (_ctx: OnboardContext) => {
 
   if (!wantExternal) {
     await note(
-      ["Skipping external access setup.", "", "You can set this up later:", pc.cyan("  wopr funnel expose 7438")].join(
+      ["Skipping external access setup.", "", "You can set this up later:", pc.cyan("  wopr funnel expose")].join(
         "\n",
       ),
       "External Access",
@@ -108,7 +113,7 @@ export const externalStep: OnboardStep = async (_ctx: OnboardContext) => {
   s.start("Enabling Tailscale Funnel...");
 
   // Check if funnel is enabled in ACL
-  const funnelTest = exec("tailscale funnel status");
+  const funnelTest = execFile("tailscale", ["funnel", "status"]);
   if (!funnelTest.success || funnelTest.stdout.includes("not enabled")) {
     s.stop("Funnel not enabled");
     await note(
@@ -131,9 +136,9 @@ export const externalStep: OnboardStep = async (_ctx: OnboardContext) => {
     return {};
   }
 
-  // Start funnel for webhook port
-  const webhookPort = 7438;
-  const funnelResult = exec(`tailscale funnel ${webhookPort}`);
+  // Start funnel for the gateway port
+  const webhookPort = ctx.nextConfig.gateway?.port || DEFAULT_PORT;
+  const funnelResult = execFile("tailscale", ["funnel", String(webhookPort)]);
   if (!funnelResult.success) {
     s.stop("Failed to enable funnel");
     await note(

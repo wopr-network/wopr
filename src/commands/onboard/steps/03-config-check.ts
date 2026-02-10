@@ -13,7 +13,13 @@ export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
   const currentConfig = config.get() as unknown as OnboardConfig;
 
   // Check if we have meaningful config
-  const hasExisting = currentConfig.provider?.primary || currentConfig.workspace || currentConfig.gateway?.port;
+  const hasExisting =
+    currentConfig.provider?.primary ||
+    currentConfig.workspace ||
+    currentConfig.gateway?.port ||
+    (currentConfig.channels && currentConfig.channels.length > 0) ||
+    (currentConfig.skills && currentConfig.skills.length > 0) ||
+    (currentConfig.plugins && currentConfig.plugins.length > 0);
 
   if (!hasExisting) {
     await note("No existing configuration found. Starting fresh setup.", "Configuration");

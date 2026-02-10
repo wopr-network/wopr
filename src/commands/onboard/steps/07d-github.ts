@@ -4,14 +4,14 @@
  * Sets up GitHub webhook routing for PR automation.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { confirm, note, pc, select, spinner, text } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
-function exec(cmd: string): { stdout: string; success: boolean } {
+function execFile(cmd: string, args: string[]): { stdout: string; success: boolean } {
   try {
-    const stdout = execSync(cmd, { encoding: "utf-8", timeout: 30000 }).trim();
+    const stdout = execFileSync(cmd, args, { encoding: "utf-8", timeout: 30000 }).trim();
     return { stdout, success: true };
   } catch (err: any) {
     return { stdout: err.stderr || err.message || "", success: false };
@@ -19,17 +19,21 @@ function exec(cmd: string): { stdout: string; success: boolean } {
 }
 
 function checkGhAuth(): boolean {
-  const result = exec("gh auth status");
+  const result = execFile("gh", ["auth", "status"]);
   return result.success;
 }
 
 function getGhOrgs(): string[] {
-  const result = exec("gh api user/orgs --jq '.[].login'");
+  const result = execFile("gh", ["api", "user/orgs", "--jq", ".[].login"]);
   if (!result.success) return [];
   return result.stdout.split("\n").filter(Boolean);
 }
 
 export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
+  if (ctx.opts.skipGithub) {
+    return {};
+  }
+
   // Check if external access is configured
   const external = (ctx.nextConfig as any).external;
   if (!external?.webhookUrl) {
@@ -65,7 +69,7 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   const s = await spinner();
   s.start("Checking GitHub CLI...");
 
-  const ghInstalled = exec("which gh").success;
+  const ghInstalled = execFile("which", ["gh"]).success;
   if (!ghInstalled) {
     s.stop("GitHub CLI not installed");
     await note(
@@ -154,23 +158,24 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   const webhookUrl = `${external.webhookUrl}/github`;
   const webhookSecret = randomBytes(32).toString("hex");
 
-  const createCmd = `gh api orgs/${selectedOrg}/hooks -X POST \
-    -f name=web \
-    -f active=true \
-    -f 'config[url]=${webhookUrl}' \
-    -f 'config[content_type]=json' \
-    -f 'config[secret]=${webhookSecret}' \
-    -f 'events[]=pull_request' \
-    -f 'events[]=pull_request_review' \
-    --jq '.id'`;
-
-  const createResult = exec(createCmd);
+  const createResult = execFile("gh", [
+    "api", `orgs/${selectedOrg}/hooks`,
+    "-X", "POST",
+    "-f", "name=web",
+    "-f", "active=true",
+    "-f", `config[url]=${webhookUrl}`,
+    "-f", "config[content_type]=json",
+    "-f", `config[secret]=${webhookSecret}`,
+    "-f", "events[]=pull_request",
+    "-f", "events[]=pull_request_review",
+    "--jq", ".id",
+  ]);
 
   if (!createResult.success) {
     s.stop("Webhook creation failed");
 
     // Check if it already exists
-    const listResult = exec(`gh api orgs/${selectedOrg}/hooks --jq '.[].config.url'`);
+    const listResult = execFile("gh", ["api", `orgs/${selectedOrg}/hooks`, "--jq", ".[].config.url"]);
     if (listResult.success && listResult.stdout.includes(webhookUrl)) {
       await note(
         [
