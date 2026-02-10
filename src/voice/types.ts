@@ -10,21 +10,21 @@
 // =============================================================================
 
 export type AudioFormat =
-  | "pcm_s16le"      // 16-bit signed little-endian PCM
-  | "pcm_f32le"      // 32-bit float little-endian PCM
-  | "opus"           // Opus codec (Discord, Telegram)
-  | "ogg_opus"       // Ogg container with Opus
-  | "mp3"            // MP3
-  | "wav"            // WAV container
-  | "webm_opus"      // WebM container with Opus
-  | "mulaw"          // G.711 μ-law (Twilio)
-  | "alaw";          // G.711 A-law
+  | "pcm_s16le" // 16-bit signed little-endian PCM
+  | "pcm_f32le" // 32-bit float little-endian PCM
+  | "opus" // Opus codec (Discord, Telegram)
+  | "ogg_opus" // Ogg container with Opus
+  | "mp3" // MP3
+  | "wav" // WAV container
+  | "webm_opus" // WebM container with Opus
+  | "mulaw" // G.711 μ-law (Twilio)
+  | "alaw"; // G.711 A-law
 
 export interface AudioConfig {
   format: AudioFormat;
-  sampleRate: number;    // e.g., 16000, 24000, 48000
-  channels: number;      // 1 = mono, 2 = stereo
-  bitDepth?: number;     // For PCM: 16, 32
+  sampleRate: number; // e.g., 16000, 24000, 48000
+  channels: number; // 1 = mono, 2 = stereo
+  bitDepth?: number; // For PCM: 16, 32
 }
 
 // =============================================================================
@@ -82,13 +82,13 @@ export interface VoicePluginRequirements {
  * ```
  */
 export interface VoicePluginMetadata {
-  name: string;                    // "whisper-local", "elevenlabs"
-  version: string;                 // "1.0.0"
+  name: string; // "whisper-local", "elevenlabs"
+  version: string; // "1.0.0"
   type: "stt" | "tts";
   description: string;
-  capabilities: string[];          // ["streaming", "batch", "voice-selection"]
-  local: boolean;                  // true = no API calls, runs locally
-  docker?: boolean;                // true = runs in docker container
+  capabilities: string[]; // ["streaming", "batch", "voice-selection"]
+  local: boolean; // true = no API calls, runs locally
+  docker?: boolean; // true = runs in docker container
 
   /** What this plugin requires to run */
   requires?: VoicePluginRequirements;
@@ -114,15 +114,15 @@ export interface STTTranscriptChunk {
   text: string;
   isFinal: boolean;
   confidence?: number;
-  timestamp?: number;              // ms from start of audio
+  timestamp?: number; // ms from start of audio
 }
 
 export interface STTOptions {
-  language?: string;               // "en", "es", "auto"
+  language?: string; // "en", "es", "auto"
   format?: AudioFormat;
   sampleRate?: number;
-  vadEnabled?: boolean;            // Voice Activity Detection
-  vadSilenceMs?: number;           // Silence duration to end utterance
+  vadEnabled?: boolean; // Voice Activity Detection
+  vadSilenceMs?: number; // Silence duration to end utterance
   wordTimestamps?: boolean;
 }
 
@@ -167,20 +167,20 @@ export interface STTProvider {
 // =============================================================================
 
 export interface Voice {
-  id: string;                      // "en_US-lessac-medium", "alloy"
-  name: string;                    // "Lessac (US English)"
-  language?: string;               // "en-US"
+  id: string; // "en_US-lessac-medium", "alloy"
+  name: string; // "Lessac (US English)"
+  language?: string; // "en-US"
   gender?: "male" | "female" | "neutral";
   description?: string;
 }
 
 export interface TTSOptions {
-  voice?: string;                  // Voice ID
-  speed?: number;                  // 0.5 - 2.0
-  pitch?: number;                  // -1.0 to 1.0
+  voice?: string; // Voice ID
+  speed?: number; // 0.5 - 2.0
+  pitch?: number; // -1.0 to 1.0
   format?: AudioFormat;
   sampleRate?: number;
-  instructions?: string;           // Voice style instructions (OpenAI gpt-4o-mini-tts)
+  instructions?: string; // Voice style instructions (OpenAI gpt-4o-mini-tts)
 }
 
 export interface TTSSynthesisResult {
