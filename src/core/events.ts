@@ -347,9 +347,10 @@ class WOPREventBusImpl implements WOPREventBus {
     }
 
     // Wildcard listeners — always concurrent (observation only, no mutation)
+    // Shallow-copy payload so wildcard handlers can't mutate the live object
     const wildcardEvent: WOPREvent = {
       type: eventName,
-      payload,
+      payload: typeof payload === "object" && payload !== null ? { ...payload } : payload,
       timestamp: meta.timestamp,
       source,
     };

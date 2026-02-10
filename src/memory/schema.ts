@@ -1,5 +1,6 @@
 // SQLite schema for memory indexing - copied from OpenClaw
 import type { DatabaseSync } from "node:sqlite";
+import { logger } from "../logger.js";
 
 export function ensureMemoryIndexSchema(params: {
   db: DatabaseSync;
@@ -96,7 +97,8 @@ function migrateFilesCompositePK(db: DatabaseSync): void {
              SELECT path, source, hash, mtime, size FROM files_old`);
     db.exec(`DROP TABLE files_old`);
     db.exec(`COMMIT`);
-  } catch {
+  } catch (err) {
+    logger.error("[schema] files composite PK migration failed:", err);
     try { db.exec(`ROLLBACK`); } catch {}
   }
 }
