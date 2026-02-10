@@ -3,14 +3,15 @@
  *
  * Sets up GitHub webhook routing for PR automation.
  */
-import { confirm, note, spinner, text, select, pc } from "../prompts.js";
-import { execSync } from "node:child_process";
+
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { confirm, note, pc, select, spinner, text } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
-function exec(cmd: string): { stdout: string; success: boolean } {
+function execFile(cmd: string, args: string[]): { stdout: string; success: boolean } {
   try {
-    const stdout = execSync(cmd, { encoding: "utf-8", timeout: 30000 }).trim();
+    const stdout = execFileSync(cmd, args, { encoding: "utf-8", timeout: 30000 }).trim();
     return { stdout, success: true };
   } catch (err: any) {
     return { stdout: err.stderr || err.message || "", success: false };
@@ -18,26 +19,33 @@ function exec(cmd: string): { stdout: string; success: boolean } {
 }
 
 function checkGhAuth(): boolean {
-  const result = exec("gh auth status");
+  const result = execFile("gh", ["auth", "status"]);
   return result.success;
 }
 
 function getGhOrgs(): string[] {
-  const result = exec("gh api user/orgs --jq '.[].login'");
+  const result = execFile("gh", ["api", "user/orgs", "--jq", ".[].login"]);
   if (!result.success) return [];
   return result.stdout.split("\n").filter(Boolean);
 }
 
 export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
+  if (ctx.opts.skipGithub) {
+    return {};
+  }
+
   // Check if external access is configured
   const external = (ctx.nextConfig as any).external;
   if (!external?.webhookUrl) {
-    await note([
-      "Skipping GitHub integration.",
-      "",
-      "GitHub webhooks require external access (Tailscale Funnel).",
-      "Set up external access first, then re-run this wizard.",
-    ].join("\n"), "GitHub");
+    await note(
+      [
+        "Skipping GitHub integration.",
+        "",
+        "GitHub webhooks require external access (Tailscale Funnel).",
+        "Set up external access first, then re-run this wizard.",
+      ].join("\n"),
+      "GitHub",
+    );
     return {};
   }
 
@@ -48,12 +56,12 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   });
 
   if (!wantGithub) {
-    await note([
-      "Skipping GitHub integration.",
-      "",
-      "You can set this up later:",
-      pc.cyan("  wopr github setup <org>"),
-    ].join("\n"), "GitHub");
+    await note(
+      ["Skipping GitHub integration.", "", "You can set this up later:", pc.cyan("  wopr github setup <org>")].join(
+        "\n",
+      ),
+      "GitHub",
+    );
     return {};
   }
 
@@ -61,36 +69,42 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   const s = await spinner();
   s.start("Checking GitHub CLI...");
 
-  const ghInstalled = exec("which gh").success;
+  const ghInstalled = execFile("which", ["gh"]).success;
   if (!ghInstalled) {
     s.stop("GitHub CLI not installed");
-    await note([
-      "GitHub CLI (gh) is required for webhook setup.",
-      "",
-      "Install it:",
-      pc.cyan("  brew install gh       # macOS"),
-      pc.cyan("  apt install gh        # Debian/Ubuntu"),
-      pc.cyan("  winget install gh     # Windows"),
-      "",
-      "Then authenticate:",
-      pc.cyan("  gh auth login"),
-      "",
-      "And re-run this wizard.",
-    ].join("\n"), "GitHub CLI Required");
+    await note(
+      [
+        "GitHub CLI (gh) is required for webhook setup.",
+        "",
+        "Install it:",
+        pc.cyan("  brew install gh       # macOS"),
+        pc.cyan("  apt install gh        # Debian/Ubuntu"),
+        pc.cyan("  winget install gh     # Windows"),
+        "",
+        "Then authenticate:",
+        pc.cyan("  gh auth login"),
+        "",
+        "And re-run this wizard.",
+      ].join("\n"),
+      "GitHub CLI Required",
+    );
     return {};
   }
 
   const ghAuthed = checkGhAuth();
   if (!ghAuthed) {
     s.stop("GitHub CLI not authenticated");
-    await note([
-      "GitHub CLI needs to be authenticated.",
-      "",
-      "Run:",
-      pc.cyan("  gh auth login"),
-      "",
-      "Then re-run this wizard.",
-    ].join("\n"), "GitHub Auth Required");
+    await note(
+      [
+        "GitHub CLI needs to be authenticated.",
+        "",
+        "Run:",
+        pc.cyan("  gh auth login"),
+        "",
+        "Then re-run this wizard.",
+      ].join("\n"),
+      "GitHub Auth Required",
+    );
     return {};
   }
 
@@ -127,7 +141,7 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   } else {
     selectedOrg = await select({
       message: "Select organization to configure:",
-      options: orgs.map(o => ({ value: o, label: o })),
+      options: orgs.map((o) => ({ value: o, label: o })),
     });
   }
 
@@ -144,41 +158,48 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   const webhookUrl = `${external.webhookUrl}/github`;
   const webhookSecret = randomBytes(32).toString("hex");
 
-  const createCmd = `gh api orgs/${selectedOrg}/hooks -X POST \
-    -f name=web \
-    -f active=true \
-    -f 'config[url]=${webhookUrl}' \
-    -f 'config[content_type]=json' \
-    -f 'config[secret]=${webhookSecret}' \
-    -f 'events[]=pull_request' \
-    -f 'events[]=pull_request_review' \
-    --jq '.id'`;
-
-  const createResult = exec(createCmd);
+  const createResult = execFile("gh", [
+    "api", `orgs/${selectedOrg}/hooks`,
+    "-X", "POST",
+    "-f", "name=web",
+    "-f", "active=true",
+    "-f", `config[url]=${webhookUrl}`,
+    "-f", "config[content_type]=json",
+    "-f", `config[secret]=${webhookSecret}`,
+    "-f", "events[]=pull_request",
+    "-f", "events[]=pull_request_review",
+    "--jq", ".id",
+  ]);
 
   if (!createResult.success) {
     s.stop("Webhook creation failed");
 
     // Check if it already exists
-    const listResult = exec(`gh api orgs/${selectedOrg}/hooks --jq '.[].config.url'`);
+    const listResult = execFile("gh", ["api", `orgs/${selectedOrg}/hooks`, "--jq", ".[].config.url"]);
     if (listResult.success && listResult.stdout.includes(webhookUrl)) {
-      await note([
-        `Webhook already exists for ${selectedOrg}!`,
-        "",
-        `URL: ${webhookUrl}`,
-        "",
-        "PRs will be routed to the configured session.",
-      ].join("\n"), "GitHub Webhook");
+      await note(
+        [
+          `Webhook already exists for ${selectedOrg}!`,
+          "",
+          `URL: ${webhookUrl}`,
+          "",
+          "PRs will be routed to the configured session.",
+        ].join("\n"),
+        "GitHub Webhook",
+      );
     } else {
-      await note([
-        "Failed to create webhook.",
-        "",
-        `Error: ${createResult.stdout}`,
-        "",
-        "You may need admin access to the organization.",
-        "Try manually:",
-        pc.cyan(`  wopr github setup ${selectedOrg}`),
-      ].join("\n"), "Webhook Error");
+      await note(
+        [
+          "Failed to create webhook.",
+          "",
+          `Error: ${createResult.stdout}`,
+          "",
+          "You may need admin access to the organization.",
+          "Try manually:",
+          pc.cyan(`  wopr github setup ${selectedOrg}`),
+        ].join("\n"),
+        "Webhook Error",
+      );
     }
     return {};
   }
@@ -186,18 +207,21 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   const webhookId = createResult.stdout;
   s.stop(`Webhook created! ID: ${webhookId}`);
 
-  await note([
-    `GitHub webhook configured for ${selectedOrg}!`,
-    "",
-    `Webhook URL: ${pc.green(webhookUrl)}`,
-    `PR Session: ${pc.cyan(prSession)}`,
-    "",
-    "When PRs are opened or reviewed, events will be",
-    `routed to ${prSession} for automated handling.`,
-    "",
-    pc.dim("The webhook secret is stored in config for signature verification."),
-    pc.dim("Update webhook config: wopr configure --plugin github"),
-  ].join("\n"), "GitHub Integration Ready");
+  await note(
+    [
+      `GitHub webhook configured for ${selectedOrg}!`,
+      "",
+      `Webhook URL: ${pc.green(webhookUrl)}`,
+      `PR Session: ${pc.cyan(prSession)}`,
+      "",
+      "When PRs are opened or reviewed, events will be",
+      `routed to ${prSession} for automated handling.`,
+      "",
+      pc.dim("The webhook secret is stored in config for signature verification."),
+      pc.dim("Update webhook config: wopr configure --plugin github"),
+    ].join("\n"),
+    "GitHub Integration Ready",
+  );
 
   // Note: webhookSecret and prReviewSession are returned to OnboardConfig
   // and saved to wopr.config.json. The wopr-plugin-github webhook handler

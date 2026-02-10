@@ -1,29 +1,34 @@
 /**
  * Step 3: Check existing config
  */
-import { select, note, confirm, pc } from "../prompts.js";
-import { summarizeExistingConfig, DEFAULT_WORKSPACE } from "../helpers.js";
+
 import { config } from "../../../core/config.js";
-import type { OnboardContext, OnboardStep, OnboardConfig } from "../types.js";
+import { DEFAULT_WORKSPACE, summarizeExistingConfig } from "../helpers.js";
+import { confirm, note, pc, select } from "../prompts.js";
+import type { OnboardConfig, OnboardContext, OnboardStep } from "../types.js";
 
 export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
   // Load current config
   await config.load();
   const currentConfig = config.get() as unknown as OnboardConfig;
-  
+
   // Check if we have meaningful config
-  const hasExisting = currentConfig.provider?.primary || 
-                     currentConfig.workspace ||
-                     currentConfig.gateway?.port;
-  
+  const hasExisting =
+    currentConfig.provider?.primary ||
+    currentConfig.workspace ||
+    currentConfig.gateway?.port ||
+    (currentConfig.channels && currentConfig.channels.length > 0) ||
+    (currentConfig.skills && currentConfig.skills.length > 0) ||
+    (currentConfig.plugins && currentConfig.plugins.length > 0);
+
   if (!hasExisting) {
     await note("No existing configuration found. Starting fresh setup.", "Configuration");
     return {};
   }
-  
+
   // Show existing config
   await note(summarizeExistingConfig(currentConfig), "Existing Configuration");
-  
+
   // Ask what to do
   const action = await select<"keep" | "modify" | "reset">({
     message: "Configuration handling",
@@ -34,17 +39,17 @@ export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
     ],
     initialValue: "keep",
   });
-  
+
   if (action === "reset") {
     const confirmReset = await confirm({
       message: pc.red("This will delete all WOPR configuration. Are you sure?"),
       initialValue: false,
     });
-    
+
     if (!confirmReset) {
       return configCheckStep(ctx); // Go back to selection
     }
-    
+
     // Reset config (but we'll do a soft reset - just clear our keys)
     ctx.runtime.log("Resetting configuration...");
     return {
@@ -56,7 +61,7 @@ export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
       plugins: [],
     };
   }
-  
+
   if (action === "keep") {
     // Return existing config as base
     return {
@@ -68,7 +73,7 @@ export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
       plugins: currentConfig.plugins || [],
     };
   }
-  
+
   // "modify" - return current config, wizard will update selectively
   return {
     workspace: currentConfig.workspace || DEFAULT_WORKSPACE,

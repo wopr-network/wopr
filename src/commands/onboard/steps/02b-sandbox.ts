@@ -2,12 +2,12 @@
  * Step 2b: Sandbox configuration
  * Checks Docker availability and configures sandboxing for untrusted sessions.
  */
-import { confirm, select, note, spinner, pc } from "../prompts.js";
+import { confirm, note, pc, select, spinner } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
 async function checkDockerAvailable(): Promise<boolean> {
   try {
-    const { execSync } = await import("child_process");
+    const { execSync } = await import("node:child_process");
     execSync("docker info", { stdio: "ignore" });
     return true;
   } catch {
@@ -17,7 +17,7 @@ async function checkDockerAvailable(): Promise<boolean> {
 
 async function checkSandboxImageExists(): Promise<boolean> {
   try {
-    const { execSync } = await import("child_process");
+    const { execSync } = await import("node:child_process");
     const result = execSync("docker images wopr-sandbox:bookworm-slim -q", {
       encoding: "utf-8",
     });
@@ -29,9 +29,7 @@ async function checkSandboxImageExists(): Promise<boolean> {
 
 async function buildSandboxImage(): Promise<boolean> {
   try {
-    const { ensureDockerImage, DEFAULT_SANDBOX_IMAGE } = await import(
-      "../../../sandbox/index.js"
-    );
+    const { ensureDockerImage, DEFAULT_SANDBOX_IMAGE } = await import("../../../sandbox/index.js");
     await ensureDockerImage(DEFAULT_SANDBOX_IMAGE);
     return true;
   } catch {
@@ -56,7 +54,7 @@ export const sandboxStep: OnboardStep = async (ctx: OnboardContext) => {
         "",
         pc.dim("Install Docker to enable sandboxing: https://docs.docker.com/get-docker/"),
       ].join("\n"),
-      "Sandbox Unavailable"
+      "Sandbox Unavailable",
     );
 
     return {
@@ -80,7 +78,7 @@ export const sandboxStep: OnboardStep = async (ctx: OnboardContext) => {
       "  • Resource limits (CPU, memory)",
       "  • Blocked dangerous commands",
     ].join("\n"),
-    "Sandbox Available"
+    "Sandbox Available",
   );
 
   // Skip sandbox in quickstart mode - just enable by default
