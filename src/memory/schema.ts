@@ -1,11 +1,10 @@
 // SQLite schema for memory indexing - copied from OpenClaw
 import type { DatabaseSync } from "node:sqlite";
 
-export function ensureMemoryIndexSchema(params: {
-  db: DatabaseSync;
-  ftsTable: string;
-  ftsEnabled: boolean;
-}): { ftsAvailable: boolean; ftsError?: string } {
+export function ensureMemoryIndexSchema(params: { db: DatabaseSync; ftsTable: string; ftsEnabled: boolean }): {
+  ftsAvailable: boolean;
+  ftsError?: string;
+} {
   params.db.exec(`
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,
@@ -65,12 +64,7 @@ export function ensureMemoryIndexSchema(params: {
   return { ftsAvailable, ...(ftsError ? { ftsError } : {}) };
 }
 
-function ensureColumn(
-  db: DatabaseSync,
-  table: "files" | "chunks",
-  column: string,
-  definition: string,
-): void {
+function ensureColumn(db: DatabaseSync, table: "files" | "chunks", column: string, definition: string): void {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (rows.some((row) => row.name === column)) {
     return;

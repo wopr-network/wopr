@@ -23,10 +23,12 @@ export async function startWatcher(params: {
   try {
     // Dynamic import to avoid loading chokidar unless needed
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const chokidar = await (Function('return import("chokidar")')() as Promise<{ watch: (paths: string[], options: any) => FSWatcher }>);
+    const chokidar = await (Function('return import("chokidar")')() as Promise<{
+      watch: (paths: string[], options: any) => FSWatcher;
+    }>);
 
     watcher = chokidar.watch(params.dirs, {
-      ignored: /(^|[\/\\])\../, // Ignore dotfiles
+      ignored: /(^|[/\\])\../, // Ignore dotfiles
       persistent: true,
       ignoreInitial: true,
       awaitWriteFinish: {

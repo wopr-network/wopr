@@ -38,9 +38,7 @@ export function normalizeExtraMemoryPaths(workspaceDir: string, extraPaths?: str
   const resolved = extraPaths
     .map((value) => value.trim())
     .filter(Boolean)
-    .map((value) =>
-      path.isAbsolute(value) ? path.resolve(value) : path.resolve(workspaceDir, value),
-    );
+    .map((value) => (path.isAbsolute(value) ? path.resolve(value) : path.resolve(workspaceDir, value)));
   return Array.from(new Set(resolved));
 }
 
@@ -76,10 +74,7 @@ async function walkDir(dir: string, files: string[]) {
   }
 }
 
-export async function listMemoryFiles(
-  workspaceDir: string,
-  extraPaths?: string[],
-): Promise<string[]> {
+export async function listMemoryFiles(workspaceDir: string, extraPaths?: string[]): Promise<string[]> {
   const result: string[] = [];
   const memoryFile = path.join(workspaceDir, "MEMORY.md");
   const altMemoryFile = path.join(workspaceDir, "memory.md");
@@ -148,10 +143,7 @@ export function hashText(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
-export async function buildFileEntry(
-  absPath: string,
-  workspaceDir: string,
-): Promise<MemoryFileEntry> {
+export async function buildFileEntry(absPath: string, workspaceDir: string): Promise<MemoryFileEntry> {
   const stat = await fs.stat(absPath);
   const content = await fs.readFile(absPath, "utf-8");
   const hash = hashText(content);
@@ -164,10 +156,7 @@ export async function buildFileEntry(
   };
 }
 
-export function chunkMarkdown(
-  content: string,
-  chunking: { tokens: number; overlap: number },
-): MemoryChunk[] {
+export function chunkMarkdown(content: string, chunking: { tokens: number; overlap: number }): MemoryChunk[] {
   const lines = content.split("\n");
   if (lines.length === 0) {
     return [];
@@ -246,7 +235,6 @@ export function chunkMarkdown(
   flush();
   return chunks;
 }
-
 
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length === 0 || b.length === 0) {

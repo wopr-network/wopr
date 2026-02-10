@@ -86,7 +86,7 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
 
   // Check for date range: "2026-01-01 to 2026-01-05"
   const rangeMatch = trimmed.match(
-    /^(\d{4}-\d{2}-\d{2})(?:T[\d:]+)?(?:\s*(?:-|to)\s*)(\d{4}-\d{2}-\d{2})(?:T[\d:]+)?$/
+    /^(\d{4}-\d{2}-\d{2})(?:T[\d:]+)?(?:\s*(?:-|to)\s*)(\d{4}-\d{2}-\d{2})(?:T[\d:]+)?$/,
   );
   if (rangeMatch) {
     const startDate = new Date(rangeMatch[1]);
@@ -94,7 +94,7 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     // Set end date to end of day
     endDate.setHours(23, 59, 59, 999);
 
-    if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+    if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
       return {
         after: startDate.getTime(),
         before: endDate.getTime(),
@@ -109,7 +109,7 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     const endDate = new Date(singleDateMatch[1]);
     endDate.setHours(23, 59, 59, 999);
 
-    if (!isNaN(startDate.getTime())) {
+    if (!Number.isNaN(startDate.getTime())) {
       return {
         after: startDate.getTime(),
         before: endDate.getTime(),
@@ -121,7 +121,7 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
   const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2}T[\d:]+)$/);
   if (isoMatch) {
     const date = new Date(isoMatch[1]);
-    if (!isNaN(date.getTime())) {
+    if (!Number.isNaN(date.getTime())) {
       // Single datetime - treat as "since this time"
       return { after: date.getTime() };
     }

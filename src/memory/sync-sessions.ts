@@ -1,7 +1,7 @@
 // Session file sync - indexes session transcripts for search
 // Adapted from OpenClaw for WOPR
 import type { DatabaseSync } from "node:sqlite";
-import { listSessionFiles, buildSessionEntry, sessionPathForFile, type SessionFileEntry } from "./session-files.js";
+import { buildSessionEntry, listSessionFiles, type SessionFileEntry, sessionPathForFile } from "./session-files.js";
 
 export async function syncSessionFiles(params: {
   db: DatabaseSync;
@@ -40,26 +40,20 @@ export async function syncSessionFiles(params: {
   await params.runWithConcurrency(tasks, params.concurrency);
 
   // Remove stale session entries
-  const staleRows = params.db
-    .prepare(`SELECT path FROM files WHERE source = ?`)
-    .all("sessions") as Array<{ path: string }>;
+  const staleRows = params.db.prepare(`SELECT path FROM files WHERE source = ?`).all("sessions") as Array<{
+    path: string;
+  }>;
   for (const stale of staleRows) {
     if (activePaths.has(stale.path)) {
       continue;
     }
-    params.db
-      .prepare(`DELETE FROM files WHERE path = ? AND source = ?`)
-      .run(stale.path, "sessions");
+    params.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, "sessions");
     try {
       params.db
-        .prepare(
-          `DELETE FROM ${params.vectorTable} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
-        )
+        .prepare(`DELETE FROM ${params.vectorTable} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`)
         .run(stale.path, "sessions");
     } catch {}
-    params.db
-      .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
-      .run(stale.path, "sessions");
+    params.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "sessions");
     if (params.ftsEnabled && params.ftsAvailable) {
       try {
         params.db

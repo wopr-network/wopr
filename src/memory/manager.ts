@@ -1,28 +1,31 @@
 // MemoryIndexManager - FTS5 keyword search only
 // Vector/semantic search available via wopr-plugin-memory-semantic
-import type { DatabaseSync } from "node:sqlite";
-import { createRequire } from "node:module";
+
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 
 const require = createRequire(import.meta.url);
-import { WOPR_HOME } from "../paths.js";
-import { eventBus } from "../core/events.js";
+
 import type { MemoryFileChange } from "../core/events.js";
-import {
-  buildFileEntry,
-  chunkMarkdown,
-  ensureDir,
-  listMemoryFiles,
-} from "./internal.js";
+import { eventBus } from "../core/events.js";
+import { WOPR_HOME } from "../paths.js";
+import { buildFileEntry, chunkMarkdown, ensureDir, listMemoryFiles } from "./internal.js";
 import { ensureMemoryIndexSchema } from "./schema.js";
 import { syncSessionFiles } from "./sync-sessions.js";
-import { type MemoryConfig, type MemorySearchResult, type MemorySource, type TemporalFilter, DEFAULT_MEMORY_CONFIG } from "./types.js";
+import {
+  DEFAULT_MEMORY_CONFIG,
+  type MemoryConfig,
+  type MemorySearchResult,
+  type MemorySource,
+  type TemporalFilter,
+} from "./types.js";
 
 const META_KEY = "memory_index_meta_v1";
 const SNIPPET_MAX_CHARS = 700;
 const FTS_TABLE = "chunks_fts";
-const INDEX_CONCURRENCY = 4;
+const _INDEX_CONCURRENCY = 4;
 
 type MemoryIndexMeta = {
   chunkTokens: number;
@@ -33,10 +36,11 @@ type MemoryIndexMeta = {
  * Build FTS5 query from raw search string
  */
 function buildFtsQuery(raw: string): string | null {
-  const tokens = raw
-    .match(/[A-Za-z0-9_]+/g)
-    ?.map((t) => t.trim())
-    .filter(Boolean) ?? [];
+  const tokens =
+    raw
+      .match(/[A-Za-z0-9_]+/g)
+      ?.map((t) => t.trim())
+      .filter(Boolean) ?? [];
   if (tokens.length === 0) {
     return null;
   }
@@ -56,10 +60,7 @@ function bm25RankToScore(rank: number): number {
  * Build SQL WHERE clause for temporal filtering
  * Uses the chunks.updated_at column (ms since epoch)
  */
-function buildTemporalFilter(
-  temporal: TemporalFilter | undefined,
-  alias?: string
-): { sql: string; params: number[] } {
+function buildTemporalFilter(temporal: TemporalFilter | undefined, alias?: string): { sql: string; params: number[] } {
   if (!temporal) {
     return { sql: "", params: [] };
   }
@@ -186,16 +187,10 @@ export class MemoryIndexManager {
     const temporal = opts?.temporal;
 
     const results = await this.searchKeyword(cleaned, maxResults * 2, temporal);
-    return results
-      .filter((entry) => entry.score >= minScore)
-      .slice(0, maxResults);
+    return results.filter((entry) => entry.score >= minScore).slice(0, maxResults);
   }
 
-  private async searchKeyword(
-    query: string,
-    limit: number,
-    temporal?: TemporalFilter,
-  ): Promise<MemorySearchResult[]> {
+  private async searchKeyword(query: string, limit: number, temporal?: TemporalFilter): Promise<MemorySearchResult[]> {
     if (!this.fts.available) {
       return [];
     }
@@ -287,7 +282,7 @@ export class MemoryIndexManager {
     return this.syncing;
   }
 
-  private async runSync(params?: { force?: boolean }): Promise<void> {
+  private async runSync(_params?: { force?: boolean }): Promise<void> {
     const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     const needsFullReindex = await this.checkNeedsFullReindex();
     console.log(`[memory-sync] start (heap: ${heapMB()}MB, fullReindex: ${needsFullReindex})`);
@@ -352,21 +347,27 @@ export class MemoryIndexManager {
         const chunks = chunkMarkdown(entry.content, this.config.chunking);
         if (chunks.length === 0) return;
         // Emit per-file — handlers process and release before next file
-        await eventBus.emit("memory:filesChanged", {
-          changes: [{
-            action: "upsert" as const,
-            path: entry.path,
-            absPath: entry.absPath,
-            source: "sessions" as MemorySource,
-            chunks: chunks.map((chunk) => ({
-              id: chunk.hash,
-              text: chunk.text,
-              hash: chunk.hash,
-              startLine: chunk.startLine,
-              endLine: chunk.endLine,
-            })),
-          }],
-        }, "core");
+        await eventBus.emit(
+          "memory:filesChanged",
+          {
+            changes: [
+              {
+                action: "upsert" as const,
+                path: entry.path,
+                absPath: entry.absPath,
+                source: "sessions" as MemorySource,
+                chunks: chunks.map((chunk) => ({
+                  id: chunk.hash,
+                  text: chunk.text,
+                  hash: chunk.hash,
+                  startLine: chunk.startLine,
+                  endLine: chunk.endLine,
+                })),
+              },
+            ],
+          },
+          "core",
+        );
       },
       concurrency: 1, // One at a time to keep memory bounded
     });
@@ -382,9 +383,7 @@ export class MemoryIndexManager {
 
     for (const dir of params.dirs) {
       const files = await listMemoryFiles(dir);
-      const fileEntries = await Promise.all(
-        files.map(async (file) => buildFileEntry(file, dir)),
-      );
+      const fileEntries = await Promise.all(files.map(async (file) => buildFileEntry(file, dir)));
 
       for (const entry of fileEntries) {
         activePaths.add(entry.path);
@@ -413,9 +412,9 @@ export class MemoryIndexManager {
     }
 
     // Detect stale entries across ALL dirs for this source
-    const staleRows = this.db
-      .prepare(`SELECT path FROM files WHERE source = ?`)
-      .all(params.source) as Array<{ path: string }>;
+    const staleRows = this.db.prepare(`SELECT path FROM files WHERE source = ?`).all(params.source) as Array<{
+      path: string;
+    }>;
     for (const stale of staleRows) {
       if (!activePaths.has(stale.path)) {
         changes.push({
@@ -432,16 +431,16 @@ export class MemoryIndexManager {
   private handleFilesChanged(event: { changes: MemoryFileChange[] }): void {
     const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     const totalChunks = event.changes.reduce((sum, c) => sum + (c.chunks?.length || 0), 0);
-    console.log(`[handleFilesChanged] ${event.changes.length} changes, ${totalChunks} total chunks (heap=${heapMB()}MB)`);
+    console.log(
+      `[handleFilesChanged] ${event.changes.length} changes, ${totalChunks} total chunks (heap=${heapMB()}MB)`,
+    );
     for (const change of event.changes) {
       if (change.action === "delete") {
         this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(change.path, change.source);
         this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(change.path, change.source);
         if (this.fts.available) {
           try {
-            this.db
-              .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
-              .run(change.path, change.source);
+            this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`).run(change.path, change.source);
           } catch {}
         }
         continue;
@@ -455,19 +454,17 @@ export class MemoryIndexManager {
       this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(change.path, change.source);
       if (this.fts.available) {
         try {
-          this.db
-            .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`)
-            .run(change.path, change.source);
+          this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ?`).run(change.path, change.source);
         } catch {}
       }
 
       const insertChunk = this.db.prepare(
-        `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, updated_at)
+        `INSERT OR REPLACE INTO chunks (id, path, source, start_line, end_line, hash, model, text, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const insertFts = this.fts.available
         ? this.db.prepare(
-            `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
+            `INSERT OR REPLACE INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
           )
         : null;
@@ -488,15 +485,7 @@ export class MemoryIndexManager {
             now,
           );
           if (insertFts) {
-            insertFts.run(
-              chunk.text,
-              chunk.id,
-              change.path,
-              change.source,
-              "fts5",
-              chunk.startLine,
-              chunk.endLine,
-            );
+            insertFts.run(chunk.text, chunk.id, change.path, change.source, "fts5", chunk.startLine, chunk.endLine);
           }
         }
 
@@ -532,9 +521,7 @@ export class MemoryIndexManager {
   }
 
   private readMeta(): MemoryIndexMeta | null {
-    const row = this.db.prepare(`SELECT value FROM meta WHERE key = ?`).get(META_KEY) as
-      | { value: string }
-      | undefined;
+    const row = this.db.prepare(`SELECT value FROM meta WHERE key = ?`).get(META_KEY) as { value: string } | undefined;
     if (!row?.value) {
       return null;
     }
@@ -550,9 +537,7 @@ export class MemoryIndexManager {
       chunkTokens: this.config.chunking.tokens,
       chunkOverlap: this.config.chunking.overlap,
     };
-    this.db
-      .prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)`)
-      .run(META_KEY, JSON.stringify(meta));
+    this.db.prepare(`INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)`).run(META_KEY, JSON.stringify(meta));
   }
 
   private buildSourceFilter(alias?: string): { sql: string; params: MemorySource[] } {
@@ -576,7 +561,6 @@ export class MemoryIndexManager {
   private ensureSchema() {
     const result = ensureMemoryIndexSchema({
       db: this.db,
-      embeddingCacheTable: "embedding_cache",
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
     });
@@ -587,10 +571,7 @@ export class MemoryIndexManager {
     }
   }
 
-  private async runWithConcurrency<T>(
-    tasks: Array<() => Promise<T>>,
-    concurrency: number,
-  ): Promise<T[]> {
+  private async runWithConcurrency<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
     const results: T[] = [];
     const executing: Promise<void>[] = [];
 
@@ -602,10 +583,7 @@ export class MemoryIndexManager {
 
       if (executing.length >= concurrency) {
         await Promise.race(executing);
-        executing.splice(
-          executing.findIndex((e) => e === p),
-          1,
-        );
+        executing.splice(executing.indexOf(p), 1);
       }
     }
 
