@@ -8,7 +8,7 @@ import { logger } from "./logger.js";
  * that makes HTTP calls and formats output.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -865,7 +865,10 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
         }
       } else if (auth.type === "api_key") {
         logger.info("Auth: API Key");
-        logger.info(`Key: ${auth.apiKey?.substring(0, 12)}...`);
+        if (auth.apiKey) {
+          const masked = auth.apiKey.length > 4 ? `...${auth.apiKey.slice(-4)}` : "****";
+          logger.info(`Key: ${masked}`);
+        }
       }
     } else if (subcommand === "login") {
       const pkce = generatePKCE();
@@ -917,7 +920,7 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
 
       server.listen(9876, () => {
         const open = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-        execSync(`${open} "${authUrl}"`, { stdio: "ignore" });
+        execFileSync(open, [authUrl], { stdio: "ignore" });
       });
 
       setTimeout(

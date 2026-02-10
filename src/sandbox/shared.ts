@@ -8,7 +8,7 @@ import path from "node:path";
 
 export function slugifySessionKey(value: string): string {
   const trimmed = value.trim() || "session";
-  const hash = crypto.createHash("sha1").update(trimmed).digest("hex").slice(0, 8);
+  const hash = crypto.createHash("sha256").update(trimmed).digest("hex").slice(0, 8);
   const safe = trimmed
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, "-")

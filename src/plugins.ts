@@ -232,7 +232,7 @@ export interface InstallResult {
 
 // Validate input for safe shell interpolation
 const SAFE_NAME = /^[a-zA-Z0-9._-]+$/;
-const SAFE_PKG = /^[@a-zA-Z0-9._\/-]+$/;
+const SAFE_PKG = /^[@a-zA-Z0-9._/-]+$/;
 
 function assertSafeName(value: string, label: string): void {
   if (!SAFE_NAME.test(value)) {
@@ -368,7 +368,7 @@ export function uninstallPlugin(name: string): boolean {
   // Remove files (only if under PLUGINS_DIR to prevent path traversal)
   const normalizedPath = resolve(plugin.path);
   const normalizedBase = resolve(PLUGINS_DIR);
-  if (existsSync(normalizedPath) && normalizedPath.startsWith(normalizedBase + "/")) {
+  if (existsSync(normalizedPath) && normalizedPath.startsWith(`${normalizedBase}/`)) {
     rmSync(normalizedPath, { recursive: true, force: true });
   }
 
@@ -935,7 +935,11 @@ export async function loadPlugin(
     if (requires) {
       logger.info(`[plugins] Checking requirements for ${installed.name}...`);
 
-      const { satisfied, installed: installedDeps, errors } = await ensureRequirements(requires, installMethods, {
+      const {
+        satisfied,
+        installed: installedDeps,
+        errors,
+      } = await ensureRequirements(requires, installMethods, {
         auto: options.autoInstall,
         prompt: options.promptInstall,
       });
