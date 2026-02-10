@@ -4,12 +4,8 @@
  * Manages STT and TTS provider registration and discovery.
  */
 
-import { EventEmitter } from "events";
-import type {
-  STTProvider,
-  TTSProvider,
-  VoiceRegistry,
-} from "./types.js";
+import { EventEmitter } from "node:events";
+import type { STTProvider, TTSProvider, VoiceRegistry } from "./types.js";
 
 export class WOPRVoiceRegistry extends EventEmitter implements VoiceRegistry {
   private sttProviders = new Map<string, STTProvider>();
@@ -131,26 +127,22 @@ export class WOPRVoiceRegistry extends EventEmitter implements VoiceRegistry {
    * Find providers by capability
    */
   findSTTByCapability(capability: string): STTProvider[] {
-    return this.listSTT().filter(p =>
-      p.metadata.capabilities.includes(capability)
-    );
+    return this.listSTT().filter((p) => p.metadata.capabilities.includes(capability));
   }
 
   findTTSByCapability(capability: string): TTSProvider[] {
-    return this.listTTS().filter(p =>
-      p.metadata.capabilities.includes(capability)
-    );
+    return this.listTTS().filter((p) => p.metadata.capabilities.includes(capability));
   }
 
   /**
    * Find local (non-cloud) providers
    */
   getLocalSTT(): STTProvider[] {
-    return this.listSTT().filter(p => p.metadata.local);
+    return this.listSTT().filter((p) => p.metadata.local);
   }
 
   getLocalTTS(): TTSProvider[] {
-    return this.listTTS().filter(p => p.metadata.local);
+    return this.listTTS().filter((p) => p.metadata.local);
   }
 
   /**

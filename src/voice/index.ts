@@ -33,29 +33,28 @@
  * ```
  */
 
-// Types
-export type {
-  AudioFormat,
-  AudioConfig,
-  InstallMethod,
-  VoicePluginRequirements,
-  VoicePluginMetadata,
-  STTTranscriptChunk,
-  STTOptions,
-  STTSession,
-  STTProvider,
-  Voice,
-  TTSOptions,
-  TTSSynthesisResult,
-  TTSProvider,
-  VoiceRegistry,
-  VoicePluginContext,
-  VoiceConsumerContext,
-} from "./types.js";
-
 // Registry
 export {
-  WOPRVoiceRegistry,
   getVoiceRegistry,
   resetVoiceRegistry,
+  WOPRVoiceRegistry,
 } from "./registry.js";
+// Types
+export type {
+  AudioConfig,
+  AudioFormat,
+  InstallMethod,
+  STTOptions,
+  STTProvider,
+  STTSession,
+  STTTranscriptChunk,
+  TTSOptions,
+  TTSProvider,
+  TTSSynthesisResult,
+  Voice,
+  VoiceConsumerContext,
+  VoicePluginContext,
+  VoicePluginMetadata,
+  VoicePluginRequirements,
+  VoiceRegistry,
+} from "./types.js";
