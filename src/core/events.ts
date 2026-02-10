@@ -239,6 +239,9 @@ class WOPREventBusImpl implements WOPREventBus {
 
   once<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void {
     const wrapper = async (payload: any, meta: { timestamp: number; source?: string }) => {
+      // Clean up the wrapper map after firing (emitter auto-removes the listener)
+      this.handlerWrappers.delete(handler);
+
       const fullEvent: WOPREvent = {
         type: event as string,
         payload,
@@ -253,7 +256,7 @@ class WOPREventBusImpl implements WOPREventBus {
       }
     };
 
-    // Store wrapper so off() can find and remove it
+    // Store wrapper so off() can find and remove it before it fires
     this.handlerWrappers.set(handler, wrapper);
     this.emitter.once(event as string, wrapper);
   }

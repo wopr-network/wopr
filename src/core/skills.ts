@@ -3,7 +3,7 @@
  * Feature parity with Clawdbot skills system
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -714,13 +714,19 @@ export function installSkillFromGitHub(owner: string, repo: string, skillPath: s
 
 export function installSkillFromUrl(source: string, name?: string): Skill {
   const skillName = name || basename(source).replace(/\.git$/, "");
+  // Validate skillName to prevent path traversal
+  const validName = /^[a-zA-Z0-9._-]+$/;
+  if (!validName.test(skillName)) {
+    throw new Error("Invalid skill name");
+  }
   const targetDir = join(SKILLS_DIR, skillName);
 
   if (existsSync(targetDir)) {
     throw new Error(`Skill "${skillName}" already exists`);
   }
 
-  execSync(`git clone "${source}" "${targetDir}"`, { stdio: "inherit" });
+  // Use execFileSync with args array to prevent shell injection
+  execFileSync("git", ["clone", source, targetDir], { stdio: "inherit" });
 
   const skill = discoverSkillsLegacy().find((s) => s.name === skillName);
   if (!skill) {
