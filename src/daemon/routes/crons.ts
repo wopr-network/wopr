@@ -3,13 +3,7 @@
  */
 
 import { Hono } from "hono";
-import {
-  getCrons,
-  addCron,
-  removeCron,
-  getCron,
-  createOnceJob,
-} from "../../core/cron.js";
+import { addCron, createOnceJob, getCron, getCrons, removeCron } from "../../core/cron.js";
 import { inject } from "../../core/sessions.js";
 import type { CronJob } from "../../types.js";
 
@@ -73,11 +67,14 @@ cronsRouter.post("/once", async (c) => {
     const job = createOnceJob(time, session, message);
     addCron(job);
 
-    return c.json({
-      created: true,
-      cron: job,
-      scheduledFor: new Date(job.runAt!).toISOString(),
-    }, 201);
+    return c.json(
+      {
+        created: true,
+        cron: job,
+        scheduledFor: new Date(job.runAt!).toISOString(),
+      },
+      201,
+    );
   } catch (err: any) {
     return c.json({ error: err.message }, 400);
   }

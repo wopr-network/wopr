@@ -3,24 +3,25 @@
  */
 
 import { Hono } from "hono";
+import { providerRegistry } from "../../core/providers.js";
+import { getSessions, inject } from "../../core/sessions.js";
+import { logger } from "../../logger.js";
 import {
-  installPlugin,
-  removePlugin,
-  enablePlugin,
-  disablePlugin,
-  listPlugins,
-  searchPlugins,
   addRegistry,
-  removeRegistry,
-  listRegistries,
-  getWebUiExtensions,
-  getUiComponents,
+  disablePlugin,
+  enablePlugin,
   getPluginExtension,
+  getUiComponents,
+  getWebUiExtensions,
+  installPlugin,
+  listPlugins,
+  listRegistries,
   loadPlugin,
+  removePlugin,
+  removeRegistry,
+  searchPlugins,
   unloadPlugin,
 } from "../../plugins.js";
-import { inject, getSessions } from "../../core/sessions.js";
-import { providerRegistry } from "../../core/providers.js";
 import type { PluginInjectOptions } from "../../types.js";
 
 export const pluginsRouter = new Hono();
@@ -40,14 +41,23 @@ function createInjectors() {
 pluginsRouter.get("/", (c) => {
   const plugins = listPlugins();
   return c.json({
-    plugins: plugins.map((p: { name: string; version: string; description?: string; source: string; enabled: boolean; installedAt: number }) => ({
-      name: p.name,
-      version: p.version,
-      description: p.description || null,
-      source: p.source,
-      enabled: p.enabled,
-      installedAt: p.installedAt,
-    })),
+    plugins: plugins.map(
+      (p: {
+        name: string;
+        version: string;
+        description?: string;
+        source: string;
+        enabled: boolean;
+        installedAt: number;
+      }) => ({
+        name: p.name,
+        version: p.version,
+        description: p.description || null,
+        source: p.source,
+        enabled: p.enabled,
+        installedAt: p.installedAt,
+      }),
+    ),
   });
 });
 
@@ -84,19 +94,23 @@ pluginsRouter.post("/", async (c) => {
     // Run health check for any newly registered providers
     await providerRegistry.checkHealth();
 
-    return c.json({
-      installed: true,
-      plugin: {
-        name: plugin.name,
-        version: plugin.version,
-        description: plugin.description,
-        source: plugin.source,
-        enabled: true,
-        loaded: true,
+    return c.json(
+      {
+        installed: true,
+        plugin: {
+          name: plugin.name,
+          version: plugin.version,
+          description: plugin.description,
+          source: plugin.source,
+          enabled: true,
+          loaded: true,
+        },
       },
-    }, 201);
+      201,
+    );
   } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+    logger.error({ msg: "[plugins] Install failed", error: err.message });
+    return c.json({ error: "Plugin installation failed" }, 400);
   }
 });
 
@@ -111,7 +125,8 @@ pluginsRouter.delete("/:name", async (c) => {
     await removePlugin(name);
     return c.json({ removed: true, unloaded: true });
   } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+    logger.error({ msg: "[plugins] Remove failed", plugin: name, error: err.message });
+    return c.json({ error: "Plugin removal failed" }, 400);
   }
 });
 
@@ -137,7 +152,8 @@ pluginsRouter.post("/:name/enable", async (c) => {
 
     return c.json({ enabled: true, loaded: true });
   } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+    logger.error({ msg: "[plugins] Enable failed", plugin: name, error: err.message });
+    return c.json({ error: "Plugin enable failed" }, 400);
   }
 });
 
@@ -152,7 +168,8 @@ pluginsRouter.post("/:name/disable", async (c) => {
     disablePlugin(name);
     return c.json({ disabled: true, unloaded: true });
   } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+    logger.error({ msg: "[plugins] Disable failed", plugin: name, error: err.message });
+    return c.json({ error: "Plugin disable failed" }, 400);
   }
 });
 
@@ -183,7 +200,8 @@ pluginsRouter.post("/:name/reload", async (c) => {
 
     return c.json({ reloaded: true, plugin: name });
   } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+    logger.error({ msg: "[plugins] Reload failed", plugin: name, error: err.message });
+    return c.json({ error: "Plugin reload failed" }, 400);
   }
 });
 

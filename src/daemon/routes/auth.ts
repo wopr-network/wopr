@@ -4,15 +4,13 @@
 
 import { Hono } from "hono";
 import {
+  buildAuthUrl,
+  clearAuth,
+  exchangeCode,
+  generatePKCE,
   loadAuth,
   loadClaudeCodeCredentials,
   saveApiKey,
-  clearAuth,
-  isAuthenticated,
-  getAuthType,
-  generatePKCE,
-  buildAuthUrl,
-  exchangeCode,
   saveOAuthTokens,
 } from "../../auth.js";
 
@@ -53,7 +51,7 @@ authRouter.get("/", (c) => {
     return c.json({
       authenticated: true,
       type: "api_key",
-      keyPrefix: auth.apiKey?.substring(0, 12) + "...",
+      keyPrefix: `${auth.apiKey?.substring(0, 12)}...`,
     });
   }
 

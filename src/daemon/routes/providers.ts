@@ -12,7 +12,7 @@ export const providersRouter = new Hono();
 providersRouter.get("/", (c) => {
   const providers = providerRegistry.listProviders();
   return c.json({
-    providers: providers.map(p => ({
+    providers: providers.map((p) => ({
       id: p.id,
       name: p.name,
       available: p.available,
@@ -53,9 +53,9 @@ providersRouter.delete("/:id", async (c) => {
 providersRouter.post("/health", async (c) => {
   await providerRegistry.checkHealth();
   const providers = providerRegistry.listProviders();
-  
+
   return c.json({
-    providers: providers.map(p => ({
+    providers: providers.map((p) => ({
       id: p.id,
       name: p.name,
       available: p.available,

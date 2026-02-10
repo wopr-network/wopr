@@ -7,17 +7,11 @@
 
 import { logger } from "../../logger.js";
 import { SessionQueue } from "./SessionQueue.js";
-import type {
-  InjectOptions,
-  InjectResult,
-  MultimodalMessage,
-  QueueStats,
-  QueueEvent,
-  QueueEventHandler,
-} from "./types.js";
+import type { InjectOptions, InjectResult, MultimodalMessage, QueueEventHandler, QueueStats } from "./types.js";
 
 export class QueueManager {
   private queues = new Map<string, SessionQueue>();
+  private lastActivityMs = new Map<string, number>();
   private globalEventHandlers = new Set<QueueEventHandler>();
 
   /** Function to execute an inject - set via setExecutor */
@@ -25,7 +19,7 @@ export class QueueManager {
     sessionKey: string,
     message: string | MultimodalMessage,
     options: InjectOptions | undefined,
-    abortSignal: AbortSignal
+    abortSignal: AbortSignal,
   ) => Promise<InjectResult>;
 
   /**
@@ -37,8 +31,8 @@ export class QueueManager {
       sessionKey: string,
       message: string | MultimodalMessage,
       options: InjectOptions | undefined,
-      abortSignal: AbortSignal
-    ) => Promise<InjectResult>
+      abortSignal: AbortSignal,
+    ) => Promise<InjectResult>,
   ): void {
     this.executeInject = executor;
     logger.info("[queue-manager] Executor set");
@@ -70,6 +64,7 @@ export class QueueManager {
       this.queues.set(sessionKey, queue);
       logger.info({ msg: "[queue-manager] Created queue for session", sessionKey });
     }
+    this.lastActivityMs.set(sessionKey, Date.now());
     return queue;
   }
 
@@ -80,7 +75,7 @@ export class QueueManager {
   async inject(
     sessionKey: string,
     message: string | MultimodalMessage,
-    options?: InjectOptions
+    options?: InjectOptions,
   ): Promise<InjectResult> {
     const queue = this.getQueue(sessionKey);
     return queue.enqueue(message, options);
@@ -188,13 +183,16 @@ export class QueueManager {
    */
   cleanup(maxIdleMs: number = 5 * 60 * 1000): number {
     let cleaned = 0;
+    const now = Date.now();
     for (const [sessionKey, queue] of this.queues) {
       const stats = queue.getStats();
       if (!stats.isProcessing && stats.queueDepth === 0) {
-        // Queue is idle - could add timestamp tracking for smarter cleanup
-        // For now, just remove truly empty queues
-        this.queues.delete(sessionKey);
-        cleaned++;
+        const lastActivity = this.lastActivityMs.get(sessionKey) ?? 0;
+        if (now - lastActivity >= maxIdleMs) {
+          this.queues.delete(sessionKey);
+          this.lastActivityMs.delete(sessionKey);
+          cleaned++;
+        }
       }
     }
     if (cleaned > 0) {

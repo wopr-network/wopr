@@ -5,37 +5,32 @@
  * Supports WebSocket for real-time streaming.
  */
 
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { serve } from "@hono/node-server";
+import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
-import { logger as winstonLogger } from "../logger.js";
-import { serve } from "@hono/node-server";
-import { createNodeWebSocket } from "@hono/node-ws";
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
-
-import { PID_FILE, LOG_FILE } from "../paths.js";
 import { config as centralConfig } from "../core/config.js";
-import { sessionsRouter } from "./routes/sessions.js";
-import { cronsRouter } from "./routes/crons.js";
-import { authRouter } from "./routes/auth.js";
-import { pluginsRouter } from "./routes/plugins.js";
-import { skillsRouter } from "./routes/skills.js";
-import { configRouter } from "./routes/config.js";
-import { hooksRouter } from "./routes/hooks.js";
-import { providersRouter } from "./routes/providers.js";
-import { setupWebSocket, handleWebSocketMessage, handleWebSocketClose, broadcast } from "./ws.js";
-
 // Core imports for daemon functionality
-import { getCrons, saveCrons, shouldRunCron, addCronHistory } from "../core/cron.js";
-import { inject } from "../core/sessions.js";
-import { loadAllPlugins, shutdownAllPlugins } from "../plugins.js";
-import { registerPluginExtension } from "../plugins.js";
-import type { StreamCallback } from "../types.js";
-
+import { addCronHistory, getCrons, saveCrons, shouldRunCron } from "../core/cron.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
+import { inject } from "../core/sessions.js";
+import { logger as winstonLogger } from "../logger.js";
+import { LOG_FILE, PID_FILE } from "../paths.js";
+import { loadAllPlugins, registerPluginExtension, shutdownAllPlugins } from "../plugins.js";
+import { authRouter } from "./routes/auth.js";
+import { configRouter } from "./routes/config.js";
+import { cronsRouter } from "./routes/crons.js";
+import { hooksRouter } from "./routes/hooks.js";
+import { pluginsRouter } from "./routes/plugins.js";
+import { providersRouter } from "./routes/providers.js";
+import { sessionsRouter } from "./routes/sessions.js";
+import { skillsRouter } from "./routes/skills.js";
+import { handleWebSocketClose, handleWebSocketMessage, setupWebSocket } from "./ws.js";
 
-const DEFAULT_PORT = parseInt(process.env.WOPR_DAEMON_PORT || "7437");
+const DEFAULT_PORT = parseInt(process.env.WOPR_DAEMON_PORT || "7437", 10);
 const DEFAULT_HOST = process.env.WOPR_DAEMON_HOST || "127.0.0.1";
 
 // Global error handlers - prevent crash on unhandled errors
@@ -45,7 +40,7 @@ process.on("uncaughtException", (error) => {
   // Don't exit - log and continue
 });
 
-process.on("unhandledRejection", (reason, promise) => {
+process.on("unhandledRejection", (reason, _promise) => {
   const msg = reason instanceof Error ? reason.message : String(reason);
   const stack = reason instanceof Error ? reason.stack : undefined;
   winstonLogger.error(`[daemon] Unhandled rejection: ${msg}`);
@@ -66,11 +61,13 @@ export function createApp() {
   app.use("*", logger());
 
   // Health check
-  app.get("/", (c) => c.json({
-    name: "wopr",
-    version: "0.0.1",
-    status: "running",
-  }));
+  app.get("/", (c) =>
+    c.json({
+      name: "wopr",
+      version: "0.0.1",
+      status: "running",
+    }),
+  );
 
   app.get("/health", (c) => c.json({ status: "ok" }));
 
@@ -139,12 +136,16 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
       onClose(_event, ws) {
         handleWebSocketClose(ws as unknown as { send(data: string): void });
       },
-    }))
+    })),
   );
 
   // Create injectors for plugins
   const injectors = {
-    inject: async (session: string, message: string, options?: import("../types.js").PluginInjectOptions): Promise<string> => {
+    inject: async (
+      session: string,
+      message: string,
+      options?: import("../types.js").PluginInjectOptions,
+    ): Promise<string> => {
       // If source is provided, use it directly
       // Otherwise, parse the `from` field to create an appropriate security source
       let source = options?.source;
@@ -198,7 +199,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // Expose memory SQLite to plugins — they handle their own columns
   try {
     const { WOPR_HOME } = await import("../paths.js");
-    const { join } = await import("path");
+    const { join } = await import("node:path");
     const { createRequire } = await import("node:module");
     const _require = createRequire(import.meta.url);
     const { DatabaseSync } = _require("node:sqlite");
@@ -221,7 +222,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   try {
     const { MemoryIndexManager } = await import("../memory/index.js");
     const { GLOBAL_IDENTITY_DIR, WOPR_HOME, SESSIONS_DIR } = await import("../paths.js");
-    const { join } = await import("path");
+    const { join } = await import("node:path");
     const { config: centralConfig } = await import("../core/config.js");
     const memCfg = (centralConfig.get() as any).memory || {};
     const heap0 = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
@@ -244,7 +245,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // Check provider health after plugins have registered
   try {
     const providers = providerRegistry.listProviders();
-    daemonLog(`Providers registered: ${providers.map(p => p.id).join(", ") || "none (install provider plugins)"}`);
+    daemonLog(`Providers registered: ${providers.map((p) => p.id).join(", ") || "none (install provider plugins)"}`);
     daemonLog(`Provider details before health check: ${JSON.stringify(providers)}`);
 
     daemonLog(`Starting provider health check...`);
@@ -255,7 +256,10 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     const updatedProviders = providerRegistry.listProviders();
     daemonLog(`Provider details after health check: ${JSON.stringify(updatedProviders)}`);
 
-    const available = updatedProviders.filter(p => p.available).map(p => p.id).join(", ");
+    const available = updatedProviders
+      .filter((p) => p.available)
+      .map((p) => p.id)
+      .join(", ");
     daemonLog(`Provider health check complete. Available: ${available || "none"}`);
   } catch (err) {
     daemonLog(`Warning: Provider health check failed: ${err}`);
@@ -326,7 +330,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     if (toRemove.length > 0) {
       // Re-read to get any jobs added during execution (avoids race condition)
       crons = getCrons();
-      crons = crons.filter(c => !toRemove.includes(c.name));
+      crons = crons.filter((c) => !toRemove.includes(c.name));
       saveCrons(crons);
     }
   };
@@ -362,7 +366,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
 export function getDaemonPid(): number | null {
   if (!existsSync(PID_FILE)) return null;
-  const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim());
+  const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
   try {
     process.kill(pid, 0);
     return pid;

@@ -3,20 +3,15 @@
  */
 
 import { Hono } from "hono";
+import { addRegistry, getRegistries, removeRegistry, searchAllRegistries } from "../../core/registries.js";
 import {
-  discoverSkills,
+  clearSkillCache,
   createSkill,
-  removeSkill,
+  discoverSkills,
   installSkillFromGitHub,
   installSkillFromUrl,
-  clearSkillCache,
+  removeSkill,
 } from "../../core/skills.js";
-import {
-  getRegistries,
-  addRegistry,
-  removeRegistry,
-  searchAllRegistries,
-} from "../../core/registries.js";
 
 export const skillsRouter = new Hono();
 
@@ -53,7 +48,7 @@ skillsRouter.post("/install", async (c) => {
   }
 
   try {
-    let skill;
+    let skill: ReturnType<typeof installSkillFromGitHub> | ReturnType<typeof installSkillFromUrl>;
     if (source.startsWith("github:")) {
       const parts = source.replace("github:", "").split("/");
       const [owner, repo, ...pathParts] = parts;

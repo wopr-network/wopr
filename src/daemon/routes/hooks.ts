@@ -3,10 +3,7 @@
  */
 
 import { Hono } from "hono";
-import {
-  getRegisteredProviders,
-  contextProviders,
-} from "../../core/context.js";
+import { contextProviders, getRegisteredProviders } from "../../core/context.js";
 import { getLoadedPlugin } from "../../plugins.js";
 
 export const hooksRouter = new Hono();
@@ -22,7 +19,8 @@ hooksRouter.get("/", (c) => {
   // we need to aggregate them
   // For now, return an empty list - plugins manage their own hooks
   return c.json({
-    message: "Hooks are managed per-plugin via ctx.hooks.on(). Use /hooks/list/:plugin to see hooks for a specific plugin.",
+    message:
+      "Hooks are managed per-plugin via ctx.hooks.on(). Use /hooks/list/:plugin to see hooks for a specific plugin.",
     note: "Hooks replace the middleware system with priority-ordered event handlers.",
   });
 });
@@ -49,7 +47,7 @@ hooksRouter.get("/list/:plugin", (c) => {
 hooksRouter.get("/context", (c) => {
   const providers = getRegisteredProviders();
   return c.json({
-    providers: providers.map(p => ({
+    providers: providers.map((p) => ({
       name: p.name,
       priority: p.priority,
       enabled: p.enabled !== false,

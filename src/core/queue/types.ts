@@ -2,7 +2,7 @@
  * Session Queue Types
  */
 
-import type { StreamCallback, ChannelRef, InjectionSource } from "../../types.js";
+import type { ChannelRef, InjectionSource, StreamCallback } from "../../types.js";
 
 /**
  * Options for an inject request
@@ -78,13 +78,7 @@ export interface QueueStats {
 /**
  * Event types emitted by the queue
  */
-export type QueueEventType =
-  | "enqueue"
-  | "dequeue"
-  | "start"
-  | "complete"
-  | "error"
-  | "cancel";
+export type QueueEventType = "enqueue" | "dequeue" | "start" | "complete" | "error" | "cancel";
 
 export interface QueueEvent {
   type: QueueEventType;
