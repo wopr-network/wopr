@@ -247,7 +247,10 @@ class WOPREventBusImpl implements WOPREventBus {
       try {
         await handler(payload, fullEvent);
       } catch (err) {
-        logger.error(`[events] Handler error for ${event}:`, err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        logger.error(`[events] Handler error for '${String(event)}' (source: ${meta?.source || "unknown"}): ${errMsg}`);
+        if (stack) logger.error(`[events] Stack: ${stack}`);
       }
     };
 
@@ -278,7 +281,10 @@ class WOPREventBusImpl implements WOPREventBus {
       try {
         await handler(payload, fullEvent);
       } catch (err) {
-        logger.error(`[events] Handler error for ${event}:`, err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        logger.error(`[events] Handler error for '${String(event)}' (source: ${meta?.source || "unknown"}): ${errMsg}`);
+        if (stack) logger.error(`[events] Stack: ${stack}`);
       }
     };
 
@@ -382,7 +388,8 @@ class WOPREventBusImpl implements WOPREventBus {
         if (result && typeof result.then === "function") {
           wcPromises.push(
             (result as Promise<void>).catch((err: unknown) => {
-              logger.error(`[events] Wildcard handler error for ${eventName}:`, err);
+              const errMsg = err instanceof Error ? (err as Error).message : String(err);
+              logger.error(`[events] Wildcard handler error for '${eventName}': ${errMsg}`);
             }),
           );
         }
