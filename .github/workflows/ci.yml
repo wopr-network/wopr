@@ -95,5 +95,5 @@ jobs:
 
       - name: Verify CLI works
         run: |
-          timeout 10 node dist/cli.js --help || true
+          node dist/cli.js --help
           echo "CLI executed successfully"

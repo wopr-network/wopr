@@ -157,6 +157,7 @@ Install plugins for additional functionality:
   wopr plugin install wopr-plugin-p2p    P2P networking, identity, and peer management
   wopr plugin install wopr-plugin-discord Discord bot integration
 `);
+  process.exit(0);
 }
 
 // ==================== Main ====================
