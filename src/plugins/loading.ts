@@ -8,12 +8,23 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../logger.js";
-import { checkRequirements, ensureRequirements, formatMissingRequirements } from "../plugins/requirements.js";
+import type {
+  InstallMethod as ManifestInstallMethod,
+  PluginManifest,
+  PluginRequirements,
+} from "../plugin-types/manifest.js";
+import {
+  checkNodeRequirement,
+  checkOsRequirement,
+  checkRequirements,
+  ensureRequirements,
+  formatMissingRequirements,
+} from "../plugins/requirements.js";
 import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContext } from "../types.js";
 import type { InstallMethod, VoicePluginRequirements } from "../voice/types.js";
 import { createPluginContext } from "./context-factory.js";
 import { getInstalledPlugins } from "./installation.js";
-import { loadedPlugins } from "./state.js";
+import { configSchemas, loadedPlugins, pluginManifests } from "./state.js";
 
 /** Options for loading plugins */
 export interface LoadPluginOptions {
@@ -48,13 +59,50 @@ export async function loadPlugin(
     entryPoint = join(installed.path, "index.ts");
   }
 
-  // Check requirements from package.json wopr.plugin metadata
+  // ── Step 1: Read manifest BEFORE init ──
+  // Check package.json "wopr" field first, then fall back to wopr-plugin.json
+  const manifest = readPluginManifest(installed.path, pkg);
+
+  if (manifest) {
+    logger.info(`[plugins] Read manifest for ${installed.name} (v${manifest.version})`);
+    pluginManifests.set(installed.name, manifest);
+
+    // Populate config schema from manifest (before init).
+    // The manifest ConfigSchema is a superset of the legacy ConfigSchema in types.ts
+    // (extra field types like "boolean", "array", "object"). Structurally compatible.
+    if (manifest.configSchema) {
+      configSchemas.set(installed.name, manifest.configSchema as unknown as import("../types.js").ConfigSchema);
+    }
+  }
+
+  // ── Step 2: Validate requirements (manifest takes priority over legacy) ──
   if (!options.skipRequirementsCheck) {
-    const pluginMeta = pkg.wopr?.plugin;
-    const requires: VoicePluginRequirements | undefined = pluginMeta?.requires;
-    const installMethods: InstallMethod[] | undefined = pluginMeta?.install;
+    // Prefer manifest requirements, fall back to legacy pkg.wopr.plugin.requires
+    const manifestRequires: PluginRequirements | undefined = manifest?.requires;
+    const legacyMeta = pkg.wopr?.plugin;
+    const legacyRequires: VoicePluginRequirements | undefined = legacyMeta?.requires;
+    const requires = manifestRequires ?? legacyRequires;
+
+    const manifestInstall: ManifestInstallMethod[] | undefined = manifest?.install;
+    const legacyInstall: InstallMethod[] | undefined = legacyMeta?.install;
+    const installMethods = manifestInstall ?? legacyInstall;
 
     if (requires) {
+      // Check OS constraint before anything else (manifest-only field)
+      if ("os" in requires && !checkOsRequirement((requires as PluginRequirements).os)) {
+        const allowed = (requires as PluginRequirements).os?.join(", ") ?? "unknown";
+        throw new Error(
+          `Plugin ${installed.name} does not support this platform (${process.platform}). Supported: ${allowed}`,
+        );
+      }
+
+      // Check Node.js version constraint (manifest-only field)
+      if ("node" in requires && !checkNodeRequirement((requires as PluginRequirements).node)) {
+        throw new Error(
+          `Plugin ${installed.name} requires Node.js ${(requires as PluginRequirements).node} (running ${process.versions.node})`,
+        );
+      }
+
       logger.info(`[plugins] Checking requirements for ${installed.name}...`);
 
       const {
@@ -79,6 +127,7 @@ export async function loadPlugin(
     }
   }
 
+  // ── Step 3: Dynamic import ──
   // Temporarily change cwd to plugin directory for proper module resolution
   const originalCwd = process.cwd();
   process.chdir(installed.path);
@@ -100,12 +149,55 @@ export async function loadPlugin(
   // Store
   loadedPlugins.set(installed.name, { plugin, context });
 
-  // Initialize if needed (skip for CLI commands)
+  // ── Step 4: Initialize (skip for CLI commands) ──
   if (plugin.init && !options.skipInit) {
     await plugin.init(context);
   }
 
   return plugin;
+}
+
+/**
+ * Read a plugin manifest from package.json "wopr" field or wopr-plugin.json.
+ * Returns undefined if no manifest is found (backward compat).
+ */
+// biome-ignore lint/suspicious/noExplicitAny: package.json shape is untyped
+export function readPluginManifest(pluginPath: string, pkg?: any): PluginManifest | undefined {
+  // 1. Check package.json "wopr" field (top-level manifest)
+  if (pkg?.wopr?.name && pkg.wopr.capabilities) {
+    return pkg.wopr as PluginManifest;
+  }
+
+  // 2. Check standalone wopr-plugin.json
+  const manifestPath = join(pluginPath, "wopr-plugin.json");
+  if (existsSync(manifestPath)) {
+    try {
+      const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
+      if (raw.name && raw.capabilities) {
+        return raw as PluginManifest;
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn(`[plugins] Failed to parse ${manifestPath}: ${msg}`);
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Get the manifest for a plugin by name (if available).
+ * This allows the platform/webui to query manifest data without loading the plugin.
+ */
+export function getPluginManifest(name: string): PluginManifest | undefined {
+  return pluginManifests.get(name);
+}
+
+/**
+ * Get all loaded plugin manifests.
+ */
+export function getAllPluginManifests(): Map<string, PluginManifest> {
+  return pluginManifests;
 }
 
 export async function unloadPlugin(name: string): Promise<void> {
@@ -123,6 +215,8 @@ export async function unloadPlugin(name: string): Promise<void> {
   }
 
   loadedPlugins.delete(name);
+  pluginManifests.delete(name);
+  configSchemas.delete(name);
 }
 
 export function getLoadedPlugin(name: string): { plugin: WOPRPlugin; context: WOPRPluginContext } | undefined {

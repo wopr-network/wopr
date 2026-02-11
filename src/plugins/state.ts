@@ -7,6 +7,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { PluginManifest } from "../plugin-types/manifest.js";
 import type { ModelProvider } from "../types/provider.js";
 import type {
   ChannelAdapter,
@@ -37,6 +38,9 @@ export const providerPlugins: Map<string, ModelProvider> = new Map();
 
 /** Config schemas registry (pluginId -> schema) */
 export const configSchemas: Map<string, ConfigSchema> = new Map();
+
+/** Plugin manifests registry (pluginName -> manifest) */
+export const pluginManifests: Map<string, PluginManifest> = new Map();
 
 /**
  * Plugin extensions registry - plugins can expose APIs to other plugins.
