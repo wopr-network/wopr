@@ -12,6 +12,7 @@
  * - Edge cases: missing files, empty content, concurrent sessions
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import os from "node:os";
 import path from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -101,7 +102,6 @@ describe("resolveDefaultWorkspaceDir", () => {
 
   it("falls back to ~/.wopr/workspace when WOPR_HOME is not set", () => {
     vi.stubEnv("WOPR_HOME", "");
-    const os = require("node:os");
     const dir = workspace.resolveDefaultWorkspaceDir();
     expect(dir).toBe(path.join(os.homedir(), ".wopr", "workspace"));
   });
