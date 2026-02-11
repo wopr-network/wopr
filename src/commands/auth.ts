@@ -8,6 +8,7 @@ import {
   exchangeCode,
   generatePKCE,
   loadAuth,
+  loadAuthFromEnv,
   loadClaudeCodeCredentials,
   saveApiKey,
   saveOAuthTokens,
@@ -17,10 +18,22 @@ import { help } from "./help.js";
 
 export async function authCommand(subcommand: string | undefined, args: string[]): Promise<void> {
   if (!subcommand || subcommand === "status") {
+    const envAuth = loadAuthFromEnv();
     const claudeCodeAuth = loadClaudeCodeCredentials();
     const auth = loadAuth();
 
-    if (claudeCodeAuth) {
+    if (envAuth) {
+      if (envAuth.type === "oauth") {
+        logger.info("Auth: OAuth (environment variable)");
+        logger.info("Source: WOPR_CLAUDE_OAUTH_TOKEN");
+      } else {
+        logger.info("Auth: API Key (environment variable)");
+        logger.info("Source: WOPR_API_KEY");
+      }
+      if (process.env.WOPR_CREDENTIAL_KEY) {
+        logger.info("Encryption: auth.json encrypted at rest");
+      }
+    } else if (claudeCodeAuth) {
       logger.info("Auth: Claude Code OAuth (shared credentials)");
       logger.info("Source: ~/.claude/.credentials.json");
       if (claudeCodeAuth.expiresAt) {

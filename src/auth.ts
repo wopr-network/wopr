@@ -6,9 +6,11 @@ import { logger } from "./logger.js";
  * - Claude Max/Pro OAuth (subscription-based, no per-token cost)
  * - API Key (pay-per-use)
  * - Multi-provider credentials via ProviderRegistry
+ * - Environment variable injection for platform/container deployment
+ * - Encrypted auth.json at rest (WOPR_CREDENTIAL_KEY)
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +33,135 @@ const BETA_HEADERS = [
   "interleaved-thinking-2025-05-14",
   "fine-grained-tool-streaming-2025-05-14",
 ];
+
+// Encryption constants
+const ENCRYPTION_ALGO = "aes-256-gcm";
+const ENCRYPTION_IV_LEN = 16;
+const ENCRYPTION_SALT_LEN = 32;
+const ENCRYPTION_KEY_LEN = 32;
+// Marker prefix to distinguish encrypted data from plaintext JSON
+const ENCRYPTED_PREFIX = "wopr:enc:";
+
+/**
+ * Derive an AES-256 key from a passphrase using scrypt.
+ */
+export function deriveKey(passphrase: string, salt: Buffer): Buffer {
+  return scryptSync(passphrase, salt, ENCRYPTION_KEY_LEN);
+}
+
+/**
+ * Encrypt a plaintext string using AES-256-GCM.
+ * Returns a prefixed base64 blob: "wopr:enc:<salt>:<iv>:<tag>:<ciphertext>"
+ */
+export function encryptData(plaintext: string, passphrase: string): string {
+  const salt = randomBytes(ENCRYPTION_SALT_LEN);
+  const key = deriveKey(passphrase, salt);
+  const iv = randomBytes(ENCRYPTION_IV_LEN);
+
+  const cipher = createCipheriv(ENCRYPTION_ALGO, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf-8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+
+  const parts = [salt, iv, tag, encrypted].map((b) => b.toString("base64"));
+  return `${ENCRYPTED_PREFIX}${parts.join(":")}`;
+}
+
+/**
+ * Decrypt data produced by encryptData().
+ * Returns null if decryption fails (wrong key, corrupt data, etc.).
+ */
+export function decryptData(blob: string, passphrase: string): string | null {
+  if (!blob.startsWith(ENCRYPTED_PREFIX)) return null;
+
+  try {
+    const payload = blob.slice(ENCRYPTED_PREFIX.length);
+    const [saltB64, ivB64, tagB64, cipherB64] = payload.split(":");
+    if (!saltB64 || !ivB64 || !tagB64 || !cipherB64) return null;
+
+    const salt = Buffer.from(saltB64, "base64");
+    const iv = Buffer.from(ivB64, "base64");
+    const tag = Buffer.from(tagB64, "base64");
+    const ciphertext = Buffer.from(cipherB64, "base64");
+    const key = deriveKey(passphrase, salt);
+
+    const decipher = createDecipheriv(ENCRYPTION_ALGO, key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return decrypted.toString("utf-8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check whether data on disk is encrypted (starts with the prefix).
+ */
+export function isEncryptedData(data: string): boolean {
+  return data.startsWith(ENCRYPTED_PREFIX);
+}
+
+/**
+ * Load auth state from environment variables.
+ * Returns null if no relevant env vars are set.
+ *
+ * Priority within env vars:
+ *   1. WOPR_CLAUDE_OAUTH_TOKEN  (OAuth token for Claude Max)
+ *   2. WOPR_API_KEY             (Anthropic API key)
+ *
+ * Additionally, WOPR_PLUGIN_CONFIG is a JSON blob that is loaded into the
+ * provider registry, keyed by provider ID.
+ */
+export function loadAuthFromEnv(): AuthState | null {
+  // WOPR_CLAUDE_OAUTH_TOKEN — direct OAuth token injection
+  const oauthToken = process.env.WOPR_CLAUDE_OAUTH_TOKEN;
+  if (oauthToken) {
+    return {
+      type: "oauth",
+      accessToken: oauthToken,
+      refreshToken: process.env.WOPR_CLAUDE_REFRESH_TOKEN,
+      expiresAt: process.env.WOPR_CLAUDE_OAUTH_EXPIRES_AT
+        ? Number(process.env.WOPR_CLAUDE_OAUTH_EXPIRES_AT)
+        : undefined,
+      updatedAt: Date.now(),
+    };
+  }
+
+  // WOPR_API_KEY — direct API key injection
+  const apiKey = process.env.WOPR_API_KEY;
+  if (apiKey) {
+    return {
+      type: "api_key",
+      apiKey,
+      updatedAt: Date.now(),
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Parse WOPR_PLUGIN_CONFIG env var and load credentials into the provider registry.
+ * Expected format: JSON object keyed by provider ID, e.g.:
+ *   { "anthropic": "sk-ant-...", "openai": "sk-..." }
+ *
+ * Returns parsed config or null if env var is not set / invalid.
+ */
+export function parsePluginConfig(): Record<string, string> | null {
+  const raw = process.env.WOPR_PLUGIN_CONFIG;
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      logger.error("WOPR_PLUGIN_CONFIG must be a JSON object keyed by provider ID");
+      return null;
+    }
+    return parsed as Record<string, string>;
+  } catch {
+    logger.error("WOPR_PLUGIN_CONFIG is not valid JSON");
+    return null;
+  }
+}
 
 export interface AuthState {
   type: "oauth" | "api_key";
@@ -159,31 +290,50 @@ export function loadClaudeCodeCredentials(): AuthState | null {
   }
 }
 
-// Load auth state from disk
-// Priority: WOPR explicit API key > Claude Code OAuth > WOPR OAuth
-// This ensures `wopr auth api-key` is not silently ignored when
-// ~/.claude/.credentials.json exists.
+// Load auth state
+// Priority: env vars > WOPR explicit API key > Claude Code OAuth > WOPR OAuth
+// Env vars enable platform/container credential injection without file mounts.
 export function loadAuth(): AuthState | null {
-  // Check WOPR's own auth file first
+  // 1. Environment variable injection (highest priority for platform deployments)
+  const envAuth = loadAuthFromEnv();
+  if (envAuth) return envAuth;
+
+  // 2. Check WOPR's own auth file (supports encrypted storage)
   let woprAuth: AuthState | null = null;
   if (existsSync(AUTH_FILE)) {
     try {
-      woprAuth = JSON.parse(readFileSync(AUTH_FILE, "utf-8"));
+      const raw = readFileSync(AUTH_FILE, "utf-8");
+      const credKey = process.env.WOPR_CREDENTIAL_KEY;
+
+      if (isEncryptedData(raw)) {
+        if (!credKey) {
+          logger.error("auth.json is encrypted but WOPR_CREDENTIAL_KEY is not set");
+        } else {
+          const decrypted = decryptData(raw, credKey);
+          if (decrypted) {
+            woprAuth = JSON.parse(decrypted);
+          } else {
+            logger.error("Failed to decrypt auth.json — wrong WOPR_CREDENTIAL_KEY?");
+          }
+        }
+      } else {
+        woprAuth = JSON.parse(raw);
+      }
     } catch {
-      // ignore
+      // ignore parse errors
     }
   }
 
-  // If WOPR has an explicit API key, prefer it over Claude Code OAuth
+  // 3. If WOPR has an explicit API key, prefer it over Claude Code OAuth
   if (woprAuth?.type === "api_key" && woprAuth.apiKey) {
     return woprAuth;
   }
 
-  // Otherwise try Claude Code credentials
+  // 4. Otherwise try Claude Code credentials
   const claudeCodeAuth = loadClaudeCodeCredentials();
   if (claudeCodeAuth) return claudeCodeAuth;
 
-  // Fall back to whatever WOPR auth was saved (e.g. WOPR's own OAuth)
+  // 5. Fall back to whatever WOPR auth was saved (e.g. WOPR's own OAuth)
   return woprAuth;
 }
 
@@ -194,6 +344,20 @@ export async function loadAuthWithRegistry(): Promise<AuthState | null> {
     await providerRegistry.loadCredentials();
   } catch (error) {
     logger.error("Failed to load provider credentials:", error);
+  }
+
+  // Load WOPR_PLUGIN_CONFIG env var into registry
+  const pluginConfig = parsePluginConfig();
+  if (pluginConfig) {
+    for (const [providerId, credential] of Object.entries(pluginConfig)) {
+      if (typeof credential === "string" && credential.length > 0) {
+        try {
+          await providerRegistry.setCredential(providerId, credential);
+        } catch {
+          // Provider may not be registered yet — that's OK for early boot
+        }
+      }
+    }
   }
 
   // Load standard auth
@@ -211,9 +375,15 @@ export async function loadAuthWithRegistry(): Promise<AuthState | null> {
   return auth;
 }
 
-// Save auth state to disk
+// Save auth state to disk (encrypts when WOPR_CREDENTIAL_KEY is set)
 export function saveAuth(auth: AuthState): void {
-  writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2));
+  const json = JSON.stringify(auth, null, 2);
+  const credKey = process.env.WOPR_CREDENTIAL_KEY;
+  if (credKey) {
+    writeFileSync(AUTH_FILE, encryptData(json, credKey));
+  } else {
+    writeFileSync(AUTH_FILE, json);
+  }
 }
 
 // Clear auth state

@@ -52,6 +52,7 @@ const {
   exchangeCode,
   refreshAccessToken,
   loadAuth,
+  loadAuthFromEnv,
   loadClaudeCodeCredentials,
   saveAuth,
   clearAuth,
@@ -62,15 +63,41 @@ const {
   getBetaHeaders,
   saveOAuthTokens,
   saveApiKey,
+  encryptData,
+  decryptData,
+  isEncryptedData,
+  parsePluginConfig,
 } = await import("../../src/auth.js");
 
 describe("Authentication Module", () => {
+  const envBackup: Record<string, string | undefined> = {};
+
   beforeEach(() => {
     mockFs.clear();
+    // Snapshot env vars we may modify
+    for (const key of [
+      "WOPR_CLAUDE_OAUTH_TOKEN",
+      "WOPR_CLAUDE_REFRESH_TOKEN",
+      "WOPR_CLAUDE_OAUTH_EXPIRES_AT",
+      "WOPR_API_KEY",
+      "WOPR_PLUGIN_CONFIG",
+      "WOPR_CREDENTIAL_KEY",
+    ]) {
+      envBackup[key] = process.env[key];
+      delete process.env[key];
+    }
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    // Restore env vars
+    for (const [key, val] of Object.entries(envBackup)) {
+      if (val === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = val;
+      }
+    }
   });
 
   // ========================================================================
@@ -363,6 +390,213 @@ describe("Authentication Module", () => {
       const saved = JSON.parse(mockFs.get("/mock/wopr/auth.json")!);
       expect(saved.type).toBe("api_key");
       expect(saved.apiKey).toBe("sk-ant-my-key");
+    });
+  });
+
+  // ========================================================================
+  // Environment Variable Credential Injection (WOP-68)
+  // ========================================================================
+  describe("loadAuthFromEnv", () => {
+    it("should return null when no env vars set", () => {
+      expect(loadAuthFromEnv()).toBeNull();
+    });
+
+    it("should return OAuth state from WOPR_CLAUDE_OAUTH_TOKEN", () => {
+      process.env.WOPR_CLAUDE_OAUTH_TOKEN = "env-oauth-token";
+      const auth = loadAuthFromEnv();
+      expect(auth).not.toBeNull();
+      expect(auth!.type).toBe("oauth");
+      expect(auth!.accessToken).toBe("env-oauth-token");
+    });
+
+    it("should include refresh token and expiresAt from env", () => {
+      process.env.WOPR_CLAUDE_OAUTH_TOKEN = "env-oauth-token";
+      process.env.WOPR_CLAUDE_REFRESH_TOKEN = "env-refresh";
+      process.env.WOPR_CLAUDE_OAUTH_EXPIRES_AT = "9999999999999";
+      const auth = loadAuthFromEnv();
+      expect(auth!.refreshToken).toBe("env-refresh");
+      expect(auth!.expiresAt).toBe(9999999999999);
+    });
+
+    it("should return API key state from WOPR_API_KEY", () => {
+      process.env.WOPR_API_KEY = "sk-ant-env-key";
+      const auth = loadAuthFromEnv();
+      expect(auth).not.toBeNull();
+      expect(auth!.type).toBe("api_key");
+      expect(auth!.apiKey).toBe("sk-ant-env-key");
+    });
+
+    it("should prefer WOPR_CLAUDE_OAUTH_TOKEN over WOPR_API_KEY", () => {
+      process.env.WOPR_CLAUDE_OAUTH_TOKEN = "env-oauth";
+      process.env.WOPR_API_KEY = "env-api-key";
+      const auth = loadAuthFromEnv();
+      expect(auth!.type).toBe("oauth");
+      expect(auth!.accessToken).toBe("env-oauth");
+    });
+  });
+
+  describe("loadAuth with env vars", () => {
+    it("should prefer env var auth over file-based auth", () => {
+      process.env.WOPR_API_KEY = "sk-env-priority";
+      mockFs.set("/mock/wopr/auth.json", JSON.stringify(AUTH_FIXTURES.validApiKeyAuth));
+
+      const auth = loadAuth();
+      expect(auth!.apiKey).toBe("sk-env-priority");
+    });
+
+    it("should prefer env var OAuth over Claude Code credentials", async () => {
+      process.env.WOPR_CLAUDE_OAUTH_TOKEN = "env-oauth-wins";
+      const { homedir } = await import("node:os");
+      const claudeCredPath = `${homedir()}/.claude/.credentials.json`;
+      mockFs.set(claudeCredPath, JSON.stringify(AUTH_FIXTURES.claudeCodeCredentials));
+
+      const auth = loadAuth();
+      expect(auth!.type).toBe("oauth");
+      expect(auth!.accessToken).toBe("env-oauth-wins");
+    });
+
+    it("should fall through to file auth when no env vars set", () => {
+      mockFs.set("/mock/wopr/auth.json", JSON.stringify(AUTH_FIXTURES.validApiKeyAuth));
+      const auth = loadAuth();
+      expect(auth!.apiKey).toBe("sk-ant-test-key-123");
+    });
+  });
+
+  // ========================================================================
+  // Encryption at Rest (WOP-68)
+  // ========================================================================
+  describe("encryptData / decryptData", () => {
+    it("should round-trip encrypt and decrypt", () => {
+      const plaintext = '{"type":"api_key","apiKey":"sk-ant-secret"}';
+      const passphrase = "test-passphrase-123";
+      const encrypted = encryptData(plaintext, passphrase);
+      expect(encrypted).not.toBe(plaintext);
+      expect(encrypted.startsWith("wopr:enc:")).toBe(true);
+
+      const decrypted = decryptData(encrypted, passphrase);
+      expect(decrypted).toBe(plaintext);
+    });
+
+    it("should return null for wrong passphrase", () => {
+      const encrypted = encryptData("secret-data", "correct-key");
+      const result = decryptData(encrypted, "wrong-key");
+      expect(result).toBeNull();
+    });
+
+    it("should return null for non-encrypted data", () => {
+      const result = decryptData('{"type":"api_key"}', "any-key");
+      expect(result).toBeNull();
+    });
+
+    it("should return null for malformed encrypted data", () => {
+      const result = decryptData("wopr:enc:bad-data", "any-key");
+      expect(result).toBeNull();
+    });
+
+    it("should produce different ciphertexts for same input (random salt/IV)", () => {
+      const plaintext = "same-input";
+      const key = "same-key";
+      const a = encryptData(plaintext, key);
+      const b = encryptData(plaintext, key);
+      expect(a).not.toBe(b);
+    });
+  });
+
+  describe("isEncryptedData", () => {
+    it("should return true for encrypted blobs", () => {
+      expect(isEncryptedData("wopr:enc:abc:def:ghi:jkl")).toBe(true);
+    });
+
+    it("should return false for plaintext JSON", () => {
+      expect(isEncryptedData('{"type":"api_key"}')).toBe(false);
+    });
+  });
+
+  describe("saveAuth with encryption", () => {
+    it("should encrypt auth.json when WOPR_CREDENTIAL_KEY is set", () => {
+      process.env.WOPR_CREDENTIAL_KEY = "my-secret-key";
+      saveAuth(AUTH_FIXTURES.validApiKeyAuth);
+
+      const raw = mockFs.get("/mock/wopr/auth.json")!;
+      expect(raw.startsWith("wopr:enc:")).toBe(true);
+      // Should not contain plaintext API key
+      expect(raw).not.toContain("sk-ant-test-key-123");
+    });
+
+    it("should save plaintext when WOPR_CREDENTIAL_KEY is not set", () => {
+      saveAuth(AUTH_FIXTURES.validApiKeyAuth);
+      const raw = mockFs.get("/mock/wopr/auth.json")!;
+      expect(raw.startsWith("{")).toBe(true);
+      const parsed = JSON.parse(raw);
+      expect(parsed.apiKey).toBe("sk-ant-test-key-123");
+    });
+  });
+
+  describe("loadAuth with encrypted auth.json", () => {
+    it("should decrypt auth.json when WOPR_CREDENTIAL_KEY is set", () => {
+      const passphrase = "decrypt-test-key";
+      const json = JSON.stringify(AUTH_FIXTURES.validApiKeyAuth);
+      const encrypted = encryptData(json, passphrase);
+      mockFs.set("/mock/wopr/auth.json", encrypted);
+
+      process.env.WOPR_CREDENTIAL_KEY = passphrase;
+      const auth = loadAuth();
+      expect(auth!.type).toBe("api_key");
+      expect(auth!.apiKey).toBe("sk-ant-test-key-123");
+    });
+
+    it("should return null when encrypted but no key provided", () => {
+      const encrypted = encryptData(JSON.stringify(AUTH_FIXTURES.validApiKeyAuth), "some-key");
+      mockFs.set("/mock/wopr/auth.json", encrypted);
+
+      // No WOPR_CREDENTIAL_KEY set
+      const auth = loadAuth();
+      expect(auth).toBeNull();
+    });
+
+    it("should return null when encrypted with wrong key", () => {
+      const encrypted = encryptData(JSON.stringify(AUTH_FIXTURES.validApiKeyAuth), "correct-key");
+      mockFs.set("/mock/wopr/auth.json", encrypted);
+
+      process.env.WOPR_CREDENTIAL_KEY = "wrong-key";
+      const auth = loadAuth();
+      expect(auth).toBeNull();
+    });
+  });
+
+  // ========================================================================
+  // Plugin Config Env Var (WOP-68)
+  // ========================================================================
+  describe("parsePluginConfig", () => {
+    it("should return null when WOPR_PLUGIN_CONFIG is not set", () => {
+      expect(parsePluginConfig()).toBeNull();
+    });
+
+    it("should parse valid JSON object", () => {
+      process.env.WOPR_PLUGIN_CONFIG = JSON.stringify({
+        anthropic: "sk-ant-123",
+        openai: "sk-openai-456",
+      });
+      const config = parsePluginConfig();
+      expect(config).toEqual({
+        anthropic: "sk-ant-123",
+        openai: "sk-openai-456",
+      });
+    });
+
+    it("should return null for invalid JSON", () => {
+      process.env.WOPR_PLUGIN_CONFIG = "not-json";
+      expect(parsePluginConfig()).toBeNull();
+    });
+
+    it("should return null for JSON array", () => {
+      process.env.WOPR_PLUGIN_CONFIG = '["a","b"]';
+      expect(parsePluginConfig()).toBeNull();
+    });
+
+    it("should return null for JSON string", () => {
+      process.env.WOPR_PLUGIN_CONFIG = '"just-a-string"';
+      expect(parsePluginConfig()).toBeNull();
     });
   });
 });
