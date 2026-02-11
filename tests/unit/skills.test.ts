@@ -12,7 +12,7 @@
  * - CRUD operations (create, remove, clearCache)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -26,7 +26,7 @@ vi.mock("../../src/logger.js", () => ({
   },
 }));
 
-// Mock paths — we override them per-test via vi.doMock where needed
+// Mock paths
 vi.mock("../../src/paths.js", () => ({
   WOPR_HOME: "/tmp/wopr-test-skills-home",
   SKILLS_DIR: "/tmp/wopr-test-skills-home/skills",
@@ -53,7 +53,6 @@ import {
 } from "../../src/core/skills.js";
 import type {
   Skill,
-  SkillMetadata,
   ParsedFrontmatter,
 } from "../../src/core/skills.js";
 
