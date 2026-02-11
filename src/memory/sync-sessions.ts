@@ -51,7 +51,9 @@ export async function syncSessionFiles(params: {
     if (params.vectorTable) {
       try {
         params.db
-          .prepare(`DELETE FROM ${params.vectorTable} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`)
+          .prepare(
+            `DELETE FROM ${params.vectorTable} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
+          )
           .run(stale.path, "sessions");
       } catch (err) {
         console.warn(`[sync-sessions] Vector table delete failed for ${stale.path}: ${err}`);

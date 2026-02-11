@@ -234,7 +234,6 @@ class WOPREventBusImpl implements WOPREventBus {
     }
   }
 
-
   on<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): () => void {
     // Wrap handler to provide full event context
     const wrapper = async (payload: any, meta: { timestamp: number; source?: string }) => {

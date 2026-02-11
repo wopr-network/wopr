@@ -12,13 +12,7 @@ import type { MemoryFileChange } from "../core/events.js";
 import { eventBus } from "../core/events.js";
 import { logger } from "../logger.js";
 import { WOPR_HOME } from "../paths.js";
-import {
-  buildFileEntry,
-  chunkMarkdown,
-  ensureDir,
-  hashText,
-  listMemoryFiles,
-} from "./internal.js";
+import { buildFileEntry, chunkMarkdown, ensureDir, hashText, listMemoryFiles } from "./internal.js";
 import { ensureMemoryIndexSchema } from "./schema.js";
 import { syncSessionFiles } from "./sync-sessions.js";
 import {
@@ -589,11 +583,13 @@ export class MemoryIndexManager {
     const executing: Set<Promise<void>> = new Set();
 
     for (const task of tasks) {
-      const p = task().then((result) => {
-        results.push(result);
-      }).finally(() => {
-        executing.delete(p);
-      });
+      const p = task()
+        .then((result) => {
+          results.push(result);
+        })
+        .finally(() => {
+          executing.delete(p);
+        });
       executing.add(p);
 
       if (executing.size >= concurrency) {

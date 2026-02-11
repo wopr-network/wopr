@@ -159,16 +159,26 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   const webhookSecret = randomBytes(32).toString("hex");
 
   const createResult = execFile("gh", [
-    "api", `orgs/${selectedOrg}/hooks`,
-    "-X", "POST",
-    "-f", "name=web",
-    "-f", "active=true",
-    "-f", `config[url]=${webhookUrl}`,
-    "-f", "config[content_type]=json",
-    "-f", `config[secret]=${webhookSecret}`,
-    "-f", "events[]=pull_request",
-    "-f", "events[]=pull_request_review",
-    "--jq", ".id",
+    "api",
+    `orgs/${selectedOrg}/hooks`,
+    "-X",
+    "POST",
+    "-f",
+    "name=web",
+    "-f",
+    "active=true",
+    "-f",
+    `config[url]=${webhookUrl}`,
+    "-f",
+    "config[content_type]=json",
+    "-f",
+    `config[secret]=${webhookSecret}`,
+    "-f",
+    "events[]=pull_request",
+    "-f",
+    "events[]=pull_request_review",
+    "--jq",
+    ".id",
   ]);
 
   if (!createResult.success) {

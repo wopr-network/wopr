@@ -3,7 +3,7 @@
  */
 
 import { config } from "../../../core/config.js";
-import { DEFAULT_WORKSPACE, applyWizardMetadata, openBrowser } from "../helpers.js";
+import { applyWizardMetadata, DEFAULT_WORKSPACE, openBrowser } from "../helpers.js";
 import { confirm, note, outro, pc } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
@@ -119,10 +119,7 @@ export const finalizeStep: OnboardStep = async (ctx: OnboardContext) => {
       if (opened) {
         ctx.runtime.log("Browser opened!");
       } else {
-        await note(
-          ["Could not open browser automatically.", "", `Please open: ${webUiUrl}`].join("\n"),
-          "Open Web UI",
-        );
+        await note(["Could not open browser automatically.", "", `Please open: ${webUiUrl}`].join("\n"), "Open Web UI");
       }
     }
   }
