@@ -210,7 +210,7 @@ export function listSessions(): Session[] {
     name,
     id: sessions[name],
     context: getSessionContext(name),
-    created: 0, // TODO: track creation time
+    created: Date.now(),
   }));
 }
 

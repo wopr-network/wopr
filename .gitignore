@@ -1,7 +1,10 @@
 node_modules/
 dist/
 *.log
+*.tsbuildinfo
 .cache/
+coverage/
+.turbo/
 identity.json
 peers.json
 sessions.json
