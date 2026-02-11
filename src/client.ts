@@ -5,12 +5,15 @@
  */
 
 import type { WoprConfig } from "./core/config.js";
+import { getToken } from "./daemon/auth-token.js";
 import type { ConversationEntry, CronJob, StreamCallback, StreamMessage } from "./types.js";
 
 const DEFAULT_URL = "http://127.0.0.1:7437";
 
 export interface ClientConfig {
   baseUrl?: string;
+  /** Override token instead of reading from daemon-token file */
+  token?: string;
 }
 
 export interface Session {
@@ -27,9 +30,19 @@ export interface InjectResult {
 
 export class WoprClient {
   private baseUrl: string;
+  private tokenOverride?: string;
 
   constructor(config: ClientConfig = {}) {
     this.baseUrl = config.baseUrl ?? DEFAULT_URL;
+    this.tokenOverride = config.token;
+  }
+
+  private authHeaders(): Record<string, string> {
+    const token = this.tokenOverride ?? getToken();
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+    return {};
   }
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -37,6 +50,7 @@ export class WoprClient {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...this.authHeaders(),
         ...options?.headers,
       },
     });
@@ -97,6 +111,7 @@ export class WoprClient {
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
+          ...this.authHeaders(),
         },
         body: JSON.stringify({ message }),
       });

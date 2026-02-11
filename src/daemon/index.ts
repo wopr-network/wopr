@@ -20,6 +20,8 @@ import { inject } from "../core/sessions.js";
 import { logger as winstonLogger } from "../logger.js";
 import { LOG_FILE, PID_FILE } from "../paths.js";
 import { loadAllPlugins, registerPluginExtension, shutdownAllPlugins } from "../plugins.js";
+import { ensureToken } from "./auth-token.js";
+import { bearerAuth } from "./middleware/auth.js";
 import { authRouter } from "./routes/auth.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
@@ -59,8 +61,9 @@ export function createApp() {
   // Middleware
   app.use("*", cors());
   app.use("*", logger());
+  app.use("*", bearerAuth());
 
-  // Health check
+  // Health check (unauthenticated: /health)
   app.get("/", (c) =>
     c.json({
       name: "wopr",
@@ -106,6 +109,10 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // Load config from disk first
   await centralConfig.load();
   daemonLog("Configuration loaded from disk");
+
+  // Ensure bearer token exists for API authentication
+  ensureToken();
+  daemonLog("Bearer token ready for API authentication");
 
   // Write PID file
   writeFileSync(PID_FILE, process.pid.toString());
