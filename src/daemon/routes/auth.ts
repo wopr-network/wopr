@@ -110,11 +110,18 @@ authRouter.post("/callback", async (c) => {
     return c.json({ error: "Invalid or expired OAuth state" }, 400);
   }
 
-  // Remove entry immediately — single use
-  pkceStore.delete(state);
+  // Enforce TTL at lookup time (belt-and-suspenders with interval cleanup)
+  if (Date.now() - pending.createdAt > PKCE_TTL_MS) {
+    pkceStore.delete(state);
+    return c.json({ error: "PKCE session expired" }, 400);
+  }
 
   try {
     const tokens = await exchangeCode(code, pending.codeVerifier, pending.redirectUri);
+
+    // Delete AFTER successful exchange so retries work on transient failures
+    pkceStore.delete(state);
+
     saveOAuthTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresIn);
 
     return c.json({
