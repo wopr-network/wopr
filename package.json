@@ -19,6 +19,10 @@
     "format": "biome format --write src/",
     "check": "biome check src/ && tsc --noEmit"
   },
+  "overrides": {
+    "cmake-js": "^8.0.0",
+    "tar": "^7.0.0"
+  },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@clack/prompts": "^0.7.0",
