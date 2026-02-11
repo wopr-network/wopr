@@ -155,6 +155,6 @@ export function getProviderStatus(): Array<{
     id: p.id,
     name: p.name,
     available: p.available,
-    lastChecked: Date.now(),
+    lastChecked: p.lastChecked,
   }));
 }

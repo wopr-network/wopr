@@ -189,6 +189,30 @@ describe("saveSessionId", () => {
     const stored = JSON.parse(mockFiles.get(MOCK_SESSIONS_FILE)!);
     expect(stored).toEqual({ dup: "new-id" });
   });
+
+  it("should persist creation timestamp for new sessions", () => {
+    const before = Date.now();
+    sessions.saveSessionId("new-session", "sid-123");
+    const after = Date.now();
+
+    const createdFile = join(MOCK_SESSIONS_DIR, "new-session.created");
+    expect(mockFiles.has(createdFile)).toBe(true);
+
+    const ts = Number(mockFiles.get(createdFile));
+    expect(ts).toBeGreaterThanOrEqual(before);
+    expect(ts).toBeLessThanOrEqual(after);
+  });
+
+  it("should not overwrite creation timestamp when updating existing session", () => {
+    mockFiles.set(MOCK_SESSIONS_FILE, JSON.stringify({ existing: "old-id" }));
+    const createdFile = join(MOCK_SESSIONS_DIR, "existing.created");
+    mockFiles.set(createdFile, "1700000000000");
+
+    sessions.saveSessionId("existing", "new-id");
+
+    // Creation timestamp should be unchanged
+    expect(mockFiles.get(createdFile)).toBe("1700000000000");
+  });
 });
 
 describe("deleteSessionId", () => {
@@ -275,6 +299,32 @@ describe("setSessionProvider", () => {
 });
 
 // ===========================================================================
+// getSessionCreated
+// ===========================================================================
+describe("getSessionCreated", () => {
+  it("should return 0 when no .created file exists", () => {
+    const result = sessions.getSessionCreated("nonexistent");
+    expect(result).toBe(0);
+  });
+
+  it("should return the persisted timestamp", () => {
+    const createdFile = join(MOCK_SESSIONS_DIR, "my-session.created");
+    mockFiles.set(createdFile, "1700000000000");
+
+    const result = sessions.getSessionCreated("my-session");
+    expect(result).toBe(1700000000000);
+  });
+
+  it("should return 0 for invalid timestamp content", () => {
+    const createdFile = join(MOCK_SESSIONS_DIR, "bad.created");
+    mockFiles.set(createdFile, "not-a-number");
+
+    const result = sessions.getSessionCreated("bad");
+    expect(result).toBe(0);
+  });
+});
+
+// ===========================================================================
 // listSessions
 // ===========================================================================
 describe("listSessions", () => {
@@ -302,14 +352,20 @@ describe("listSessions", () => {
     expect(s2!.context).toBeUndefined();
   });
 
-  it("should include created timestamp for each session", () => {
+  it("should use persisted creation timestamp from .created file", () => {
     mockFiles.set(MOCK_SESSIONS_FILE, JSON.stringify({ ts: "id-ts" }));
-    const before = Date.now();
-    const result = sessions.listSessions();
-    const after = Date.now();
+    const createdFile = join(MOCK_SESSIONS_DIR, "ts.created");
+    mockFiles.set(createdFile, "1700000000000");
 
-    expect(result[0].created).toBeGreaterThanOrEqual(before);
-    expect(result[0].created).toBeLessThanOrEqual(after);
+    const result = sessions.listSessions();
+    expect(result[0].created).toBe(1700000000000);
+  });
+
+  it("should return 0 when session has no .created file", () => {
+    mockFiles.set(MOCK_SESSIONS_FILE, JSON.stringify({ ts: "id-ts" }));
+
+    const result = sessions.listSessions();
+    expect(result[0].created).toBe(0);
   });
 });
 
@@ -317,12 +373,14 @@ describe("listSessions", () => {
 // deleteSession (async, emits event, cleans up files)
 // ===========================================================================
 describe("deleteSession", () => {
-  it("should remove session ID, context file, and provider file", async () => {
+  it("should remove session ID, context file, provider file, and created file", async () => {
     mockFiles.set(MOCK_SESSIONS_FILE, JSON.stringify({ doomed: "id-doomed" }));
     const contextFile = join(MOCK_SESSIONS_DIR, "doomed.md");
     const providerFile = join(MOCK_SESSIONS_DIR, "doomed.provider.json");
+    const createdFile = join(MOCK_SESSIONS_DIR, "doomed.created");
     mockFiles.set(contextFile, "ctx");
     mockFiles.set(providerFile, "{}");
+    mockFiles.set(createdFile, "1700000000000");
 
     await sessions.deleteSession("doomed", "test cleanup");
 
@@ -333,6 +391,7 @@ describe("deleteSession", () => {
     // Files deleted
     expect(mockFiles.has(contextFile)).toBe(false);
     expect(mockFiles.has(providerFile)).toBe(false);
+    expect(mockFiles.has(createdFile)).toBe(false);
   });
 
   it("should handle missing context/provider files gracefully", async () => {
