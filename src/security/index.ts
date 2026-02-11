@@ -57,6 +57,7 @@ export {
   auditLogHook,
   createHookContext,
   type HookContext,
+  parseHookCommand,
   type PostInjectResult,
   type PreInjectResult,
   processInjection,
