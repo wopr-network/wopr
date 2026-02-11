@@ -22,6 +22,7 @@ import { LOG_FILE, PID_FILE } from "../paths.js";
 import { loadAllPlugins, registerPluginExtension, shutdownAllPlugins } from "../plugins.js";
 import { ensureToken } from "./auth-token.js";
 import { bearerAuth } from "./middleware/auth.js";
+import { checkReadiness, markCronRunning, markStartupComplete } from "./readiness.js";
 import { authRouter } from "./routes/auth.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
@@ -73,6 +74,11 @@ export function createApp() {
   );
 
   app.get("/health", (c) => c.json({ status: "ok" }));
+
+  app.get("/ready", (c) => {
+    const result = checkReadiness();
+    return c.json(result, result.ready ? 200 : 503);
+  });
 
   // Mount routers
   app.route("/auth", authRouter);
@@ -318,6 +324,9 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     daemonLog("[startup] All systems initialized successfully");
   }
 
+  // All subsystems initialized — mark startup complete for readiness probe
+  markStartupComplete();
+
   // Start cron scheduler
   const lastRun: Record<string, number> = {};
   const cronTick = async () => {
@@ -401,6 +410,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   };
 
   setInterval(cronTick, 30000);
+  markCronRunning();
   cronTick();
 
   // Shutdown handler
