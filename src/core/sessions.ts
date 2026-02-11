@@ -137,14 +137,30 @@ export function getSessions(): Record<string, string> {
 
 export function saveSessionId(name: string, id: string): void {
   const sessions = getSessions();
+  const isNew = !(name in sessions);
   sessions[name] = id;
   writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
+
+  // Persist creation timestamp for new sessions
+  if (isNew) {
+    const createdFile = join(SESSIONS_DIR, `${name}.created`);
+    writeFileSync(createdFile, String(Date.now()));
+  }
 }
 
 export function deleteSessionId(name: string): void {
   const sessions = getSessions();
   delete sessions[name];
   writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
+}
+
+export function getSessionCreated(name: string): number {
+  const createdFile = join(SESSIONS_DIR, `${name}.created`);
+  if (existsSync(createdFile)) {
+    const ts = Number(readFileSync(createdFile, "utf-8"));
+    if (!Number.isNaN(ts)) return ts;
+  }
+  return 0;
 }
 
 export function getSessionContext(name: string): string | undefined {
@@ -176,6 +192,8 @@ export async function deleteSession(name: string, reason?: string): Promise<void
   if (existsSync(contextFile)) unlinkSync(contextFile);
   const providerFile = join(SESSIONS_DIR, `${name}.provider.json`);
   if (existsSync(providerFile)) unlinkSync(providerFile);
+  const createdFile = join(SESSIONS_DIR, `${name}.created`);
+  if (existsSync(createdFile)) unlinkSync(createdFile);
 
   // Emit session:destroy event
   await emitSessionDestroy(name, history, reason);
@@ -210,7 +228,7 @@ export function listSessions(): Session[] {
     name,
     id: sessions[name],
     context: getSessionContext(name),
-    created: Date.now(),
+    created: getSessionCreated(name),
   }));
 }
 

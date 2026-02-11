@@ -132,11 +132,12 @@ export class ProviderRegistry {
   /**
    * List all registered providers
    */
-  listProviders(): Array<{ id: string; name: string; available: boolean }> {
+  listProviders(): Array<{ id: string; name: string; available: boolean; lastChecked: number }> {
     return Array.from(this.providers.values()).map((reg) => ({
       id: reg.provider.id,
       name: reg.provider.name,
       available: reg.available,
+      lastChecked: reg.lastChecked,
     }));
   }
 
