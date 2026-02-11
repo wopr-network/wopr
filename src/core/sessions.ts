@@ -35,7 +35,7 @@ export {
 } from "./a2a-mcp.js";
 
 // Initialize context system with defaults (async)
-const _contextInitPromise = initContextSystem();
+initContextSystem();
 // Don't block - let it initialize in background
 
 // Export functions for A2A MCP server (deferred to avoid circular imports)

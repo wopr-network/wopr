@@ -6,7 +6,11 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["src/**/*.ts", "!!**/dist", "!!**/node_modules"]
+    "includes": [
+      "src/**/*.ts",
+      "!!**/dist",
+      "!!**/node_modules"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -19,15 +23,15 @@
     "rules": {
       "recommended": true,
       "correctness": {
-        "noUnusedVariables": "warn",
-        "noUnusedImports": "warn"
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error"
       },
       "suspicious": {
-        "noExplicitAny": "off"
+        "noExplicitAny": "warn"
       },
       "style": {
-        "noNonNullAssertion": "off",
-        "useConst": "warn"
+        "noNonNullAssertion": "warn",
+        "useConst": "error"
       }
     }
   },
