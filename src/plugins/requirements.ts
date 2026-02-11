@@ -10,6 +10,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 import { logger } from "../logger.js";
+import type { InstallMethod as ManifestInstallMethod, PluginRequirements } from "../plugin-types/manifest.js";
 import type { InstallMethod, VoicePluginRequirements } from "../voice/types.js";
 
 // =============================================================================
@@ -204,14 +205,43 @@ export function isConfigPathTruthy(config: Record<string, unknown> | undefined, 
 }
 
 // =============================================================================
+// OS & Node.js Checking (manifest-only fields)
+// =============================================================================
+
+/**
+ * Check if the current OS matches the plugin's requirements
+ */
+export function checkOsRequirement(os: Array<"linux" | "darwin" | "win32"> | undefined): boolean {
+  if (!os || os.length === 0) return true;
+  return os.includes(process.platform as "linux" | "darwin" | "win32");
+}
+
+/**
+ * Check if the current Node.js version satisfies a semver range.
+ * Supports simple >=X.Y.Z ranges (the common case for plugins).
+ */
+export function checkNodeRequirement(range: string | undefined): boolean {
+  if (!range) return true;
+  // Parse simple >=X.Y.Z pattern
+  const match = range.match(/^>=\s*(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) return true; // Can't parse, assume satisfied
+  const [, major, minor, patch] = match.map(Number);
+  const [curMajor, curMinor, curPatch] = process.versions.node.split(".").map(Number);
+  if (curMajor !== major) return curMajor > major;
+  if (curMinor !== minor) return curMinor > minor;
+  return curPatch >= patch;
+}
+
+// =============================================================================
 // Comprehensive Requirements Checking
 // =============================================================================
 
 /**
- * Check all requirements for a plugin
+ * Check all requirements for a plugin.
+ * Accepts both legacy VoicePluginRequirements and manifest PluginRequirements.
  */
 export async function checkRequirements(
-  requires: VoicePluginRequirements | undefined,
+  requires: VoicePluginRequirements | PluginRequirements | undefined,
   config?: Record<string, unknown>,
 ): Promise<RequirementCheckResult> {
   const result: RequirementCheckResult = {
@@ -430,11 +460,12 @@ export interface AutoInstallOptions {
 }
 
 /**
- * Check requirements and optionally auto-install missing dependencies
+ * Check requirements and optionally auto-install missing dependencies.
+ * Accepts both legacy InstallMethod[] and manifest InstallMethod[].
  */
 export async function ensureRequirements(
-  requires: VoicePluginRequirements | undefined,
-  installMethods: InstallMethod[] | undefined,
+  requires: VoicePluginRequirements | PluginRequirements | undefined,
+  installMethods: InstallMethod[] | ManifestInstallMethod[] | undefined,
   options: AutoInstallOptions = {},
 ): Promise<{ satisfied: boolean; installed: InstallResult[]; errors: string[] }> {
   const check = await checkRequirements(requires);
