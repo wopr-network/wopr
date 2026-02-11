@@ -865,7 +865,7 @@ export interface InstalledPlugin {
   name: string;
   version: string;
   description?: string;
-  source: "npm" | "github" | "local";
+  source: "npm" | "github" | "local" | "bundled";
   path: string;
   enabled: boolean;
   installedAt: number;

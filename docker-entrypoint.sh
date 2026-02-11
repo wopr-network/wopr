@@ -43,6 +43,14 @@ if command -v tailscaled >/dev/null 2>&1; then
   fi
 fi
 
+# Register pre-installed (bundled) plugins if present (WOP-69 fat image strategy).
+# This symlinks bundled plugins into $WOPR_HOME/plugins/ and seeds plugins.json
+# for any not already registered. Runs as root so symlinks are created before
+# dropping to node user. Idempotent — safe to run on every container start.
+if [ -d "${WOPR_BUNDLED_PLUGINS:-/app/bundled-plugins}" ] && [ -x /app/scripts/register-bundled-plugins.sh ]; then
+  /app/scripts/register-bundled-plugins.sh
+fi
+
 # Run the main command as node user
 export NODE_OPTIONS="--max-old-space-size=4096"
 exec runuser -u node -- "$@"
