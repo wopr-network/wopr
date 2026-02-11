@@ -1,0 +1,56 @@
+# Slim multi-tenant compose — no privileged mode, minimal mounts.
+# For self-hosted power-user setup, see docker-compose.yml
+networks:
+  wopr-net:
+    driver: bridge
+
+services:
+  wopr:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+    container_name: wopr
+    restart: unless-stopped
+    read_only: true
+    networks:
+      - wopr-net
+    tmpfs:
+      - /tmp
+    volumes:
+      - wopr-data:/data
+    environment:
+      - WOPR_HOME=/data
+      - WOPR_DAEMON_HOST=0.0.0.0
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OLLAMA_HOST=http://ollama:11434
+    ports:
+      - "7437:7437"
+    security_opt:
+      - no-new-privileges:true
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: unless-stopped
+    networks:
+      - wopr-net
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_MODEL=qwen3-embedding:0.6b
+    entrypoint: /bin/sh -c "ollama serve & sleep 5 && ollama pull $$OLLAMA_MODEL && wait"
+
+volumes:
+  wopr-data:
+  ollama-data:

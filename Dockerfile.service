@@ -1,0 +1,46 @@
+# Slim multi-tenant service image for WOPR
+# - No Tailscale, no Docker-in-Docker, no privileged mode
+# - Only /data mounted for persistence
+# - Credentials via env vars, not file mounts
+#
+# For self-hosted power-user image, see Dockerfile
+
+# --- Build stage ---
+FROM node:22-slim AS build
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src/ ./src/
+
+RUN npm run build
+
+# --- Production stage ---
+FROM node:22-slim
+
+WORKDIR /app
+
+# Install only git (needed at runtime for plugin operations)
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY --from=build /app/dist ./dist
+
+# Create data directory owned by node
+RUN mkdir -p /data && chown -R node:node /data
+
+ENV WOPR_HOME=/data
+ENV NODE_ENV=production
+
+# Drop to non-root user
+USER node
+
+EXPOSE 7437
+
+CMD ["node", "dist/cli.js", "daemon", "run"]
