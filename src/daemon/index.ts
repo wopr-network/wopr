@@ -138,8 +138,20 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
       onMessage(event, ws) {
         const data = event.data;
         if (data == null) return;
+        let message: string;
+        if (typeof data === "string") {
+          message = data;
+        } else if (Buffer.isBuffer(data)) {
+          message = data.toString("utf-8");
+        } else if (data instanceof ArrayBuffer) {
+          message = Buffer.from(data).toString("utf-8");
+        } else if (Array.isArray(data)) {
+          message = Buffer.concat(data).toString("utf-8");
+        } else {
+          message = String(data);
+        }
         try {
-          handleWebSocketMessage(ws as unknown as { send(data: string): void }, String(data));
+          handleWebSocketMessage(ws as unknown as { send(data: string): void }, message);
         } catch (err) {
           winstonLogger.error(
             `[daemon] WebSocket message handler error: ${err instanceof Error ? err.message : String(err)}`,
@@ -324,15 +336,16 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
         daemonLog(`Running: ${cron.name} -> ${cron.session}`);
         const startTime = Date.now();
         const CRON_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max per cron job
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
           await Promise.race([
             inject(cron.session, cron.message, { silent: true, from: "cron" }),
-            new Promise<never>((_, reject) =>
-              setTimeout(
+            new Promise<never>((_, reject) => {
+              timeoutId = setTimeout(
                 () => reject(new Error(`Cron job '${cron.name}' timed out after ${CRON_TIMEOUT_MS / 1000}s`)),
                 CRON_TIMEOUT_MS,
-              ),
-            ),
+              );
+            }),
           ]);
           const durationMs = Date.now() - startTime;
           daemonLog(`Completed: ${cron.name} (${durationMs}ms)`);
@@ -366,6 +379,8 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
             error: errorMsg,
             message: cron.message,
           });
+        } finally {
+          if (timeoutId !== undefined) clearTimeout(timeoutId);
         }
       }
     }

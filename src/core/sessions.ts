@@ -79,9 +79,7 @@ function initQueue(): void {
   // Subscribe to queue events for logging
   queueManager.on((event) => {
     if (event.type === "error") {
-      const errorDetail = event.data?.error
-        ? `: ${event.data.error instanceof Error ? event.data.error.message : String(event.data.error)}`
-        : "";
+      const errorDetail = event.data?.error ? `: ${String(event.data.error)}` : "";
       logger.error({
         msg: `[queue] error${errorDetail}`,
         sessionKey: event.sessionKey,
