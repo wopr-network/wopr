@@ -12,16 +12,19 @@
  */
 
 // Config types
-export type { ConfigField, ConfigSchema } from "./config.js";
+export type { ConfigField, ConfigSchema, SetupFlowType } from "./config.js";
 
 // Manifest types
 export type {
   InstallMethod,
+  NetworkRequirements,
   PluginCapability,
   PluginCategory,
+  PluginLifecycle,
   PluginManifest,
   PluginRequirements,
   SetupStep,
+  StorageRequirements,
 } from "./manifest.js";
 
 // Core plugin types
