@@ -155,7 +155,9 @@ export function uninstallPlugin(name: string): boolean {
   const plugin = installed.find((p) => p.name === name);
   if (!plugin) return false;
 
-  // Remove files (only if under PLUGINS_DIR to prevent path traversal)
+  // Remove files (only if under PLUGINS_DIR to prevent path traversal).
+  // Bundled plugins live in the read-only image layer — only remove the
+  // symlink in PLUGINS_DIR, not the source files.
   const normalizedPath = resolve(plugin.path);
   const normalizedBase = resolve(PLUGINS_DIR);
   if (existsSync(normalizedPath) && normalizedPath.startsWith(`${normalizedBase}/`)) {
