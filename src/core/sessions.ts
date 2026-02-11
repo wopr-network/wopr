@@ -78,7 +78,17 @@ function initQueue(): void {
 
   // Subscribe to queue events for logging
   queueManager.on((event) => {
-    if (event.type === "error" || event.type === "cancel") {
+    if (event.type === "error") {
+      const errorDetail = event.data?.error
+        ? `: ${event.data.error instanceof Error ? event.data.error.message : String(event.data.error)}`
+        : "";
+      logger.error({
+        msg: `[queue] error${errorDetail}`,
+        sessionKey: event.sessionKey,
+        injectId: event.injectId,
+        data: event.data,
+      });
+    } else if (event.type === "cancel") {
       logger.warn({
         msg: `[queue] ${event.type}`,
         sessionKey: event.sessionKey,
