@@ -3,10 +3,17 @@
  */
 
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { OnboardConfig, OnboardRuntime } from "./types.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkgVersion: string = JSON.parse(
+  readFileSync(path.resolve(__dirname, "../../../package.json"), "utf-8"),
+).version;
 
 export const DEFAULT_WORKSPACE = path.join(os.homedir(), ".wopr", "workspace");
 export const DEFAULT_PORT = 3000;
@@ -267,7 +274,7 @@ export async function applyWizardMetadata(
     ...cfg,
     wizard: {
       lastRunAt: new Date().toISOString(),
-      lastRunVersion: "0.0.1", // TODO: Get from package.json
+      lastRunVersion: pkgVersion,
       lastRunCommand: params.command,
       lastRunMode: params.mode,
     },
