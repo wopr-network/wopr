@@ -10,7 +10,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import { ensureToken } from "../auth-token.js";
 
-const SKIP_AUTH_PATHS = new Set(["/health"]);
+const SKIP_AUTH_PATHS = new Set(["/health", "/ready"]);
 
 // Cache the token so we don't hit disk on every request
 let cachedToken: string | null = null;
