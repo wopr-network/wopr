@@ -4,7 +4,7 @@
  * Tests WOPRVoiceRegistry, STT/TTS provider contracts,
  * VoicePluginMetadata validation, and edge cases.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { WOPRVoiceRegistry } from "../../src/voice/registry.js";
 import type {
   STTProvider,
@@ -13,6 +13,15 @@ import type {
   TTSSynthesisResult,
   VoicePluginMetadata,
 } from "../../src/voice/types.js";
+
+// Suppress console noise during tests
+beforeAll(() => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterAll(() => {
+  vi.restoreAllMocks();
+});
 
 // =============================================================================
 // Mock Helpers
