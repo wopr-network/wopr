@@ -5,8 +5,8 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { confirm, note, pc, spinner } from "../prompts.js";
 import { DEFAULT_PORT } from "../helpers.js";
+import { confirm, note, pc, spinner } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 
 function execFile(cmd: string, args: string[]): { stdout: string; success: boolean } {
@@ -56,9 +56,7 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
 
   if (!wantExternal) {
     await note(
-      ["Skipping external access setup.", "", "You can set this up later:", pc.cyan("  wopr funnel expose")].join(
-        "\n",
-      ),
+      ["Skipping external access setup.", "", "You can set this up later:", pc.cyan("  wopr funnel expose")].join("\n"),
       "External Access",
     );
     return {};

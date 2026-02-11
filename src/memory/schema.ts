@@ -98,16 +98,13 @@ function migrateFilesCompositePK(db: DatabaseSync): void {
     db.exec(`COMMIT`);
   } catch (err) {
     logger.error("[schema] files composite PK migration failed:", err);
-    try { db.exec(`ROLLBACK`); } catch {}
+    try {
+      db.exec(`ROLLBACK`);
+    } catch {}
   }
 }
 
-function ensureColumn(
-  db: DatabaseSync,
-  table: "files" | "chunks",
-  column: string,
-  definition: string,
-): void {
+function ensureColumn(db: DatabaseSync, table: "files" | "chunks", column: string, definition: string): void {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (rows.some((row) => row.name === column)) {
     return;
