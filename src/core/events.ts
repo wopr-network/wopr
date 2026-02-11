@@ -388,8 +388,11 @@ class WOPREventBusImpl implements WOPREventBus {
         if (result && typeof result.then === "function") {
           wcPromises.push(
             (result as Promise<void>).catch((err: unknown) => {
-              const errMsg = err instanceof Error ? (err as Error).message : String(err);
+              const errMsg = err instanceof Error ? err.message : String(err);
               logger.error(`[events] Wildcard handler error for '${eventName}': ${errMsg}`);
+              if (err instanceof Error && err.stack) {
+                logger.error(`[events] Stack: ${err.stack}`);
+              }
             }),
           );
         }
