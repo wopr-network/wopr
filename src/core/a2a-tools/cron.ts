@@ -19,19 +19,29 @@ import {
 export function createCronTools(sessionName: string): any[] {
   const tools: any[] = [];
 
+  const cronScriptSchema = z
+    .object({
+      name: z.string().describe("Template key, referenced as {{name}} in message"),
+      command: z.string().describe("Shell command to execute"),
+      timeout: z.number().optional().describe("Per-script timeout in ms (default: 30000)"),
+      cwd: z.string().optional().describe("Working directory"),
+    })
+    .strict();
+
   tools.push(
     tool(
       "cron_schedule",
-      "Schedule a recurring cron job that sends a message to a session. Requires cross.inject capability when targeting other sessions.",
+      "Schedule a recurring cron job that sends a message to a session. Supports optional scripts that execute before the message is sent - their stdout replaces {{name}} placeholders in the message. Requires cross.inject capability when targeting other sessions.",
       {
         name: z.string().describe("Unique name for this cron job"),
         schedule: z.string().describe("Cron schedule (e.g., '0 9 * * *' for 9am daily)"),
         session: z.string().describe("Target session to receive the message"),
-        message: z.string().describe("Message to inject into the session"),
+        message: z.string().describe("Message to inject. Use {{script_name}} for script output placeholders."),
+        scripts: z.array(cronScriptSchema).optional().describe("Scripts to execute before sending the message"),
       },
       async (args: any) => {
         return withSecurityCheck("cron_schedule", sessionName, async () => {
-          const { name, schedule, session, message } = args;
+          const { name, schedule, session, message, scripts } = args;
           if (session !== sessionName) {
             const ctx = getContext(sessionName);
             if (ctx && !ctx.hasCapability("cross.inject")) {
@@ -51,8 +61,13 @@ export function createCronTools(sessionName: string): any[] {
                 );
             }
           }
-          addCron({ name, schedule, session, message });
-          return { content: [{ type: "text", text: `Cron job '${name}' scheduled: ${schedule} -> ${session}` }] };
+          addCron({ name, schedule, session, message, scripts: scripts || undefined });
+          const scriptInfo = scripts?.length ? ` (${scripts.length} script(s))` : "";
+          return {
+            content: [
+              { type: "text", text: `Cron job '${name}' scheduled: ${schedule} -> ${session}${scriptInfo}` },
+            ],
+          };
         });
       },
     ),

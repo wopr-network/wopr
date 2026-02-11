@@ -2,9 +2,13 @@
  * Cron job management
  */
 
+import { exec } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { promisify } from "node:util";
 import { CRON_HISTORY_FILE, CRONS_FILE } from "../paths.js";
-import type { CronHistoryEntry, CronJob } from "../types.js";
+import type { CronHistoryEntry, CronJob, CronScript, CronScriptResult } from "../types.js";
+
+const execAsync = promisify(exec);
 
 const MAX_HISTORY_ENTRIES = 1000; // Keep last 1000 entries
 
@@ -225,4 +229,74 @@ export function clearCronHistory(options?: { name?: string; session?: string }):
 
   writeFileSync(CRON_HISTORY_FILE, JSON.stringify(history, null, 2));
   return originalLength - history.length;
+}
+
+const DEFAULT_SCRIPT_TIMEOUT = 30000;
+const MAX_SCRIPT_OUTPUT = 50000; // 50KB max per script output
+
+/**
+ * Execute a single cron script, capturing stdout/stderr.
+ */
+export async function executeCronScript(script: CronScript): Promise<CronScriptResult> {
+  const timeout = script.timeout ?? DEFAULT_SCRIPT_TIMEOUT;
+  const start = Date.now();
+  try {
+    const { stdout, stderr } = await execAsync(script.command, {
+      cwd: script.cwd || undefined,
+      timeout,
+      maxBuffer: 1024 * 1024, // 1MB
+    });
+    const durationMs = Date.now() - start;
+    return {
+      name: script.name,
+      exitCode: 0,
+      stdout: stdout.length > MAX_SCRIPT_OUTPUT ? `${stdout.substring(0, MAX_SCRIPT_OUTPUT)}\n... (truncated)` : stdout,
+      stderr: stderr.length > MAX_SCRIPT_OUTPUT ? `${stderr.substring(0, MAX_SCRIPT_OUTPUT)}\n... (truncated)` : stderr,
+      durationMs,
+    };
+  } catch (err: any) {
+    const durationMs = Date.now() - start;
+    return {
+      name: script.name,
+      exitCode: err.code ?? 1,
+      stdout: err.stdout ?? "",
+      stderr: err.stderr ?? "",
+      durationMs,
+      error: err.message,
+    };
+  }
+}
+
+/**
+ * Execute all scripts for a cron job serially and return results.
+ */
+export async function executeCronScripts(scripts: CronScript[]): Promise<CronScriptResult[]> {
+  const results: CronScriptResult[] = [];
+  for (const script of scripts) {
+    results.push(await executeCronScript(script));
+  }
+  return results;
+}
+
+/**
+ * Replace {{name}} placeholders in a message with corresponding script outputs.
+ * If a script failed, includes an error marker in the output.
+ */
+export function resolveScriptTemplates(message: string, results: CronScriptResult[]): string {
+  let resolved = message;
+  for (const result of results) {
+    const placeholder = `{{${result.name}}}`;
+    let replacement: string;
+    if (result.error) {
+      replacement = result.stdout
+        ? `${result.stdout}\n[script error: ${result.error}]`
+        : `[script error: ${result.error}]`;
+    } else {
+      replacement = result.stdout;
+    }
+    // Remove trailing newline from command output for cleaner templating
+    replacement = replacement.replace(/\n$/, "");
+    resolved = resolved.split(placeholder).join(replacement);
+  }
+  return resolved;
 }

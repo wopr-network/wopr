@@ -1,8 +1,10 @@
 /**
  * `wopr cron` commands - scheduled injection management.
  */
+import { readFileSync } from "node:fs";
 import { parseTimeSpec } from "../core/cron.js";
 import { logger } from "../logger.js";
+import type { CronScript } from "../types.js";
 import { help } from "./help.js";
 import { client, requireDaemon } from "./shared.js";
 
@@ -10,8 +12,12 @@ export async function cronCommand(subcommand: string | undefined, args: string[]
   await requireDaemon();
   switch (subcommand) {
     case "add": {
-      const flags = { now: false, once: false };
-      const filtered = args.filter((a) => {
+      const flags: { now: boolean; once: boolean; scriptsFile: string | null } = {
+        now: false,
+        once: false,
+        scriptsFile: null,
+      };
+      const filtered = args.filter((a, i) => {
         if (a === "--now") {
           flags.now = true;
           return false;
@@ -20,20 +26,45 @@ export async function cronCommand(subcommand: string | undefined, args: string[]
           flags.once = true;
           return false;
         }
+        if (a === "--scripts-file" && args[i + 1]) {
+          flags.scriptsFile = args[i + 1];
+          return false;
+        }
+        // Skip the value after --scripts-file
+        if (i > 0 && args[i - 1] === "--scripts-file") {
+          return false;
+        }
         return true;
       });
       if (filtered.length < 4) {
-        logger.error("Usage: wopr cron add <name> <schedule> <session> <message>");
+        logger.error("Usage: wopr cron add <name> <schedule> <session> <message> [--scripts-file <path>]");
         process.exit(1);
       }
+
+      let scripts: CronScript[] | undefined;
+      if (flags.scriptsFile) {
+        try {
+          const raw = readFileSync(flags.scriptsFile, "utf-8");
+          scripts = JSON.parse(raw);
+          if (!Array.isArray(scripts)) {
+            logger.error("Scripts file must contain a JSON array");
+            process.exit(1);
+          }
+        } catch (err: any) {
+          logger.error(`Failed to read scripts file: ${err.message}`);
+          process.exit(1);
+        }
+      }
+
       await client.addCron({
         name: filtered[0],
         schedule: filtered[1],
         session: filtered[2],
         message: filtered.slice(3).join(" "),
+        scripts,
         once: flags.once || undefined,
       });
-      logger.info(`Added cron: ${filtered[0]}`);
+      logger.info(`Added cron: ${filtered[0]}${scripts ? ` (${scripts.length} script(s))` : ""}`);
       if (flags.now) {
         await client.inject(filtered[2], filtered.slice(3).join(" "), (msg) => {
           if (msg.type === "text") process.stdout.write(msg.content);
@@ -90,6 +121,9 @@ export async function cronCommand(subcommand: string | undefined, args: string[]
             logger.info(`  ${c.name}: ${c.schedule}${c.once ? " (one-time)" : ""}`);
           }
           logger.info(`    -> ${c.session}: "${c.message}"`);
+          if (c.scripts && c.scripts.length > 0) {
+            logger.info(`    scripts: ${c.scripts.map((s: CronScript) => s.name).join(", ")}`);
+          }
         }
       }
       break;
