@@ -10,6 +10,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -712,7 +713,7 @@ export function installSkillFromGitHub(owner: string, repo: string, skillPath: s
       { stdio: "pipe" },
     );
     execFileSync("git", ["-C", tmpDir, "sparse-checkout", "set", normalizedSkillPath], { stdio: "pipe" });
-    execFileSync("mv", [join(tmpDir, normalizedSkillPath), targetDir], { stdio: "pipe" });
+    renameSync(join(tmpDir, normalizedSkillPath), targetDir);
     rmSync(tmpDir, { recursive: true, force: true });
   } catch {
     rmSync(tmpDir, { recursive: true, force: true });
@@ -739,8 +740,24 @@ export function installSkillFromUrl(source: string, name?: string): Skill {
     throw new Error(`Skill "${skillName}" already exists`);
   }
 
+  // Validate source is an HTTPS URL to prevent file:// or other scheme abuse
+  try {
+    const parsed = new URL(source);
+    if (parsed.protocol !== "https:") {
+      throw new Error("Only HTTPS URLs are supported for skill installation");
+    }
+  } catch (e: any) {
+    if (e.message.includes("HTTPS")) throw e;
+    throw new Error("Invalid skill source URL");
+  }
+
   // Use execFileSync with args array to prevent shell injection
-  execFileSync("git", ["clone", source, targetDir], { stdio: "inherit" });
+  try {
+    execFileSync("git", ["clone", source, targetDir], { stdio: "inherit" });
+  } catch (error) {
+    rmSync(targetDir, { recursive: true, force: true });
+    throw error;
+  }
 
   const skill = discoverSkillsLegacy().find((s) => s.name === skillName);
   if (!skill) {

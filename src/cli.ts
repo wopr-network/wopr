@@ -8,7 +8,7 @@ import { logger } from "./logger.js";
  * that makes HTTP calls and formats output.
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -796,11 +796,21 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           return;
         }
         const script = process.argv[1];
-        const child = execSync(`nohup npx tsx "${script}" daemon run > /dev/null 2>&1 & echo $!`, {
-          encoding: "utf-8",
-          shell: "/bin/bash",
+        const child = spawn("npx", ["tsx", script, "daemon", "run"], {
+          detached: true,
+          stdio: "ignore",
+          shell: false,
         });
-        logger.info(`Daemon started (PID ${child.trim()})`);
+        child.on("error", (err) => {
+          logger.error(`Failed to start daemon: ${err.message}`);
+        });
+        child.unref();
+        const pid = child.pid;
+        if (!pid) {
+          logger.error("Failed to start daemon - could not obtain PID");
+          return;
+        }
+        logger.info(`Daemon started (PID ${pid})`);
         break;
       }
       case "stop": {

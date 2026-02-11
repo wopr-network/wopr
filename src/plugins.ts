@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -1170,10 +1170,16 @@ async function searchNpmPlugins(query?: string): Promise<DiscoveredPlugin[]> {
   const searchTerm = sanitized ? `wopr-plugin-${sanitized}` : "wopr-plugin-";
 
   try {
-    const output = execSync(`npm search "${searchTerm}" --json 2>/dev/null | head -c 50000`, {
+    const result = spawnSync("npm", ["search", searchTerm, "--json"], {
       encoding: "utf-8",
       timeout: 15000,
+      maxBuffer: 1024 * 1024,
+      shell: false,
     });
+    if (result.error || result.status !== 0 || !result.stdout) {
+      return results;
+    }
+    const output = result.stdout;
     const packages = JSON.parse(output);
 
     for (const pkg of packages) {

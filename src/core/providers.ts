@@ -8,7 +8,7 @@ import { logger } from "../logger.js";
  */
 
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -80,7 +80,7 @@ export class ProviderRegistry {
 
     // Ensure directory exists
     const dir = join(homedir(), ".wopr");
-    await (await import("node:fs")).promises.mkdir(dir, { recursive: true });
+    await mkdir(dir, { recursive: true });
 
     await writeFile(this.credentialsPath, JSON.stringify(creds, null, 2));
   }

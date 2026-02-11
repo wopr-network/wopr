@@ -211,7 +211,29 @@ export interface WOPREventBus {
 
 class WOPREventBusImpl implements WOPREventBus {
   private emitter = new EventEmitter();
-  private handlerWrappers = new WeakMap<(...args: any[]) => any, (...args: any[]) => any>();
+  private handlerWrappers = new WeakMap<(...args: any[]) => any, Map<string, (...args: any[]) => any>>();
+
+  private setWrapper(handler: (...args: any[]) => any, event: string, wrapper: (...args: any[]) => any): void {
+    let eventMap = this.handlerWrappers.get(handler);
+    if (!eventMap) {
+      eventMap = new Map();
+      this.handlerWrappers.set(handler, eventMap);
+    }
+    eventMap.set(event, wrapper);
+  }
+
+  private getWrapper(handler: (...args: any[]) => any, event: string): ((...args: any[]) => any) | undefined {
+    return this.handlerWrappers.get(handler)?.get(event);
+  }
+
+  private deleteWrapper(handler: (...args: any[]) => any, event: string): void {
+    const eventMap = this.handlerWrappers.get(handler);
+    if (eventMap) {
+      eventMap.delete(event);
+      if (eventMap.size === 0) this.handlerWrappers.delete(handler);
+    }
+  }
+
 
   on<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): () => void {
     // Wrap handler to provide full event context
@@ -230,7 +252,12 @@ class WOPREventBusImpl implements WOPREventBus {
       }
     };
 
-    this.handlerWrappers.set(handler, wrapper);
+    // Remove existing wrapper for same handler+event to prevent orphaned listeners
+    const existing = this.getWrapper(handler, event as string);
+    if (existing) {
+      this.emitter.off(event as string, existing as (...args: any[]) => void);
+    }
+    this.setWrapper(handler, event as string, wrapper);
     this.emitter.on(event as string, wrapper);
 
     // Return unsubscribe function
@@ -240,7 +267,7 @@ class WOPREventBusImpl implements WOPREventBus {
   once<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void {
     const wrapper = async (payload: any, meta: { timestamp: number; source?: string }) => {
       // Clean up the wrapper map after firing (emitter auto-removes the listener)
-      this.handlerWrappers.delete(handler);
+      this.deleteWrapper(handler, event as string);
 
       const fullEvent: WOPREvent = {
         type: event as string,
@@ -256,16 +283,21 @@ class WOPREventBusImpl implements WOPREventBus {
       }
     };
 
+    // Remove existing wrapper for same handler+event to prevent orphaned listeners
+    const existing = this.getWrapper(handler, event as string);
+    if (existing) {
+      this.emitter.off(event as string, existing as (...args: any[]) => void);
+    }
     // Store wrapper so off() can find and remove it before it fires
-    this.handlerWrappers.set(handler, wrapper);
+    this.setWrapper(handler, event as string, wrapper);
     this.emitter.once(event as string, wrapper);
   }
 
   off<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void {
-    const wrapper = this.handlerWrappers.get(handler);
+    const wrapper = this.getWrapper(handler, event as string);
     if (wrapper) {
       this.emitter.off(event as string, wrapper as (...args: any[]) => void);
-      this.handlerWrappers.delete(handler);
+      this.deleteWrapper(handler, event as string);
     }
   }
 
