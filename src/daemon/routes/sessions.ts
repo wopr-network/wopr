@@ -18,6 +18,7 @@ import {
 } from "../../core/sessions.js";
 import { SESSIONS_DIR } from "../../paths.js";
 import { createInjectionSource } from "../../security/index.js";
+import { assertPathContained, validateSessionName } from "../validation.js";
 import { broadcastInjection, broadcastStream } from "../ws.js";
 
 export const sessionsRouter = new Hono();
@@ -31,6 +32,7 @@ sessionsRouter.get("/", (c) => {
 // Get session details
 sessionsRouter.get("/:name", (c) => {
   const name = c.req.param("name");
+  validateSessionName(name);
   const sessions = getSessions();
   const context = getSessionContext(name);
 
@@ -48,6 +50,7 @@ sessionsRouter.get("/:name", (c) => {
 // Get conversation history
 sessionsRouter.get("/:name/conversation", (c) => {
   const name = c.req.param("name");
+  validateSessionName(name);
   const limitParam = c.req.query("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
@@ -69,6 +72,8 @@ sessionsRouter.post("/", async (c) => {
     return c.json({ error: "Name is required" }, 400);
   }
 
+  validateSessionName(name);
+
   const defaultContext = context || `You are WOPR session "${name}".`;
   setSessionContext(name, defaultContext);
 
@@ -85,6 +90,7 @@ sessionsRouter.post("/", async (c) => {
 // Update session context
 sessionsRouter.put("/:name", async (c) => {
   const name = c.req.param("name");
+  validateSessionName(name);
   const body = await c.req.json();
   const { context } = body;
 
@@ -104,6 +110,7 @@ sessionsRouter.put("/:name", async (c) => {
 // Delete session
 sessionsRouter.delete("/:name", async (c) => {
   const name = c.req.param("name");
+  validateSessionName(name);
   await deleteSession(name, "api_delete");
   return c.json({ deleted: true });
 });
@@ -111,6 +118,7 @@ sessionsRouter.delete("/:name", async (c) => {
 // Inject message - returns streaming response via SSE
 sessionsRouter.post("/:name/inject", async (c) => {
   const name = c.req.param("name");
+  validateSessionName(name);
   const body = await c.req.json();
   const { message, from = "api" } = body;
 
@@ -186,6 +194,7 @@ sessionsRouter.post("/:name/inject", async (c) => {
 // Log message without triggering a response
 sessionsRouter.post("/:name/log", async (c) => {
   const name = c.req.param("name");
+  validateSessionName(name);
   const body = await c.req.json();
   const { message, from = "api" } = body;
 
@@ -204,6 +213,7 @@ sessionsRouter.post("/:name/log", async (c) => {
 // Initialize self-documentation files (SOUL.md, AGENTS.md, etc.)
 sessionsRouter.post("/:name/init-docs", async (c) => {
   const name = c.req.param("name");
+  validateSessionName(name);
   const body = await c.req.json();
   const { agentName, userName } = body;
 
@@ -214,7 +224,8 @@ sessionsRouter.post("/:name/init-docs", async (c) => {
     return c.json({ error: "Session not found" }, 404);
   }
 
-  // Create self-doc files
+  // Create self-doc files (defense-in-depth: verify path stays within SESSIONS_DIR)
+  assertPathContained(SESSIONS_DIR, name);
   const sessionDir = join(SESSIONS_DIR, name);
 
   // Ensure directory exists
