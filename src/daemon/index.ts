@@ -410,8 +410,8 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   };
 
   setInterval(cronTick, 30000);
-  cronTick();
   markCronRunning();
+  cronTick();
 
   // Shutdown handler
   const shutdown = async () => {
