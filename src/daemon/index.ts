@@ -22,6 +22,7 @@ import { LOG_FILE, PID_FILE } from "../paths.js";
 import { loadAllPlugins, registerPluginExtension, shutdownAllPlugins } from "../plugins.js";
 import { ensureToken } from "./auth-token.js";
 import { bearerAuth } from "./middleware/auth.js";
+import { rateLimit } from "./middleware/rate-limit.js";
 import { checkReadiness, markCronRunning, markStartupComplete } from "./readiness.js";
 import { authRouter } from "./routes/auth.js";
 import { configRouter } from "./routes/config.js";
@@ -62,6 +63,7 @@ export function createApp() {
   // Middleware
   app.use("*", cors());
   app.use("*", logger());
+  app.use("*", rateLimit());
   app.use("*", bearerAuth());
 
   // Health check (unauthenticated: /health)
