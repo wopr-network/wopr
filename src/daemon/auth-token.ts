@@ -6,7 +6,7 @@
  * $WOPR_HOME/daemon-token with mode 0600.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { WOPR_HOME } from "../paths.js";
@@ -21,8 +21,9 @@ export function getToken(): string | null {
   try {
     const token = readFileSync(TOKEN_FILE, "utf-8").trim();
     return token.length > 0 ? token : null;
-  } catch {
-    return null;
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return null;
+    throw err;
   }
 }
 
@@ -40,5 +41,6 @@ export function ensureToken(): string {
     mkdirSync(dir, { recursive: true });
   }
   writeFileSync(TOKEN_FILE, token, { mode: 0o600 });
+  chmodSync(TOKEN_FILE, 0o600);
   return token;
 }

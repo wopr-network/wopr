@@ -63,7 +63,7 @@ export function createApp() {
   app.use("*", logger());
   app.use("*", bearerAuth());
 
-  // Health check
+  // Health check (unauthenticated: /health)
   app.get("/", (c) =>
     c.json({
       name: "wopr",
@@ -111,8 +111,8 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   daemonLog("Configuration loaded from disk");
 
   // Ensure bearer token exists for API authentication
-  const token = ensureToken();
-  daemonLog(`Bearer token ready (${token.slice(0, 8)}...)`);
+  ensureToken();
+  daemonLog("Bearer token ready for API authentication");
 
   // Write PID file
   writeFileSync(PID_FILE, process.pid.toString());

@@ -12,6 +12,9 @@ import { ensureToken } from "../auth-token.js";
 
 const SKIP_AUTH_PATHS = new Set(["/health"]);
 
+// Cache the token so we don't hit disk on every request
+let cachedToken: string | null = null;
+
 /**
  * Hono middleware that validates bearer tokens.
  * Must be applied after CORS but before route handlers.
@@ -27,8 +30,19 @@ export function bearerAuth(): MiddlewareHandler {
       return c.json({ error: "Missing or invalid Authorization header" }, 401);
     }
 
+    let expected: string;
+    try {
+      if (!cachedToken) {
+        cachedToken = ensureToken();
+      }
+      expected = cachedToken;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[auth] Failed to load token: ${msg}`);
+      return c.json({ error: "Internal server error" }, 500);
+    }
+
     const provided = authHeader.slice(7);
-    const expected = ensureToken();
 
     // Constant-time comparison to prevent timing attacks
     const providedBuf = Buffer.from(provided, "utf-8");
