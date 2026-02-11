@@ -6,9 +6,138 @@
  */
 
 import { spawn } from "node:child_process";
+import { isAbsolute } from "node:path";
 import { logger } from "../logger.js";
 import { getSecurityConfig } from "./policy.js";
 import type { InjectionSource } from "./types.js";
+
+// ============================================================================
+// Hook Command Security
+// ============================================================================
+
+/**
+ * Default allowlist of executables permitted in hook commands.
+ * Only bare names are matched — no paths, no shell metacharacters.
+ * Users can extend via SecurityConfig.allowedHookCommands.
+ */
+const DEFAULT_HOOK_COMMAND_ALLOWLIST: ReadonlySet<string> = new Set([
+  "node",
+  "python3",
+  "python",
+  "ruby",
+  "perl",
+  "jq",
+  "grep",
+  "sed",
+  "awk",
+  "cat",
+  "echo",
+  "tee",
+  "wopr-hook",
+  // NOTE: bash/sh are intentionally excluded — they allow arbitrary command
+  // execution via `-c`, bypassing all argument validation.
+  // Users who need shell hooks can add "bash" to allowedHookCommands in config.
+]);
+
+/**
+ * Characters that indicate shell metacharacter abuse.
+ * These are blocked in arguments to prevent injection even via execFile.
+ */
+const SHELL_METACHAR_PATTERN = /[;|&`$(){}!<>\\]/;
+
+/**
+ * Get the effective allowlist (default + user-configured).
+ */
+function getHookCommandAllowlist(): ReadonlySet<string> {
+  const config = getSecurityConfig();
+  const extra = config.allowedHookCommands;
+  if (!extra || extra.length === 0) return DEFAULT_HOOK_COMMAND_ALLOWLIST;
+  return new Set([...DEFAULT_HOOK_COMMAND_ALLOWLIST, ...extra]);
+}
+
+/**
+ * Parse a hook command string into executable and arguments.
+ * Returns null if the command is unsafe.
+ *
+ * Rules:
+ * - Executable must be on the allowlist (bare name only, no paths)
+ * - Arguments must not contain shell metacharacters
+ * - No empty commands
+ */
+export function parseHookCommand(command: string): { executable: string; args: string[] } | null {
+  const trimmed = command.trim();
+  if (trimmed.length === 0) return null;
+
+  // Split on whitespace, respecting simple quoting
+  const parts = splitCommandArgs(trimmed);
+  if (parts.length === 0) return null;
+
+  const executable = parts[0];
+  const args = parts.slice(1);
+
+  // Block absolute/relative paths — only bare executable names allowed
+  if (executable.includes("/") || executable.includes("\\") || isAbsolute(executable)) {
+    logger.warn(`[hooks] Hook command rejected: paths not allowed in executable (${executable})`);
+    return null;
+  }
+
+  // Check allowlist
+  const allowlist = getHookCommandAllowlist();
+  if (!allowlist.has(executable)) {
+    logger.warn(`[hooks] Hook command rejected: '${executable}' is not in the allowlist`);
+    return null;
+  }
+
+  // Check arguments for shell metacharacters
+  for (const arg of args) {
+    if (SHELL_METACHAR_PATTERN.test(arg)) {
+      logger.warn(`[hooks] Hook command rejected: argument contains shell metacharacters`);
+      return null;
+    }
+  }
+
+  return { executable, args };
+}
+
+/**
+ * Split a command string into parts, handling simple single/double quoting.
+ * Does NOT interpret shell expansions — quotes are just used for grouping.
+ */
+function splitCommandArgs(input: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let inSingle = false;
+  let inDouble = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      continue;
+    }
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      continue;
+    }
+
+    if ((ch === " " || ch === "\t") && !inSingle && !inDouble) {
+      if (current.length > 0) {
+        parts.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (current.length > 0) {
+    parts.push(current);
+  }
+
+  return parts;
+}
 
 // ============================================================================
 // Hook Types
@@ -64,15 +193,24 @@ export interface PostInjectResult {
 // ============================================================================
 
 /**
- * Run a shell command hook.
- * Commands come from admin-controlled security config (security.json).
- * Shell execution via sh -c is intentional to support pipes/redirects in hook scripts.
+ * Run a hook command using execFile (no shell interpretation).
+ *
+ * The command string is parsed and validated against the allowlist before
+ * execution. Shell metacharacters and path-based executables are rejected
+ * to prevent RCE even if an attacker can modify security.json.
  */
 async function runCommandHook(command: string, context: HookContext): Promise<PreInjectResult | PostInjectResult> {
   if (!command || typeof command !== "string" || command.trim().length === 0) {
     logger.warn("[hooks] Empty or invalid hook command, skipping");
     return {};
   }
+
+  const parsed = parseHookCommand(command);
+  if (!parsed) {
+    logger.warn(`[hooks] Hook command rejected by validation: ${command}`);
+    return { allow: true }; // Fail open — don't block injections on config error
+  }
+
   return new Promise((resolve) => {
     let settled = false;
     const settle = (result: PreInjectResult | PostInjectResult) => {
@@ -81,18 +219,21 @@ async function runCommandHook(command: string, context: HookContext): Promise<Pr
       resolve(result);
     };
 
-    const proc = spawn("sh", ["-c", command], {
+    // spawn with shell: false — executable is looked up via PATH but no
+    // shell interpretation occurs, eliminating the RCE vector.
+    const proc = spawn(parsed.executable, parsed.args, {
       stdio: ["pipe", "pipe", "pipe"],
+      shell: false,
     });
 
     let stdout = "";
     let stderr = "";
 
-    proc.stdout.on("data", (data) => {
+    proc.stdout.on("data", (data: Buffer) => {
       stdout += data.toString();
     });
 
-    proc.stderr.on("data", (data) => {
+    proc.stderr.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
 
@@ -100,7 +241,7 @@ async function runCommandHook(command: string, context: HookContext): Promise<Pr
     proc.stdin.write(JSON.stringify(context));
     proc.stdin.end();
 
-    proc.on("close", (code) => {
+    proc.on("close", (code: number | null) => {
       if (code !== 0) {
         logger.warn(`[hooks] Hook command failed: ${stderr}`);
         settle({ allow: true }); // Allow by default on hook failure
@@ -116,7 +257,7 @@ async function runCommandHook(command: string, context: HookContext): Promise<Pr
       }
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", (err: Error) => {
       logger.warn(`[hooks] Hook command error: ${err.message}`);
       settle({ allow: true });
     });

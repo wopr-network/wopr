@@ -483,6 +483,9 @@ export interface SecurityConfig {
   /** Injection hooks */
   hooks?: HookConfig[];
 
+  /** Additional executable names to allow in hook commands (extends built-in allowlist) */
+  allowedHookCommands?: string[];
+
   /** Audit logging */
   audit?: {
     /** Enable audit logging */
