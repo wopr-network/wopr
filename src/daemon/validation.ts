@@ -11,7 +11,7 @@ import { HTTPException } from "hono/http-exception";
  * Throws an HTTPException(400) if the name is invalid.
  */
 export function validateSessionName(name: string): void {
-  if (!/^[a-zA-Z0-9._-]+$/.test(name) || name.includes("..")) {
+  if (!/^[a-zA-Z0-9._-]+$/.test(name) || name.includes("..") || name === ".") {
     throw new HTTPException(400, { message: "Invalid session name" });
   }
 }
