@@ -367,14 +367,21 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
           let resolvedMessage = cron.message;
           let scriptResults: import("../types.js").CronScriptResult[] | undefined;
           if (cron.scripts && cron.scripts.length > 0) {
-            daemonLog(`Executing ${cron.scripts.length} script(s) for ${cron.name}`);
-            scriptResults = await executeCronScripts(cron.scripts);
-            resolvedMessage = resolveScriptTemplates(cron.message, scriptResults);
-            const failedScripts = scriptResults.filter((r) => r.error);
-            if (failedScripts.length > 0) {
+            const cfg = centralConfig.get();
+            if (!cfg.daemon.cronScriptsEnabled) {
               daemonLog(
-                `Warning: ${failedScripts.length} script(s) failed for ${cron.name}: ${failedScripts.map((r) => r.name).join(", ")}`,
+                `Cron scripts disabled for ${cron.name} — set cronScriptsEnabled: true in daemon config to enable`,
               );
+            } else {
+              daemonLog(`Executing ${cron.scripts.length} script(s) for ${cron.name}`);
+              scriptResults = await executeCronScripts(cron.scripts);
+              resolvedMessage = resolveScriptTemplates(cron.message, scriptResults);
+              const failedScripts = scriptResults.filter((r) => r.error);
+              if (failedScripts.length > 0) {
+                daemonLog(
+                  `Warning: ${failedScripts.length} script(s) failed for ${cron.name}: ${failedScripts.map((r) => r.name).join(", ")}`,
+                );
+              }
             }
           }
 

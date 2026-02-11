@@ -5,9 +5,10 @@
  * - executeCronScript: single script execution with timeout, cwd, error handling
  * - executeCronScripts: serial execution of multiple scripts
  * - resolveScriptTemplates: placeholder replacement in messages
+ * - cronScriptsEnabled config gate: scripts rejected when disabled
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -21,12 +22,15 @@ vi.mock("../../src/logger.js", () => ({
   },
 }));
 
-vi.mock("../../src/paths.js", () => {
+vi.mock("../../src/paths.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/paths.js")>();
   const path = require("node:path");
   const os = require("node:os");
   const dir = path.join(os.tmpdir(), "wopr-test-cron-scripts");
   return {
+    ...actual,
     WOPR_HOME: dir,
+    CONFIG_FILE: path.join(dir, "config.json"),
     CRONS_FILE: path.join(dir, "crons.json"),
     CRON_HISTORY_FILE: path.join(dir, "cron-history.json"),
   };
@@ -237,5 +241,95 @@ describe("resolveScriptTemplates", () => {
     ];
     const resolved = resolveScriptTemplates("Output: [{{empty}}]", results);
     expect(resolved).toBe("Output: []");
+  });
+});
+
+describe("cronScriptsEnabled config gate", () => {
+  it("should reject cron creation with scripts when cronScriptsEnabled is false", async () => {
+    // Dynamically import to get the mocked version
+    const { config } = await import("../../src/core/config.js");
+    // Ensure cronScriptsEnabled is false (the default)
+    const cfg = config.get();
+    expect(cfg.daemon.cronScriptsEnabled).toBe(false);
+
+    const { Hono } = await import("hono");
+    const { cronsRouter } = await import("../../src/daemon/routes/crons.js");
+
+    const app = new Hono();
+    app.route("/crons", cronsRouter);
+
+    const res = await app.request("/crons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "test-job",
+        schedule: "* * * * *",
+        session: "main",
+        message: "Status: {{check}}",
+        scripts: [{ name: "check", command: "echo ok" }],
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("disabled");
+  });
+
+  it("should allow cron creation with scripts when cronScriptsEnabled is true", async () => {
+    const { config } = await import("../../src/core/config.js");
+    // Enable cron scripts
+    config.setValue("daemon.cronScriptsEnabled", true);
+
+    const { Hono } = await import("hono");
+    const { cronsRouter } = await import("../../src/daemon/routes/crons.js");
+
+    const app = new Hono();
+    app.route("/crons", cronsRouter);
+
+    const res = await app.request("/crons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "test-job-enabled",
+        schedule: "* * * * *",
+        session: "main",
+        message: "Status: {{check}}",
+        scripts: [{ name: "check", command: "echo ok" }],
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(true);
+
+    // Reset to default
+    config.setValue("daemon.cronScriptsEnabled", false);
+  });
+
+  it("should allow cron creation without scripts when cronScriptsEnabled is false", async () => {
+    const { config } = await import("../../src/core/config.js");
+    config.setValue("daemon.cronScriptsEnabled", false);
+    expect(config.get().daemon.cronScriptsEnabled).toBe(false);
+
+    const { Hono } = await import("hono");
+    const { cronsRouter } = await import("../../src/daemon/routes/crons.js");
+
+    const app = new Hono();
+    app.route("/crons", cronsRouter);
+
+    const res = await app.request("/crons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "no-script-job",
+        schedule: "0 9 * * *",
+        session: "main",
+        message: "Good morning",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.created).toBe(true);
   });
 });

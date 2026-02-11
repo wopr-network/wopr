@@ -3,6 +3,7 @@
  */
 
 import { Hono } from "hono";
+import { config } from "../../core/config.js";
 import { addCron, createOnceJob, getCron, getCrons, removeCron } from "../../core/cron.js";
 import { inject } from "../../core/sessions.js";
 import type { CronJob } from "../../types.js";
@@ -48,6 +49,16 @@ cronsRouter.post("/", async (c) => {
       if (!s.command || typeof s.command !== "string") {
         return c.json({ error: "Each script must have a string 'command'" }, 400);
       }
+    }
+    // Reject scripts when cronScriptsEnabled is false
+    if (scripts.length > 0 && !config.get().daemon.cronScriptsEnabled) {
+      return c.json(
+        {
+          error:
+            "Cron script execution is disabled. Set cronScriptsEnabled: true in daemon config to enable.",
+        },
+        400,
+      );
     }
   }
 

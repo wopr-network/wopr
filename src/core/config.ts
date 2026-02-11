@@ -23,6 +23,7 @@ export interface WoprConfig {
     port: number;
     host: string;
     autoStart: boolean;
+    cronScriptsEnabled: boolean;
   };
   anthropic: {
     apiKey?: string;
@@ -91,6 +92,7 @@ const DEFAULT_CONFIG: WoprConfig = {
     port: 7437,
     host: "127.0.0.1",
     autoStart: false,
+    cronScriptsEnabled: false,
   },
   anthropic: {},
   oauth: {},
