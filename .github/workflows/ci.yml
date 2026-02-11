@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   lint-and-check:
     name: Lint and Type Check
@@ -54,6 +57,7 @@ jobs:
         with:
           name: dist
           path: dist/
+          if-no-files-found: error
           retention-days: 1
 
   validate:
@@ -75,6 +79,9 @@ jobs:
         with:
           name: dist
           path: dist/
+
+      - name: Install production dependencies
+        run: npm ci --omit=dev
 
       - name: Ensure dist/cli.js exists
         run: |
