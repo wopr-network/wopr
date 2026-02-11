@@ -117,8 +117,6 @@ describe("parseHookCommand", () => {
       "python",
       "ruby",
       "perl",
-      "bash",
-      "sh",
       "jq",
       "grep",
       "sed",
@@ -133,6 +131,13 @@ describe("parseHookCommand", () => {
       expect(result).not.toBeNull();
       expect(result!.executable).toBe(exe);
     }
+  });
+
+  it("rejects bash and sh by default (prevent -c bypass)", () => {
+    expect(parseHookCommand("bash -c 'rm -rf /'")).toBeNull();
+    expect(parseHookCommand("sh -c 'rm -rf /'")).toBeNull();
+    expect(parseHookCommand("bash script.sh")).toBeNull();
+    expect(parseHookCommand("sh script.sh")).toBeNull();
   });
 
   it("respects user-configured allowedHookCommands", () => {

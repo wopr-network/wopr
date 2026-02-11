@@ -26,8 +26,6 @@ const DEFAULT_HOOK_COMMAND_ALLOWLIST: ReadonlySet<string> = new Set([
   "python",
   "ruby",
   "perl",
-  "bash",
-  "sh",
   "jq",
   "grep",
   "sed",
@@ -36,6 +34,9 @@ const DEFAULT_HOOK_COMMAND_ALLOWLIST: ReadonlySet<string> = new Set([
   "echo",
   "tee",
   "wopr-hook",
+  // NOTE: bash/sh are intentionally excluded — they allow arbitrary command
+  // execution via `-c`, bypassing all argument validation.
+  // Users who need shell hooks can add "bash" to allowedHookCommands in config.
 ]);
 
 /**
