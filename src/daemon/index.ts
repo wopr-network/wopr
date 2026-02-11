@@ -100,6 +100,9 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   daemonLog(`[heap] startup: ${heapMB()}`);
 
+  // Track startup warnings/errors for clear reporting
+  const startupWarnings: string[] = [];
+
   // Load config from disk first
   await centralConfig.load();
   daemonLog("Configuration loaded from disk");
@@ -114,7 +117,9 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     await providerRegistry.loadCredentials();
     daemonLog("Provider credentials loaded");
   } catch (err) {
-    daemonLog(`Warning: Provider registry initialization failed: ${err}`);
+    const msg = `Provider registry initialization failed: ${err}`;
+    daemonLog(`Warning: ${msg}`);
+    startupWarnings.push(msg);
   }
 
   // Create Hono app
@@ -131,7 +136,15 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
         setupWebSocket(ws as unknown as { send(data: string): void });
       },
       onMessage(event, ws) {
-        handleWebSocketMessage(ws as unknown as { send(data: string): void }, event.data.toString());
+        const data = event.data;
+        if (data == null) return;
+        try {
+          handleWebSocketMessage(ws as unknown as { send(data: string): void }, String(data));
+        } catch (err) {
+          winstonLogger.error(
+            `[daemon] WebSocket message handler error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       },
       onClose(_event, ws) {
         handleWebSocketClose(ws as unknown as { send(data: string): void });
@@ -191,7 +204,9 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     initMemoryHooks();
     daemonLog("Memory system hooks initialized");
   } catch (err) {
-    daemonLog(`Warning: Memory hooks initialization failed: ${err}`);
+    const msg = `Memory hooks initialization failed: ${err}`;
+    daemonLog(`Warning: ${msg}`);
+    startupWarnings.push(msg);
   }
 
   daemonLog(`[heap] after memory hooks: ${heapMB()}`);
@@ -207,7 +222,9 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     registerPluginExtension("core", "memory:db", new DatabaseSync(dbPath));
     daemonLog("Memory SQLite exposed to plugins as core.memory:db");
   } catch (err) {
-    daemonLog(`Warning: Memory db extension setup failed: ${err}`);
+    const msg = `Memory db extension setup failed: ${err}`;
+    daemonLog(`Warning: ${msg}`);
+    startupWarnings.push(msg);
   }
 
   daemonLog(`[heap] before plugins: ${heapMB()}`);
@@ -239,7 +256,9 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     const heap1 = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     daemonLog(`Initial memory sync complete (heap: ${heap1}MB)`);
   } catch (err) {
-    daemonLog(`Warning: Initial memory sync failed: ${err}`);
+    const msg = `Initial memory sync failed: ${err}`;
+    daemonLog(`Warning: ${msg}`);
+    startupWarnings.push(msg);
   }
 
   // Check provider health after plugins have registered
@@ -262,7 +281,22 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
       .join(", ");
     daemonLog(`Provider health check complete. Available: ${available || "none"}`);
   } catch (err) {
-    daemonLog(`Warning: Provider health check failed: ${err}`);
+    const msg = `Provider health check failed: ${err}`;
+    daemonLog(`Warning: ${msg}`);
+    startupWarnings.push(msg);
+  }
+
+  // Report startup warnings clearly
+  if (startupWarnings.length > 0) {
+    daemonLog(`[startup] Completed with ${startupWarnings.length} warning(s):`);
+    for (const w of startupWarnings) {
+      daemonLog(`  - ${w}`);
+    }
+    winstonLogger.warn(
+      `[daemon] Startup completed with ${startupWarnings.length} warning(s): ${startupWarnings.join("; ")}`,
+    );
+  } else {
+    daemonLog("[startup] All systems initialized successfully");
   }
 
   // Start cron scheduler
@@ -289,8 +323,17 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
         lastRun[key] = Math.floor(nowTs / 60000);
         daemonLog(`Running: ${cron.name} -> ${cron.session}`);
         const startTime = Date.now();
+        const CRON_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max per cron job
         try {
-          await inject(cron.session, cron.message, { silent: true, from: "cron" });
+          await Promise.race([
+            inject(cron.session, cron.message, { silent: true, from: "cron" }),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Cron job '${cron.name}' timed out after ${CRON_TIMEOUT_MS / 1000}s`)),
+                CRON_TIMEOUT_MS,
+              ),
+            ),
+          ]);
           const durationMs = Date.now() - startTime;
           daemonLog(`Completed: ${cron.name} (${durationMs}ms)`);
 
