@@ -13,7 +13,14 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { config as centralConfig } from "../core/config.js";
 // Core imports for daemon functionality
-import { addCronHistory, getCrons, saveCrons, shouldRunCron } from "../core/cron.js";
+import {
+  addCronHistory,
+  executeCronScripts,
+  getCrons,
+  resolveScriptTemplates,
+  saveCrons,
+  shouldRunCron,
+} from "../core/cron.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
 import { inject } from "../core/sessions.js";
@@ -356,8 +363,23 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
         const CRON_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max per cron job
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         try {
+          // Execute scripts and resolve templates if scripts are defined
+          let resolvedMessage = cron.message;
+          let scriptResults: import("../types.js").CronScriptResult[] | undefined;
+          if (cron.scripts && cron.scripts.length > 0) {
+            daemonLog(`Executing ${cron.scripts.length} script(s) for ${cron.name}`);
+            scriptResults = await executeCronScripts(cron.scripts);
+            resolvedMessage = resolveScriptTemplates(cron.message, scriptResults);
+            const failedScripts = scriptResults.filter((r) => r.error);
+            if (failedScripts.length > 0) {
+              daemonLog(
+                `Warning: ${failedScripts.length} script(s) failed for ${cron.name}: ${failedScripts.map((r) => r.name).join(", ")}`,
+              );
+            }
+          }
+
           await Promise.race([
-            inject(cron.session, cron.message, { silent: true, from: "cron" }),
+            inject(cron.session, resolvedMessage, { silent: true, from: "cron" }),
             new Promise<never>((_, reject) => {
               timeoutId = setTimeout(
                 () => reject(new Error(`Cron job '${cron.name}' timed out after ${CRON_TIMEOUT_MS / 1000}s`)),
@@ -375,7 +397,8 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
             timestamp: startTime,
             success: true,
             durationMs,
-            message: cron.message,
+            message: resolvedMessage,
+            scriptResults,
           });
 
           if (cron.once) {
