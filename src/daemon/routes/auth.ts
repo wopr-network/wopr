@@ -16,6 +16,25 @@ import {
 
 export const authRouter = new Hono();
 
+// Server-side PKCE verifier store keyed by OAuth state parameter.
+// Entries are auto-cleaned after PKCE_TTL_MS to prevent memory leaks.
+const PKCE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const pkceStore = new Map<string, { codeVerifier: string; redirectUri: string; createdAt: number }>();
+
+const pkceCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [state, entry] of pkceStore) {
+    if (now - entry.createdAt > PKCE_TTL_MS) {
+      pkceStore.delete(state);
+    }
+  }
+}, 60_000); // Run cleanup every 60 seconds
+
+// Allow Node to exit without waiting for the interval
+if (typeof pkceCleanupInterval === "object" && "unref" in pkceCleanupInterval) {
+  pkceCleanupInterval.unref();
+}
+
 // Get auth status
 authRouter.get("/", (c) => {
   const claudeCodeAuth = loadClaudeCodeCredentials();
@@ -64,27 +83,45 @@ authRouter.post("/login", (c) => {
   const redirectUri = "http://localhost:9876/callback";
   const authUrl = buildAuthUrl(pkce, redirectUri);
 
-  // Store PKCE challenge in a temp way (in production, use session)
-  // For now, we return it and expect the client to handle it
+  // Store PKCE verifier server-side — never expose to client
+  pkceStore.set(pkce.state, {
+    codeVerifier: pkce.codeVerifier,
+    redirectUri,
+    createdAt: Date.now(),
+  });
+
   return c.json({
     authUrl,
-    redirectUri,
     state: pkce.state,
-    codeVerifier: pkce.codeVerifier,
   });
 });
 
 // Complete OAuth flow
 authRouter.post("/callback", async (c) => {
   const body = await c.req.json();
-  const { code, codeVerifier, redirectUri } = body;
+  const { code, state } = body;
 
-  if (!code || !codeVerifier || !redirectUri) {
-    return c.json({ error: "Missing required fields" }, 400);
+  if (!code || !state) {
+    return c.json({ error: "Missing required fields: code, state" }, 400);
+  }
+
+  const pending = pkceStore.get(state);
+  if (!pending) {
+    return c.json({ error: "Invalid or expired OAuth state" }, 400);
+  }
+
+  // Enforce TTL at lookup time (belt-and-suspenders with interval cleanup)
+  if (Date.now() - pending.createdAt > PKCE_TTL_MS) {
+    pkceStore.delete(state);
+    return c.json({ error: "PKCE session expired" }, 400);
   }
 
   try {
-    const tokens = await exchangeCode(code, codeVerifier, redirectUri);
+    const tokens = await exchangeCode(code, pending.codeVerifier, pending.redirectUri);
+
+    // Delete AFTER successful exchange so retries work on transient failures
+    pkceStore.delete(state);
+
     saveOAuthTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresIn);
 
     return c.json({
