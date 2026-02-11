@@ -801,8 +801,15 @@ function parseFlags(args: string[]): { flags: Record<string, string | boolean>; 
           stdio: "ignore",
           shell: false,
         });
+        child.on("error", (err) => {
+          logger.error(`Failed to start daemon: ${err.message}`);
+        });
         child.unref();
         const pid = child.pid;
+        if (!pid) {
+          logger.error("Failed to start daemon - could not obtain PID");
+          return;
+        }
         logger.info(`Daemon started (PID ${pid})`);
         break;
       }

@@ -1173,9 +1173,12 @@ async function searchNpmPlugins(query?: string): Promise<DiscoveredPlugin[]> {
     const result = spawnSync("npm", ["search", searchTerm, "--json"], {
       encoding: "utf-8",
       timeout: 15000,
-      maxBuffer: 50000,
+      maxBuffer: 1024 * 1024,
       shell: false,
     });
+    if (result.error || result.status !== 0 || !result.stdout) {
+      return results;
+    }
     const output = result.stdout;
     const packages = JSON.parse(output);
 
