@@ -251,6 +251,11 @@ class WOPREventBusImpl implements WOPREventBus {
       }
     };
 
+    // Remove existing wrapper for same handler+event to prevent orphaned listeners
+    const existing = this.getWrapper(handler, event as string);
+    if (existing) {
+      this.emitter.off(event as string, existing as (...args: any[]) => void);
+    }
     this.setWrapper(handler, event as string, wrapper);
     this.emitter.on(event as string, wrapper);
 
@@ -277,6 +282,11 @@ class WOPREventBusImpl implements WOPREventBus {
       }
     };
 
+    // Remove existing wrapper for same handler+event to prevent orphaned listeners
+    const existing = this.getWrapper(handler, event as string);
+    if (existing) {
+      this.emitter.off(event as string, existing as (...args: any[]) => void);
+    }
     // Store wrapper so off() can find and remove it before it fires
     this.setWrapper(handler, event as string, wrapper);
     this.emitter.once(event as string, wrapper);

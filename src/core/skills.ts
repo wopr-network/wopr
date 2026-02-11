@@ -752,7 +752,12 @@ export function installSkillFromUrl(source: string, name?: string): Skill {
   }
 
   // Use execFileSync with args array to prevent shell injection
-  execFileSync("git", ["clone", source, targetDir], { stdio: "inherit" });
+  try {
+    execFileSync("git", ["clone", source, targetDir], { stdio: "inherit" });
+  } catch (error) {
+    rmSync(targetDir, { recursive: true, force: true });
+    throw error;
+  }
 
   const skill = discoverSkillsLegacy().find((s) => s.name === skillName);
   if (!skill) {
