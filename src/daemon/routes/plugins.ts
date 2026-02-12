@@ -6,6 +6,7 @@
  */
 
 import { Hono, type Context } from "hono";
+import { rateLimiter } from "hono-rate-limiter";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { getSessions, inject } from "../../core/sessions.js";
@@ -31,6 +32,68 @@ import {
   unloadPlugin,
 } from "../../plugins.js";
 import type { ConfigSchema, PluginInjectOptions } from "../../types.js";
+
+// ============================================================================
+// Error classes
+// ============================================================================
+
+/** Typed error for plugin route handlers with an associated HTTP status code. */
+export class PluginRouteError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = "PluginRouteError";
+  }
+}
+
+// ============================================================================
+// Validation
+// ============================================================================
+
+/**
+ * Valid plugin name pattern: must start with a letter, `@`, or digit;
+ * the rest may contain word chars, dots, slashes, and hyphens.
+ * Rejects path traversal (`..`), leading dashes, and shell metacharacters.
+ */
+const PLUGIN_NAME_RE = /^[@a-z0-9][\w./-]*$/i;
+
+/** Characters that are dangerous in shell contexts. */
+const SHELL_META_RE = /[;|&$`\\!><()"'\n\r]/;
+
+function validatePluginName(name: string): void {
+  if (!name || !PLUGIN_NAME_RE.test(name) || name.includes("..") || SHELL_META_RE.test(name)) {
+    throw new PluginRouteError(
+      `Invalid plugin name "${name}": must match ${PLUGIN_NAME_RE}, without ".." or shell metacharacters`,
+      400,
+    );
+  }
+}
+
+// ============================================================================
+// Rate limiting — stricter limits for mutating plugin operations
+// ============================================================================
+
+const rateLimitKey = (c: Context) => c.req.header("authorization") ?? c.req.header("x-forwarded-for") ?? "anonymous";
+
+/** 10 requests/minute for install/uninstall (heavy operations). */
+const installRateLimit = rateLimiter({
+  windowMs: 60_000,
+  limit: 10,
+  standardHeaders: "draft-6",
+  keyGenerator: rateLimitKey,
+  handler: (c) => c.json({ error: "Too many install/uninstall requests, please try again later" }, 429),
+});
+
+/** 30 requests/minute for enable/disable/config updates. */
+const mutateRateLimit = rateLimiter({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: "draft-6",
+  keyGenerator: rateLimitKey,
+  handler: (c) => c.json({ error: "Too many requests, please try again later" }, 429),
+});
 
 export const pluginsRouter = new Hono();
 
@@ -118,6 +181,15 @@ async function handleInstall(c: Context) {
   }
 
   try {
+    validatePluginName(source);
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    throw err;
+  }
+
+  try {
     const plugin = await installPlugin(source);
     // Auto-enable plugin after installation
     enablePlugin(plugin.name);
@@ -143,17 +215,21 @@ async function handleInstall(c: Context) {
       },
       201,
     );
-  } catch (err: any) {
-    logger.error({ msg: "[plugins] Install failed", error: err.message });
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ msg: "[plugins] Install failed", error: message });
     return c.json({ error: "Plugin installation failed" }, 400);
   }
 }
 
-pluginsRouter.post("/", handleInstall);
-pluginsRouter.post("/install", handleInstall);
+pluginsRouter.post("/", installRateLimit, handleInstall);
+pluginsRouter.post("/install", installRateLimit, handleInstall);
 
 // Uninstall plugin (POST /uninstall — new endpoint)
-pluginsRouter.post("/uninstall", async (c) => {
+pluginsRouter.post("/uninstall", installRateLimit, async (c) => {
   const body = await c.req.json();
   const { name } = body;
 
@@ -162,18 +238,40 @@ pluginsRouter.post("/uninstall", async (c) => {
   }
 
   try {
+    validatePluginName(name);
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    throw err;
+  }
+
+  try {
     await unloadPlugin(name);
     await removePlugin(name);
     return c.json({ removed: true, unloaded: true });
-  } catch (err: any) {
-    logger.error({ msg: "[plugins] Uninstall failed", plugin: name, error: err.message });
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ msg: "[plugins] Uninstall failed", plugin: name, error: message });
     return c.json({ error: "Plugin uninstall failed" }, 400);
   }
 });
 
 // Remove plugin (hot-unloads first) — legacy DELETE endpoint
-pluginsRouter.delete("/:name", async (c) => {
+pluginsRouter.delete("/:name", installRateLimit, async (c) => {
   const name = c.req.param("name");
+
+  try {
+    validatePluginName(name);
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    throw err;
+  }
 
   try {
     // Hot-unload the plugin first
@@ -181,15 +279,28 @@ pluginsRouter.delete("/:name", async (c) => {
 
     await removePlugin(name);
     return c.json({ removed: true, unloaded: true });
-  } catch (err: any) {
-    logger.error({ msg: "[plugins] Remove failed", plugin: name, error: err.message });
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ msg: "[plugins] Remove failed", plugin: name, error: message });
     return c.json({ error: "Plugin removal failed" }, 400);
   }
 });
 
 // Enable plugin (hot-loads if not already loaded)
-pluginsRouter.post("/:name/enable", async (c) => {
+pluginsRouter.post("/:name/enable", mutateRateLimit, async (c) => {
   const name = c.req.param("name");
+
+  try {
+    validatePluginName(name);
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    throw err;
+  }
 
   try {
     const plugins = listPlugins();
@@ -208,15 +319,28 @@ pluginsRouter.post("/:name/enable", async (c) => {
     await providerRegistry.checkHealth();
 
     return c.json({ enabled: true, loaded: true });
-  } catch (err: any) {
-    logger.error({ msg: "[plugins] Enable failed", plugin: name, error: err.message });
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ msg: "[plugins] Enable failed", plugin: name, error: message });
     return c.json({ error: "Plugin enable failed" }, 400);
   }
 });
 
 // Disable plugin (hot-unloads)
-pluginsRouter.post("/:name/disable", async (c) => {
+pluginsRouter.post("/:name/disable", mutateRateLimit, async (c) => {
   const name = c.req.param("name");
+
+  try {
+    validatePluginName(name);
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    throw err;
+  }
 
   try {
     // Hot-unload the plugin first
@@ -224,15 +348,28 @@ pluginsRouter.post("/:name/disable", async (c) => {
 
     disablePlugin(name);
     return c.json({ disabled: true, unloaded: true });
-  } catch (err: any) {
-    logger.error({ msg: "[plugins] Disable failed", plugin: name, error: err.message });
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ msg: "[plugins] Disable failed", plugin: name, error: message });
     return c.json({ error: "Plugin disable failed" }, 400);
   }
 });
 
 // Reload plugin (hot-unload then hot-load - picks up code changes without restart)
-pluginsRouter.post("/:name/reload", async (c) => {
+pluginsRouter.post("/:name/reload", mutateRateLimit, async (c) => {
   const name = c.req.param("name");
+
+  try {
+    validatePluginName(name);
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    throw err;
+  }
 
   try {
     const plugins = listPlugins();
@@ -256,8 +393,12 @@ pluginsRouter.post("/:name/reload", async (c) => {
     await providerRegistry.checkHealth();
 
     return c.json({ reloaded: true, plugin: name });
-  } catch (err: any) {
-    logger.error({ msg: "[plugins] Reload failed", plugin: name, error: err.message });
+  } catch (err) {
+    if (err instanceof PluginRouteError) {
+      return c.json({ error: err.message }, err.statusCode as 400);
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ msg: "[plugins] Reload failed", plugin: name, error: message });
     return c.json({ error: "Plugin reload failed" }, 400);
   }
 });
@@ -291,7 +432,7 @@ pluginsRouter.get("/:name/config", async (c) => {
 });
 
 // Update plugin config
-pluginsRouter.put("/:name/config", async (c) => {
+pluginsRouter.put("/:name/config", mutateRateLimit, async (c) => {
   const name = c.req.param("name");
 
   const plugins = listPlugins();
