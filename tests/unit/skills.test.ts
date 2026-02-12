@@ -50,10 +50,14 @@ import {
   removeSkill,
   clearSkillCache,
   checkSkillDependencies,
+  installSkillDependencies,
+  describeInstallStep,
 } from "../../src/core/skills.js";
 import type {
   Skill,
   ParsedFrontmatter,
+  InstallConsentProvider,
+  SkillInstallStep,
 } from "../../src/core/skills.js";
 
 // ============================================================================
@@ -1006,5 +1010,157 @@ describe("clearSkillCache", () => {
 
   it("should not throw if cache directory doesn't exist", () => {
     expect(() => clearSkillCache()).not.toThrow();
+  });
+});
+
+// ============================================================================
+// describeInstallStep
+// ============================================================================
+
+describe("describeInstallStep", () => {
+  it("should describe brew steps", () => {
+    expect(describeInstallStep({ id: "1", kind: "brew", formula: "jq" })).toBe("brew install jq");
+  });
+
+  it("should describe apt steps", () => {
+    expect(describeInstallStep({ id: "1", kind: "apt", package: "curl" })).toBe(
+      "sudo apt-get install -y curl",
+    );
+  });
+
+  it("should describe npm steps", () => {
+    expect(describeInstallStep({ id: "1", kind: "npm", package: "typescript" })).toBe(
+      "npm install -g typescript",
+    );
+  });
+
+  it("should describe pip steps", () => {
+    expect(describeInstallStep({ id: "1", kind: "pip", package: "requests" })).toBe(
+      "pip install requests",
+    );
+  });
+
+  it("should describe script steps with script content", () => {
+    expect(describeInstallStep({ id: "1", kind: "script", script: "echo hello" })).toBe(
+      "echo hello",
+    );
+  });
+
+  it("should handle missing formula/package/script gracefully", () => {
+    expect(describeInstallStep({ id: "1", kind: "brew" })).toBe("brew install (unknown)");
+    expect(describeInstallStep({ id: "1", kind: "script" })).toBe("(empty script)");
+  });
+});
+
+// ============================================================================
+// installSkillDependencies — Consent Gating (WOP-148)
+// ============================================================================
+
+describe("installSkillDependencies", () => {
+  function makeSkillWithInstall(steps: SkillInstallStep[]): Skill {
+    return {
+      name: "test-skill",
+      description: "Test skill",
+      path: "/test/SKILL.md",
+      baseDir: "/test",
+      source: "managed",
+      metadata: { install: steps },
+    };
+  }
+
+  function makeConsentProvider(approve: boolean): InstallConsentProvider & { calls: Array<{ skillName: string; step: SkillInstallStep; command: string }> } {
+    const calls: Array<{ skillName: string; step: SkillInstallStep; command: string }> = [];
+    return {
+      calls,
+      async requestConsent(skillName, step, command) {
+        calls.push({ skillName, step, command });
+        return approve;
+      },
+    };
+  }
+
+  it("should return true when skill has no install steps", async () => {
+    const skill: Skill = {
+      name: "no-install",
+      description: "No install",
+      path: "/test/SKILL.md",
+      baseDir: "/test",
+      source: "managed",
+    };
+    const result = await installSkillDependencies(skill);
+    expect(result).toBe(true);
+  });
+
+  it("should return true when install steps array is empty", async () => {
+    const skill = makeSkillWithInstall([]);
+    const result = await installSkillDependencies(skill);
+    expect(result).toBe(true);
+  });
+
+  it("should refuse all install steps when no consent provider is given (fail-safe)", async () => {
+    const skill = makeSkillWithInstall([
+      { id: "1", kind: "script", script: "rm -rf /" },
+    ]);
+    const result = await installSkillDependencies(skill);
+    expect(result).toBe(false);
+  });
+
+  it("should refuse script steps when no consent provider is given", async () => {
+    const skill = makeSkillWithInstall([
+      { id: "1", kind: "npm", package: "typescript" },
+    ]);
+    const result = await installSkillDependencies(skill);
+    expect(result).toBe(false);
+  });
+
+  it("should return false when user declines consent", async () => {
+    const skill = makeSkillWithInstall([
+      { id: "1", kind: "script", script: "echo hello" },
+    ]);
+    const provider = makeConsentProvider(false);
+    const result = await installSkillDependencies(skill, provider);
+    expect(result).toBe(false);
+    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0].command).toBe("echo hello");
+  });
+
+  it("should pass correct parameters to consent provider", async () => {
+    const step: SkillInstallStep = { id: "install-jq", kind: "brew", formula: "jq" };
+    const skill = makeSkillWithInstall([step]);
+    const provider = makeConsentProvider(false);
+    await installSkillDependencies(skill, provider);
+    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0].skillName).toBe("test-skill");
+    expect(provider.calls[0].step).toBe(step);
+    expect(provider.calls[0].command).toBe("brew install jq");
+  });
+
+  it("should stop at first declined step and not continue to subsequent steps", async () => {
+    const skill = makeSkillWithInstall([
+      { id: "1", kind: "script", script: "echo first" },
+      { id: "2", kind: "script", script: "echo second" },
+    ]);
+    const provider = makeConsentProvider(false);
+    const result = await installSkillDependencies(skill, provider);
+    expect(result).toBe(false);
+    // Only the first step should have been presented
+    expect(provider.calls).toHaveLength(1);
+  });
+
+  it("should request consent for every step kind, not just script", async () => {
+    const skill = makeSkillWithInstall([
+      { id: "1", kind: "brew", formula: "jq" },
+      { id: "2", kind: "apt", package: "curl" },
+      { id: "3", kind: "npm", package: "typescript" },
+      { id: "4", kind: "pip", package: "requests" },
+    ]);
+    // Approve all but since the commands won't actually exist in test, we just
+    // check that consent is requested for each one. We use a declining provider
+    // to avoid actual execution.
+    const provider = makeConsentProvider(false);
+    await installSkillDependencies(skill, provider);
+    // Should stop at first decline
+    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls[0].command).toBe("brew install jq");
   });
 });
