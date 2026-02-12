@@ -34,12 +34,12 @@ import { checkReadiness, markCronRunning, markStartupComplete } from "./readines
 import { authRouter } from "./routes/auth.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
+import { fleetRouter } from "./routes/fleet.js";
 import { hooksRouter } from "./routes/hooks.js";
 import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { skillsRouter } from "./routes/skills.js";
-import { fleetRouter } from "./routes/fleet.js";
 import { handleWebSocketClose, handleWebSocketMessage, setupWebSocket } from "./ws.js";
 
 const DEFAULT_PORT = parseInt(process.env.WOPR_DAEMON_PORT || "7437", 10);

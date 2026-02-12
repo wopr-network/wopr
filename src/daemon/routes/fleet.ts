@@ -53,9 +53,12 @@ function maskSecrets(envContent: string): Record<string, string> {
     const value = trimmed.slice(eqIdx + 1);
     // Mask values for keys that look like secrets
     const isSecret = /token|key|secret|password|credential/i.test(key);
-    masked[key] = isSecret && value.length > 4
-      ? value.slice(0, 2) + "*".repeat(Math.max(value.length - 4, 8)) + value.slice(-2)
-      : isSecret ? "****" : value;
+    masked[key] =
+      isSecret && value.length > 4
+        ? value.slice(0, 2) + "*".repeat(Math.max(value.length - 4, 8)) + value.slice(-2)
+        : isSecret
+          ? "****"
+          : value;
   }
   return masked;
 }
@@ -174,7 +177,12 @@ fleetRouter.get("/bots", (c) => {
 /** POST /fleet/bots — create a new bot from a profile template or custom config */
 fleetRouter.post("/bots", async (c) => {
   const body = await c.req.json();
-  const { name, template, profile: customProfile, env } = body as {
+  const {
+    name,
+    template,
+    profile: customProfile,
+    env,
+  } = body as {
     name?: string;
     template?: string;
     profile?: Record<string, unknown>;
@@ -236,7 +244,7 @@ fleetRouter.post("/bots", async (c) => {
     const envLines = Object.entries(env)
       .map(([k, v]) => `${k}=${v}`)
       .join("\n");
-    writeFileSync(join(botPath, ".env"), envLines + "\n");
+    writeFileSync(join(botPath, ".env"), `${envLines}\n`);
   }
 
   logger.info({ msg: "[fleet] Bot created", bot: profile.name, template });
@@ -320,10 +328,7 @@ fleetRouter.patch("/bots/:id", async (c) => {
     if (!validation.success) {
       return c.json({ error: "Invalid profile update", details: validation.error.format() }, 400);
     }
-    writeFileSync(
-      join(botPath, "profile.yaml"),
-      stringifyYaml(validation.data as unknown as Record<string, unknown>),
-    );
+    writeFileSync(join(botPath, "profile.yaml"), stringifyYaml(validation.data as unknown as Record<string, unknown>));
   }
 
   // Update env if provided
@@ -335,7 +340,7 @@ fleetRouter.patch("/bots/:id", async (c) => {
     }
     const envPath = join(botPath, ".env");
     // Merge with existing env
-    let existing: Record<string, string> = {};
+    const existing: Record<string, string> = {};
     if (existsSync(envPath)) {
       const raw = readFileSync(envPath, "utf-8");
       for (const line of raw.split("\n")) {
@@ -350,7 +355,7 @@ fleetRouter.patch("/bots/:id", async (c) => {
     const envLines = Object.entries(merged)
       .map(([k, v]) => `${k}=${v}`)
       .join("\n");
-    writeFileSync(envPath, envLines + "\n");
+    writeFileSync(envPath, `${envLines}\n`);
   }
 
   logger.info({ msg: "[fleet] Bot updated", bot: id });
@@ -438,10 +443,7 @@ fleetRouter.post("/seed", (c) => {
     }
 
     mkdirSync(botPath, { recursive: true });
-    writeFileSync(
-      join(botPath, "profile.yaml"),
-      stringifyYaml(tmpl.profile as unknown as Record<string, unknown>),
-    );
+    writeFileSync(join(botPath, "profile.yaml"), stringifyYaml(tmpl.profile as unknown as Record<string, unknown>));
     created.push(tmpl.profile.name);
   }
 
