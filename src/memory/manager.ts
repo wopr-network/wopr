@@ -337,7 +337,6 @@ export class MemoryIndexManager {
     await syncSessionFiles({
       db: this.db,
       needsFullReindex,
-      vectorTable: "",
       ftsTable: FTS_TABLE,
       ftsEnabled: this.fts.enabled,
       ftsAvailable: this.fts.available,
