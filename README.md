@@ -37,7 +37,7 @@ WOPR provides a foundation for managing AI sessions with persistent context, sch
 
 ```bash
 # Install
-npm install -g @tsavo/wopr
+npm install -g @wopr-network/wopr
 
 # Interactive setup wizard (recommended)
 wopr onboard
