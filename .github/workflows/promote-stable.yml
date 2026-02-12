@@ -1,0 +1,104 @@
+name: Promote Stable
+
+on:
+  schedule:
+    # Run nightly at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+  issues: write
+
+jobs:
+  promote:
+    name: Promote ${{ matrix.image }}
+    runs-on: [self-hosted, Linux, X64]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: wopr
+          - image: wopr-slim
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest image
+        run: docker pull ghcr.io/wopr-network/${{ matrix.image }}:latest
+
+      - name: Smoke test
+        id: smoke
+        run: |
+          CONTAINER_NAME="smoke-${{ matrix.image }}-$$"
+
+          # Start container in background
+          docker run -d --name "$CONTAINER_NAME" \
+            -p 0:7437 \
+            ghcr.io/wopr-network/${{ matrix.image }}:latest
+
+          # Resolve the host port assigned to container port 7437
+          HOST_PORT=$(docker port "$CONTAINER_NAME" 7437 | head -1 | cut -d: -f2)
+
+          # Wait up to 60s for the health endpoint to respond
+          HEALTHY=false
+          for i in $(seq 1 30); do
+            if curl -sf "http://localhost:${HOST_PORT}/health" > /dev/null 2>&1; then
+              HEALTHY=true
+              break
+            fi
+            sleep 2
+          done
+
+          # Cleanup
+          docker rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
+
+          if [ "$HEALTHY" = "true" ]; then
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+            echo "Health check passed for ${{ matrix.image }}:latest"
+          else
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+            echo "Health check FAILED for ${{ matrix.image }}:latest"
+          fi
+
+      - name: Retag as stable and staging
+        if: steps.smoke.outputs.result == 'pass'
+        run: |
+          IMAGE="ghcr.io/wopr-network/${{ matrix.image }}"
+
+          docker tag "${IMAGE}:latest" "${IMAGE}:stable"
+          docker tag "${IMAGE}:latest" "${IMAGE}:staging"
+
+          docker push "${IMAGE}:stable"
+          docker push "${IMAGE}:staging"
+
+          echo "Promoted ${{ matrix.image }}:latest -> :stable + :staging"
+
+      - name: Alert on failure
+        if: steps.smoke.outputs.result == 'fail'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const image = '${{ matrix.image }}';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Stable promotion failed: ${image}:latest`,
+              body: [
+                `The nightly promotion smoke test failed for \`ghcr.io/wopr-network/${image}:latest\`.`,
+                '',
+                `The \`:stable\` and \`:staging\` tags were **not** updated.`,
+                '',
+                `**Workflow run:** ${runUrl}`,
+                '',
+                `Please investigate the health check failure before the next promotion window.`,
+              ].join('\n'),
+              labels: ['devops'],
+            });
