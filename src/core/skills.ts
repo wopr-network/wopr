@@ -663,7 +663,13 @@ export async function installSkillDependencies(
     const command = describeInstallStep(step);
 
     // Request explicit user consent before executing each step
-    const approved = await consentProvider.requestConsent(skill.name, step, command);
+    let approved: boolean;
+    try {
+      approved = await consentProvider.requestConsent(skill.name, step, command);
+    } catch (err) {
+      logger.warn(`Consent provider threw for step "${step.id}" of skill "${skill.name}"; failing closed`, err);
+      return false;
+    }
     if (!approved) {
       logger.info(`User declined install step "${step.id}" for skill "${skill.name}": ${command}`);
       return false;
