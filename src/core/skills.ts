@@ -62,6 +62,45 @@ export interface SkillInstallStep {
   label?: string;
 }
 
+/**
+ * Consent provider for skill install steps.
+ * Callers must supply an implementation that displays the proposed command(s)
+ * to the user and returns true only if the user explicitly approves execution.
+ *
+ * When no provider is supplied, installSkillDependencies refuses all steps
+ * (fail-safe default).
+ */
+export interface InstallConsentProvider {
+  /**
+   * Ask the user whether they consent to running an install step.
+   * @param skillName - The skill requesting installation
+   * @param step      - The install step about to be executed
+   * @param command   - Human-readable description of what will run
+   * @returns true if the user approves, false to skip
+   */
+  requestConsent(skillName: string, step: SkillInstallStep, command: string): Promise<boolean>;
+}
+
+/**
+ * Build a human-readable description of what a given install step will execute.
+ */
+export function describeInstallStep(step: SkillInstallStep): string {
+  switch (step.kind) {
+    case "brew":
+      return `brew install ${step.formula ?? "(unknown)"}`;
+    case "apt":
+      return `sudo apt-get install -y ${step.package ?? "(unknown)"}`;
+    case "npm":
+      return `npm install -g ${step.package ?? "(unknown)"}`;
+    case "pip":
+      return `pip install ${step.package ?? "(unknown)"}`;
+    case "script":
+      return step.script ?? "(empty script)";
+    default:
+      return `(unknown kind: ${(step as SkillInstallStep).kind})`;
+  }
+}
+
 export interface SkillCommandDispatch {
   kind: "tool";
   toolName: string;
@@ -601,13 +640,35 @@ export function checkSkillDependencies(skill: Skill): {
   return { missing, satisfied: missing.length === 0 };
 }
 
-export async function installSkillDependencies(skill: Skill): Promise<boolean> {
+export async function installSkillDependencies(
+  skill: Skill,
+  consentProvider?: InstallConsentProvider,
+): Promise<boolean> {
   const installSteps = skill.metadata?.install;
   if (!installSteps || installSteps.length === 0) return true;
+
+  // Fail-safe: refuse all install steps when no consent provider is given.
+  // This prevents silent execution of untrusted commands from SKILL.md metadata.
+  if (!consentProvider) {
+    logger.warn(
+      `Skill "${skill.name}" requires install steps but no consent provider was supplied. ` +
+        `Refusing to execute untrusted commands. Provide an InstallConsentProvider to allow installation.`,
+    );
+    return false;
+  }
 
   logger.info(`Installing dependencies for skill: ${skill.name}`);
 
   for (const step of installSteps) {
+    const command = describeInstallStep(step);
+
+    // Request explicit user consent before executing each step
+    const approved = await consentProvider.requestConsent(skill.name, step, command);
+    if (!approved) {
+      logger.info(`User declined install step "${step.id}" for skill "${skill.name}": ${command}`);
+      return false;
+    }
+
     try {
       switch (step.kind) {
         case "brew":
@@ -623,6 +684,11 @@ export async function installSkillDependencies(skill: Skill): Promise<boolean> {
         case "npm":
           if (step.package) {
             execFileSync("npm", ["install", "-g", step.package], { stdio: "inherit" });
+          }
+          break;
+        case "pip":
+          if (step.package) {
+            execFileSync("pip", ["install", step.package], { stdio: "inherit" });
           }
           break;
         case "script":
