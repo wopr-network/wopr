@@ -844,3 +844,70 @@ export function clearSkillCache(): void {
     rmSync(cacheDir, { recursive: true, force: true });
   }
 }
+
+// ============================================================================
+// Skill State Management (Enable / Disable)
+// ============================================================================
+
+const SKILLS_STATE_FILE = join(WOPR_HOME, "skills-state.json");
+
+interface SkillsState {
+  [skillName: string]: { enabled: boolean };
+}
+
+function readSkillsState(): SkillsState {
+  if (!existsSync(SKILLS_STATE_FILE)) return {};
+  try {
+    return JSON.parse(readFileSync(SKILLS_STATE_FILE, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeSkillsState(state: SkillsState): void {
+  writeFileSync(SKILLS_STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+/**
+ * Returns whether a skill is enabled. Skills are enabled by default.
+ */
+export function isSkillEnabled(name: string): boolean {
+  const state = readSkillsState();
+  return state[name]?.enabled !== false;
+}
+
+/**
+ * Enable a skill by name. Returns false if the skill is not installed.
+ */
+export function enableSkill(name: string): boolean {
+  const { skills } = discoverSkills();
+  const skill = skills.find((s) => s.name === name);
+  if (!skill) return false;
+
+  const state = readSkillsState();
+  state[name] = { enabled: true };
+  writeSkillsState(state);
+  return true;
+}
+
+/**
+ * Disable a skill by name. Returns false if the skill is not installed.
+ */
+export function disableSkill(name: string): boolean {
+  const { skills } = discoverSkills();
+  const skill = skills.find((s) => s.name === name);
+  if (!skill) return false;
+
+  const state = readSkillsState();
+  state[name] = { enabled: false };
+  writeSkillsState(state);
+  return true;
+}
+
+/**
+ * Get a single skill by name, or null if not found.
+ */
+export function getSkillByName(name: string): Skill | null {
+  const { skills } = discoverSkills();
+  return skills.find((s) => s.name === name) ?? null;
+}
