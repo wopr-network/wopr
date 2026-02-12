@@ -49,7 +49,7 @@ function handleMessage(ws: WS, msg: any): void {
         }
         ws.send(JSON.stringify({ type: "subscribed", sessions }));
       } else if (msg.session) {
-        subscriptions.get(ws)!.add(msg.session);
+        subscriptions.get(ws)?.add(msg.session);
         ws.send(JSON.stringify({ type: "subscribed", sessions: [msg.session] }));
       }
       break;
@@ -64,7 +64,7 @@ function handleMessage(ws: WS, msg: any): void {
         }
         ws.send(JSON.stringify({ type: "unsubscribed", sessions }));
       } else if (msg.session) {
-        subscriptions.get(ws)!.delete(msg.session);
+        subscriptions.get(ws)?.delete(msg.session);
         ws.send(JSON.stringify({ type: "unsubscribed", sessions: [msg.session] }));
       }
       break;

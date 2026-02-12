@@ -11,24 +11,20 @@
  *   import type { WOPRPlugin, WOPRPluginContext, ConfigSchema } from "../plugin-types/index.js";
  */
 
+// A2A types
+export type { A2AServerConfig, A2AToolDefinition, A2AToolResult } from "./a2a.js";
+// Channel types
+export type {
+  ChannelAdapter,
+  ChannelCommand,
+  ChannelCommandContext,
+  ChannelMessageContext,
+  ChannelMessageParser,
+  ChannelProvider,
+  ChannelRef,
+} from "./channel.js";
 // Config types
 export type { ConfigField, ConfigSchema, SetupFlowType } from "./config.js";
-
-// Manifest types
-export type {
-  InstallMethod,
-  NetworkRequirements,
-  PluginCapability,
-  PluginCategory,
-  PluginLifecycle,
-  PluginManifest,
-  PluginRequirements,
-  SetupStep,
-  StorageRequirements,
-} from "./manifest.js";
-
-// Core plugin types
-export type { InstalledPlugin, PluginCommand, PluginRegistryEntry, WOPRPlugin } from "./plugin.js";
 
 // Context (the runtime API plugins receive)
 export type {
@@ -44,17 +40,8 @@ export type {
   WebUiExtension,
   WOPRPluginContext,
 } from "./context.js";
-
-// Channel types
-export type {
-  ChannelAdapter,
-  ChannelCommand,
-  ChannelCommandContext,
-  ChannelMessageContext,
-  ChannelMessageParser,
-  ChannelProvider,
-  ChannelRef,
-} from "./channel.js";
+// Context provider types
+export type { ContextPart, ContextProvider, MessageInfo } from "./context-provider.js";
 
 // Event and hook types
 export type {
@@ -85,9 +72,17 @@ export type {
   WOPREventMap,
   WOPRHookManager,
 } from "./events.js";
-
-// Context provider types
-export type { ContextPart, ContextProvider, MessageInfo } from "./context-provider.js";
-
-// A2A types
-export type { A2AServerConfig, A2AToolDefinition, A2AToolResult } from "./a2a.js";
+// Manifest types
+export type {
+  InstallMethod,
+  NetworkRequirements,
+  PluginCapability,
+  PluginCategory,
+  PluginLifecycle,
+  PluginManifest,
+  PluginRequirements,
+  SetupStep,
+  StorageRequirements,
+} from "./manifest.js";
+// Core plugin types
+export type { InstalledPlugin, PluginCommand, PluginRegistryEntry, WOPRPlugin } from "./plugin.js";

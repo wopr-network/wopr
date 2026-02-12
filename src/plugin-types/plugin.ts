@@ -5,8 +5,8 @@
  * PluginCommand defines CLI commands that plugins can register.
  */
 
-import type { PluginManifest } from "./manifest.js";
 import type { WOPRPluginContext } from "./context.js";
+import type { PluginManifest } from "./manifest.js";
 
 /**
  * A CLI command registered by a plugin.

@@ -5,14 +5,11 @@
  * this object during init() and use it to interact with the WOPR daemon.
  */
 
-import type { ConfigSchema } from "./config.js";
-import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
-import type { ContextProvider } from "./context-provider.js";
-import type {
-  WOPREventBus,
-  WOPRHookManager,
-} from "./events.js";
 import type { A2AServerConfig } from "./a2a.js";
+import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
+import type { ConfigSchema } from "./config.js";
+import type { ContextProvider } from "./context-provider.js";
+import type { WOPREventBus, WOPRHookManager } from "./events.js";
 
 /**
  * Multimodal message with optional images.
