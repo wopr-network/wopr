@@ -125,7 +125,6 @@ export function createHttpExecTools(sessionName: string): any[] {
             "sort",
             "uniq",
             "diff",
-            "env",
             "which",
             "file",
             "stat",
