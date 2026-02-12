@@ -67,22 +67,38 @@ export interface SkillInstallStep {
  * Callers must supply an implementation that displays the proposed command(s)
  * to the user and returns true only if the user explicitly approves execution.
  *
+ * SECURITY: Implementations MUST display `rawCommand` verbatim to the user.
+ * Do NOT substitute step.label or any other summary — `rawCommand` contains
+ * the exact shell content that will be executed.
+ *
  * When no provider is supplied, installSkillDependencies refuses all steps
  * (fail-safe default).
  */
 export interface InstallConsentProvider {
   /**
    * Ask the user whether they consent to running an install step.
-   * @param skillName - The skill requesting installation
-   * @param step      - The install step about to be executed
-   * @param command   - Human-readable description of what will run
+   *
+   * SECURITY: `rawCommand` is the EXACT shell command/script that will be
+   * executed verbatim. Implementations MUST show this to the user, not
+   * step.label or any other attacker-controlled summary field.
+   *
+   * @param skillName  - The skill requesting installation
+   * @param step       - The install step about to be executed
+   * @param rawCommand - The exact shell command or script content that will be
+   *                     executed. For "script" steps this is the full bash script.
+   *                     This MUST be displayed to the user for informed consent.
    * @returns true if the user approves, false to skip
    */
-  requestConsent(skillName: string, step: SkillInstallStep, command: string): Promise<boolean>;
+  requestConsent(skillName: string, step: SkillInstallStep, rawCommand: string): Promise<boolean>;
 }
 
 /**
- * Build a human-readable description of what a given install step will execute.
+ * Return the exact shell command or script content that a given install step
+ * will execute. For package-manager steps this is the full CLI invocation;
+ * for "script" steps this is the raw bash script verbatim.
+ *
+ * SECURITY: The return value must be shown to the user as-is for informed
+ * consent — do NOT replace it with step.label or any other summary.
  */
 export function describeInstallStep(step: SkillInstallStep): string {
   switch (step.kind) {
@@ -660,18 +676,21 @@ export async function installSkillDependencies(
   logger.info(`Installing dependencies for skill: ${skill.name}`);
 
   for (const step of installSteps) {
-    const command = describeInstallStep(step);
+    // SECURITY: rawCommand is the EXACT content that will be executed.
+    // For "script" steps this is the full bash script verbatim — not a
+    // summary, label, or description. Consent providers MUST display this.
+    const rawCommand = describeInstallStep(step);
 
     // Request explicit user consent before executing each step
     let approved: boolean;
     try {
-      approved = await consentProvider.requestConsent(skill.name, step, command);
+      approved = await consentProvider.requestConsent(skill.name, step, rawCommand);
     } catch (err) {
       logger.warn(`Consent provider threw for step "${step.id}" of skill "${skill.name}"; failing closed`, err);
       return false;
     }
     if (!approved) {
-      logger.info(`User declined install step "${step.id}" for skill "${skill.name}": ${command}`);
+      logger.info(`User declined install step "${step.id}" for skill "${skill.name}": ${rawCommand}`);
       return false;
     }
 
