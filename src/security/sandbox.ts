@@ -299,6 +299,9 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
   mkdirSync(hostDir, { recursive: true });
   const hostSocketFile = join(hostDir, "mcp.sock");
 
+  // Remove stale socket file from a previous process that may have crashed
+  rmSync(hostSocketFile, { force: true });
+
   // Container-side mount point
   const containerSocketDir = "/run/wopr-mcp";
   const containerSocketPath = `${containerSocketDir}/mcp.sock`;
@@ -344,11 +347,11 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
       clientConn.destroy();
     });
 
-    // Cleanup on close — ensure both sides are torn down
+    // Cleanup on close — ensure both sides are torn down (with idempotency guards)
     const cleanup = () => {
       clients.delete(clientConn);
-      clientConn.destroy();
-      upstream.destroy();
+      if (!clientConn.destroyed) clientConn.destroy();
+      if (!upstream.destroyed) upstream.destroy();
     };
     clientConn.on("close", cleanup);
     upstream.on("close", cleanup);
@@ -359,6 +362,10 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
     server.on("error", reject);
     server.listen(hostSocketFile, () => {
       server.removeListener("error", reject);
+      // Add permanent error handler so unhandled server errors don't crash the process
+      server.on("error", (err) => {
+        logger.warn(`[sandbox] MCP bridge server error for session ${sessionName}: ${err.message}`);
+      });
       resolve();
     });
   });
@@ -393,12 +400,15 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
   }
 
   // Build the handle
+  let closed = false;
   const handle: McpSocketBridgeHandle = {
     hostDir,
     hostSocketPath: hostSocketFile,
     containerSocketPath,
     containerName: sandbox.containerName,
     close() {
+      if (closed) return;
+      closed = true;
       logger.info(`[sandbox] Closing MCP bridge for session ${sessionName}`);
       // Close all client connections
       for (const client of clients) {
