@@ -369,4 +369,47 @@ describe("MCP Socket Bridge", () => {
       handle.close();
     });
   });
+
+  // ==========================================================================
+  // Rate limiting
+  // ==========================================================================
+  describe("rate limiting", () => {
+    it("should reject connections that exceed the rate limit", async () => {
+      const { resolveSandboxContext } = await import("../../src/sandbox/index.js");
+      const { logger } = await import("../../src/logger.js");
+      vi.mocked(resolveSandboxContext).mockResolvedValueOnce({
+        enabled: true,
+        sessionKey: "test-session",
+        workspaceDir: "/tmp/workspace",
+        workspaceAccess: "ro",
+        containerName: "wopr-sbx-test",
+        containerWorkdir: "/workspace",
+        docker: {} as any,
+        tools: {},
+      });
+
+      upstreamServer = await createEchoServer(upstreamSocketPath);
+      const handle = await createMcpSocketBridge("test-session", upstreamSocketPath);
+
+      const { connect } = await import("node:net");
+
+      // Open 11 connections rapidly (limit is 10/sec)
+      const connections: import("node:net").Socket[] = [];
+      for (let i = 0; i < 11; i++) {
+        connections.push(connect(handle.hostSocketPath));
+      }
+
+      // Wait a moment for connections to be processed
+      await new Promise((r) => setTimeout(r, 100));
+
+      // The rate limit warning should have been logged
+      expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(expect.stringContaining("rate limit exceeded"));
+
+      // Cleanup
+      for (const conn of connections) {
+        conn.destroy();
+      }
+      handle.close();
+    });
+  });
 });
