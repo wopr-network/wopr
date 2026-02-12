@@ -18,12 +18,19 @@ export interface BotProfile {
   restartPolicy: "no" | "always" | "unless-stopped" | "on-failure";
   /** Optional named volume for persistent data */
   volume?: string;
-  /** Docker healthcheck override */
+  /**
+   * Docker healthcheck override.
+   * Time fields (interval, timeout, startPeriod) are in **milliseconds**.
+   * They are converted to nanoseconds when passed to the Docker API.
+   */
   healthcheck?: {
     test: string[];
+    /** Time between checks, in milliseconds (converted to ns for Docker) */
     interval?: number;
+    /** Timeout per check, in milliseconds (converted to ns for Docker) */
     timeout?: number;
     retries?: number;
+    /** Grace period before first check, in milliseconds (converted to ns for Docker) */
     startPeriod?: number;
   };
   /** Container labels */

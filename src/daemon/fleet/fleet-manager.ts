@@ -37,8 +37,8 @@ export class FleetManager {
     return this.docker.getContainer(containers[0].Id);
   }
 
-  /** Pull the Docker image for a profile */
-  private async pullImage(profile: BotProfile): Promise<void> {
+  /** Pull the Docker image for a profile (ensures it is available locally) */
+  async pullImage(profile: BotProfile): Promise<void> {
     const imageRef = `${profile.image}:${profile.releaseChannel}`;
     logger.info({ msg: "[fleet] Pulling image", image: imageRef });
     const stream = await this.docker.pull(imageRef);
@@ -88,14 +88,14 @@ export class FleetManager {
       HostConfig: hostConfig,
     };
 
-    // Healthcheck
+    // Healthcheck — profile values are in milliseconds; Docker expects nanoseconds
     if (profile.healthcheck) {
       opts.Healthcheck = {
         Test: profile.healthcheck.test,
-        Interval: profile.healthcheck.interval ? profile.healthcheck.interval * 1e6 : undefined, // ns
-        Timeout: profile.healthcheck.timeout ? profile.healthcheck.timeout * 1e6 : undefined,
+        Interval: profile.healthcheck.interval ? profile.healthcheck.interval * 1e6 : undefined, // ms -> ns
+        Timeout: profile.healthcheck.timeout ? profile.healthcheck.timeout * 1e6 : undefined, // ms -> ns
         Retries: profile.healthcheck.retries,
-        StartPeriod: profile.healthcheck.startPeriod ? profile.healthcheck.startPeriod * 1e6 : undefined,
+        StartPeriod: profile.healthcheck.startPeriod ? profile.healthcheck.startPeriod * 1e6 : undefined, // ms -> ns
       };
     }
 
