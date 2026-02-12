@@ -2,9 +2,9 @@
  * Bot profile persistence — JSON file in daemon data directory
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { WOPR_HOME } from "../../paths.js";
 import type { BotProfile, CreateBotInput, UpdateBotInput } from "./types.js";
 
