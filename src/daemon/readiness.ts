@@ -12,8 +12,8 @@
  */
 
 import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { providerRegistry } from "../core/providers.js";
 import { WOPR_HOME } from "../paths.js";
 import { loadedPlugins } from "../plugins/state.js";
@@ -51,8 +51,6 @@ function checkMemoryDb(): SubsystemCheck {
       return { healthy: false, message: "Database file not found" };
     }
     // Attempt to open and run a trivial query
-    const _require = createRequire(import.meta.url);
-    const { DatabaseSync } = _require("node:sqlite");
     const db = new DatabaseSync(dbPath, { readOnly: true });
     try {
       db.exec("SELECT 1");

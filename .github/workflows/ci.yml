@@ -30,6 +30,27 @@ jobs:
       - name: Lint and type check
         run: npm run check
 
+  test:
+    name: Test
+    runs-on: [self-hosted, Linux, X64]
+    needs: lint-and-check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
   build:
     name: Build
     runs-on: [self-hosted, Linux, X64]

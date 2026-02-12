@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock node:sqlite before importing readiness module
 vi.mock("node:sqlite", () => ({
-  DatabaseSync: vi.fn(),
+  DatabaseSync: class {
+    exec() {}
+    close() {}
+  },
 }));
 
 // Mock dependencies
@@ -34,16 +37,6 @@ vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
   return { ...actual, existsSync: vi.fn(() => false) };
 });
-
-// Mock createRequire to return a mock DatabaseSync
-vi.mock("node:module", () => ({
-  createRequire: () => () => ({
-    DatabaseSync: vi.fn().mockImplementation(() => ({
-      exec: vi.fn(),
-      close: vi.fn(),
-    })),
-  }),
-}));
 
 describe("readiness probe", () => {
   beforeEach(() => {
