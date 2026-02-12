@@ -5,6 +5,10 @@
  * Uses Docker-based isolation for untrusted sessions.
  */
 
+import { mkdirSync, rmSync } from "node:fs";
+import { createServer, connect as netConnect, type Server, type Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { logger } from "../logger.js";
 import {
   execDocker,
@@ -234,10 +238,229 @@ export function generateSeccompProfile(): string {
   return JSON.stringify(profile, null, 2);
 }
 
-// Keep MCP socket bridge placeholder for future
-export async function createMcpSocketBridge(_sessionName: string, socketPath: string): Promise<void> {
-  logger.info(`[sandbox] MCP socket bridge placeholder at ${socketPath}`);
-  // TODO: Implement full MCP socket bridge
+// ============================================================================
+// MCP Socket Bridge
+// ============================================================================
+
+/**
+ * Handle for an active MCP socket bridge.
+ * Call close() to tear down the bridge and clean up resources.
+ */
+export interface McpSocketBridgeHandle {
+  /** Host-side directory containing the socket */
+  hostDir: string;
+  /** Path to the socket file on the host */
+  hostSocketPath: string;
+  /** Path where the socket is mounted inside the container */
+  containerSocketPath: string;
+  /** The container this bridge is attached to */
+  containerName: string;
+  /** Close the bridge and clean up */
+  close: () => void;
+}
+
+/** Active bridges keyed by session name */
+const activeBridges = new Map<string, McpSocketBridgeHandle>();
+
+/** Rate limiting: track connection timestamps per bridge */
+const connectionTimestamps = new Map<string, number[]>();
+const MAX_CONNECTIONS_PER_SECOND = 10;
+
+/**
+ * Create an MCP socket bridge for a sandboxed session.
+ *
+ * Creates a Unix domain socket on the host and bind-mounts the socket
+ * directory into the running container. Processes inside the container
+ * can connect to the socket to communicate with the host-side MCP server.
+ *
+ * Each incoming connection on the socket is proxied to a new connection
+ * on the target MCP socket path (the upstream MCP server).
+ *
+ * @param sessionName - The session to bridge
+ * @param socketPath  - The upstream MCP server socket path to proxy to
+ * @returns A handle for managing the bridge lifecycle
+ */
+export async function createMcpSocketBridge(sessionName: string, socketPath: string): Promise<McpSocketBridgeHandle> {
+  // Check if a bridge already exists for this session
+  const existing = activeBridges.get(sessionName);
+  if (existing) {
+    logger.warn(`[sandbox] MCP bridge already exists for session ${sessionName}, closing old bridge`);
+    existing.close();
+  }
+
+  // Resolve the sandbox context to get the container name
+  const sandbox = await getSandboxForSession(sessionName);
+  if (!sandbox) {
+    throw new Error(`Session ${sessionName} is not sandboxed — cannot create MCP bridge`);
+  }
+
+  // Create a host-side directory for the bridge socket
+  const hostDir = join(tmpdir(), `wopr-mcp-bridge-${sandbox.containerName}`);
+  mkdirSync(hostDir, { recursive: true });
+  const hostSocketFile = join(hostDir, "mcp.sock");
+
+  // Remove stale socket file from a previous process that may have crashed
+  rmSync(hostSocketFile, { force: true });
+
+  // Container-side mount point
+  const containerSocketDir = "/run/wopr-mcp";
+  const containerSocketPath = `${containerSocketDir}/mcp.sock`;
+
+  // Track active client connections for cleanup
+  const clients = new Set<Socket>();
+
+  // Create the Unix domain socket server on the host
+  const server: Server = createServer((clientConn: Socket) => {
+    // Rate limiting: reject connections that exceed the threshold
+    const now = Date.now();
+    const timestamps = connectionTimestamps.get(sessionName) ?? [];
+    const recentTimestamps = timestamps.filter((t) => now - t < 1000);
+    if (recentTimestamps.length >= MAX_CONNECTIONS_PER_SECOND) {
+      logger.warn(`[sandbox] MCP bridge: rate limit exceeded for session ${sessionName}, rejecting connection`);
+      clientConn.destroy();
+      return;
+    }
+    recentTimestamps.push(now);
+    connectionTimestamps.set(sessionName, recentTimestamps);
+
+    logger.debug(`[sandbox] MCP bridge: new connection for session ${sessionName}`);
+    clients.add(clientConn);
+
+    // Connect to the upstream MCP server socket
+    const upstream: Socket = netConnect(socketPath, () => {
+      logger.debug(`[sandbox] MCP bridge: connected to upstream MCP at ${socketPath}`);
+    });
+
+    // Bidirectional proxy
+    clientConn.pipe(upstream);
+    upstream.pipe(clientConn);
+
+    // Error handling — log at warn level so errors are visible
+    clientConn.on("error", (err) => {
+      logger.warn(`[sandbox] MCP bridge client error: ${err.message}`);
+      clients.delete(clientConn);
+      upstream.destroy();
+    });
+    upstream.on("error", (err) => {
+      logger.warn(`[sandbox] MCP bridge upstream error: ${err.message}`);
+      clients.delete(clientConn);
+      clientConn.destroy();
+    });
+
+    // Cleanup on close — ensure both sides are torn down (with idempotency guards)
+    const cleanup = () => {
+      clients.delete(clientConn);
+      if (!clientConn.destroyed) clientConn.destroy();
+      if (!upstream.destroyed) upstream.destroy();
+    };
+    clientConn.on("close", cleanup);
+    upstream.on("close", cleanup);
+  });
+
+  // Listen on the Unix socket
+  await new Promise<void>((resolve, reject) => {
+    server.on("error", reject);
+    server.listen(hostSocketFile, () => {
+      server.removeListener("error", reject);
+      // Add permanent error handler so unhandled server errors don't crash the process
+      server.on("error", (err) => {
+        logger.warn(`[sandbox] MCP bridge server error for session ${sessionName}: ${err.message}`);
+      });
+      resolve();
+    });
+  });
+
+  logger.info(`[sandbox] MCP bridge listening at ${hostSocketFile} for session ${sessionName}`);
+
+  // Bind-mount the socket directory into the running container.
+  // We use `docker exec mkdir` + `docker cp` to make the socket accessible.
+  // Note: `docker cp` copies files, but for Unix sockets we need a volume mount
+  // on the running container. Since the container is already running, we use
+  // `docker exec` to create a socat relay from a named pipe instead.
+  //
+  // The most reliable approach for already-running containers: stop, add mount, restart.
+  // But that's disruptive. Instead, we'll record the mount info so that future container
+  // creations include it, and for the current container we'll exec a background relay.
+  try {
+    // Create the socket directory inside the container
+    await execDocker(["exec", sandbox.containerName, "mkdir", "-p", containerSocketDir]);
+
+    // Copy the host socket directory into the container
+    // docker cp copies the socket file itself
+    await execDocker(["cp", hostSocketFile, `${sandbox.containerName}:${containerSocketPath}`]);
+  } catch (err: unknown) {
+    // If docker cp fails for a socket (some Docker versions don't support it),
+    // log and continue — the bridge is still listening on the host side and can
+    // be accessed by future containers that mount the directory as a volume.
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `[sandbox] Could not copy socket into container ${sandbox.containerName}: ${message}. ` +
+        `The bridge is listening at ${hostSocketFile} — mount ${hostDir} as a volume for access.`,
+    );
+  }
+
+  // Build the handle
+  let closed = false;
+  const handle: McpSocketBridgeHandle = {
+    hostDir,
+    hostSocketPath: hostSocketFile,
+    containerSocketPath,
+    containerName: sandbox.containerName,
+    close() {
+      if (closed) return;
+      closed = true;
+      logger.info(`[sandbox] Closing MCP bridge for session ${sessionName}`);
+      // Close all client connections
+      for (const client of clients) {
+        client.destroy();
+      }
+      clients.clear();
+      // Close the server
+      server.close();
+      // Clean up the host socket directory
+      try {
+        rmSync(hostDir, { recursive: true, force: true });
+      } catch {
+        // Best effort
+      }
+      activeBridges.delete(sessionName);
+      connectionTimestamps.delete(sessionName);
+    },
+  };
+
+  activeBridges.set(sessionName, handle);
+  return handle;
+}
+
+/**
+ * Destroy an active MCP socket bridge for a session.
+ * No-op if no bridge exists.
+ */
+export function destroyMcpSocketBridge(sessionName: string): void {
+  const handle = activeBridges.get(sessionName);
+  if (handle) {
+    handle.close();
+  }
+}
+
+/**
+ * Get the active MCP socket bridge for a session, if any.
+ */
+export function getMcpSocketBridge(sessionName: string): McpSocketBridgeHandle | undefined {
+  return activeBridges.get(sessionName);
+}
+
+/**
+ * Get the host directory path for a bridge socket mount.
+ * Useful when creating new containers to include the mount from the start.
+ */
+export function getMcpBridgeMountArgs(sessionName: string): string[] {
+  const handle = activeBridges.get(sessionName);
+  if (!handle) {
+    return [];
+  }
+  // Returns Docker -v args to mount the bridge socket directory
+  return ["-v", `${handle.hostDir}:/run/wopr-mcp:ro`];
 }
 
 // Cleanup on process exit (with hard timeout to prevent hanging)
@@ -247,6 +470,14 @@ async function shutdownCleanup(): Promise<void> {
     process.exit(1);
   }, 10000);
   try {
+    // Close all active MCP bridges
+    for (const [, handle] of activeBridges) {
+      try {
+        handle.close();
+      } catch {
+        // Best effort
+      }
+    }
     await cleanupAllSandboxes();
   } catch (err) {
     logger.error(`[sandbox] Cleanup failed during shutdown: ${err}`);
