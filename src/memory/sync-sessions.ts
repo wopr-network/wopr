@@ -7,7 +7,6 @@ import { buildSessionEntry, listSessionFiles, type SessionFileEntry, sessionPath
 export async function syncSessionFiles(params: {
   db: DatabaseSync;
   needsFullReindex: boolean;
-  vectorTable: string;
   ftsTable: string;
   ftsEnabled: boolean;
   ftsAvailable: boolean;
@@ -49,17 +48,6 @@ export async function syncSessionFiles(params: {
       continue;
     }
     params.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, "sessions");
-    if (params.vectorTable) {
-      try {
-        params.db
-          .prepare(
-            `DELETE FROM ${params.vectorTable} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`,
-          )
-          .run(stale.path, "sessions");
-      } catch (err) {
-        logger.warn(`[sync-sessions] Vector table delete failed for ${stale.path}: ${err}`);
-      }
-    }
     params.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "sessions");
     if (params.ftsEnabled && params.ftsAvailable) {
       try {

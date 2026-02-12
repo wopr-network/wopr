@@ -2,7 +2,7 @@
  * Memory Module Tests (WOP-12)
  *
  * Tests FTS query building, BM25 score normalization, temporal filtering,
- * markdown chunking, hashing, and cosine similarity.
+ * markdown chunking, and hashing.
  *
  * The MemoryIndexManager requires node:sqlite which is Node 22+ only,
  * so we test the pure utility functions and the exported helpers from
@@ -21,7 +21,7 @@ vi.mock("../../src/logger.js", () => ({
 }));
 
 // Import the pure utility functions from the internal module
-const { hashText, chunkMarkdown, cosineSimilarity, normalizeRelPath, isMemoryPath, normalizeExtraMemoryPaths } =
+const { hashText, chunkMarkdown, normalizeRelPath, isMemoryPath, normalizeExtraMemoryPaths } =
   await import("../../src/memory/internal.js");
 
 // Import buildFtsQuery and bm25RankToScore from the manager module
@@ -231,37 +231,6 @@ describe("Memory Module - Pure Utility Functions", () => {
     it("should produce chunks with text property", () => {
       const chunks = chunkMarkdown("Hello\nWorld", { tokens: 100, overlap: 0 });
       expect(chunks[0].text).toContain("Hello");
-    });
-  });
-
-  // ========================================================================
-  // Cosine Similarity
-  // ========================================================================
-  describe("cosineSimilarity", () => {
-    it("should return 1 for identical vectors", () => {
-      expect(cosineSimilarity([1, 2, 3], [1, 2, 3])).toBeCloseTo(1, 5);
-    });
-
-    it("should return 0 for orthogonal vectors", () => {
-      expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0, 5);
-    });
-
-    it("should return -1 for opposite vectors", () => {
-      expect(cosineSimilarity([1, 0], [-1, 0])).toBeCloseTo(-1, 5);
-    });
-
-    it("should return 0 for empty vectors", () => {
-      expect(cosineSimilarity([], [])).toBe(0);
-    });
-
-    it("should handle zero vectors", () => {
-      expect(cosineSimilarity([0, 0], [1, 1])).toBe(0);
-    });
-
-    it("should handle vectors of different lengths (uses min length)", () => {
-      const result = cosineSimilarity([1, 2, 3], [1, 2]);
-      expect(result).toBeDefined();
-      expect(typeof result).toBe("number");
     });
   });
 
