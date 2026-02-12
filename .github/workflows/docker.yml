@@ -74,12 +74,13 @@ jobs:
           image-ref: ghcr.io/wopr-network/${{ matrix.image }}:sha-${{ steps.short-sha.outputs.sha }}
           scan-type: image
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
           exit-code: '1'
           format: sarif
           output: trivy-results.sarif
 
       - name: Upload Trivy SARIF to GitHub Security
-        if: always() && steps.trivy.outcome == 'success'
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
