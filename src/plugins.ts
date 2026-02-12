@@ -41,6 +41,7 @@ export {
   getLoadedPlugin,
   loadAllPlugins,
   loadPlugin,
+  readPluginManifest,
   shutdownAllPlugins,
   unloadPlugin,
 } from "./plugins/loading.js";

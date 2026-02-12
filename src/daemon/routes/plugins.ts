@@ -24,12 +24,13 @@ import {
   listPlugins,
   listRegistries,
   loadPlugin,
+  readPluginManifest,
   removePlugin,
   removeRegistry,
   searchPlugins,
   unloadPlugin,
 } from "../../plugins.js";
-import type { PluginInjectOptions } from "../../types.js";
+import type { ConfigSchema, PluginInjectOptions } from "../../types.js";
 
 export const pluginsRouter = new Hono();
 
@@ -47,7 +48,7 @@ function createInjectors() {
 // List installed plugins (with manifest metadata)
 pluginsRouter.get("/", (c) => {
   const plugins = listPlugins();
-  const manifests = getAllPluginManifests();
+  const runtimeManifests = getAllPluginManifests();
   return c.json({
     plugins: plugins.map(
       (p: {
@@ -55,10 +56,12 @@ pluginsRouter.get("/", (c) => {
         version: string;
         description?: string;
         source: string;
+        path: string;
         enabled: boolean;
         installedAt: number;
       }) => {
-        const manifest = manifests.get(p.name);
+        // Prefer runtime manifest (loaded plugins), fall back to reading from disk
+        const manifest = runtimeManifests.get(p.name) || readPluginManifest(p.path);
         return {
           name: p.name,
           version: p.version,
@@ -85,11 +88,12 @@ pluginsRouter.get("/", (c) => {
   });
 });
 
-// Search npm registry for available @wopr-network/plugin-* packages
+// Search npm registry for available wopr-plugin-* packages
 pluginsRouter.get("/available", async (c) => {
   const query = c.req.query("q") || "";
+  const limit = Math.min(Number(c.req.query("limit")) || 25, 100);
   const results = await searchPlugins(query);
-  return c.json({ results });
+  return c.json({ results: results.slice(0, limit) });
 });
 
 // List plugin-provided Web UI extensions
@@ -273,7 +277,15 @@ pluginsRouter.get("/:name/config", async (c) => {
   const pluginConfig = (cfg as any).plugins?.data?.[name] || {};
 
   const schemas = getConfigSchemas();
-  const schema = schemas.get(name) || null;
+  let schema = schemas.get(name) || null;
+
+  // Fall back to reading configSchema from manifest on disk if not in runtime state
+  if (!schema) {
+    const manifest = readPluginManifest(plugin.path);
+    if (manifest?.configSchema) {
+      schema = manifest.configSchema as ConfigSchema;
+    }
+  }
 
   return c.json({ name, config: pluginConfig, configSchema: schema });
 });
@@ -295,9 +307,19 @@ pluginsRouter.put("/:name/config", async (c) => {
     return c.json({ error: "config is required in request body" }, 400);
   }
 
-  // Validate against configSchema if available
+  if (typeof newConfig !== "object" || newConfig === null || Array.isArray(newConfig)) {
+    return c.json({ error: "config must be a JSON object" }, 400);
+  }
+
+  // Validate against configSchema if available (runtime or disk)
   const schemas = getConfigSchemas();
-  const schema = schemas.get(name);
+  let schema = schemas.get(name);
+  if (!schema) {
+    const manifest = readPluginManifest(plugin.path);
+    if (manifest?.configSchema) {
+      schema = manifest.configSchema as ConfigSchema;
+    }
+  }
   if (schema) {
     const errors = validateConfigAgainstSchema(newConfig, schema);
     if (errors.length > 0) {
@@ -328,8 +350,9 @@ pluginsRouter.get("/:name/health", (c) => {
   }
 
   const loaded = getLoadedPlugin(name);
-  const manifests = getAllPluginManifests();
-  const manifest = manifests.get(name);
+  const runtimeManifests = getAllPluginManifests();
+  // Prefer runtime manifest, fall back to reading from disk
+  const manifest = runtimeManifests.get(name) || readPluginManifest(plugin.path);
 
   return c.json({
     name,
@@ -399,7 +422,7 @@ function validateConfigAgainstSchema(
   const errors: string[] = [];
   for (const field of schema.fields) {
     const value = config[field.name];
-    if (field.required && (value === undefined || value === null || value === "")) {
+    if (field.required && (value === undefined || value === null || (field.type === "string" && value === ""))) {
       errors.push(`Field "${field.name}" is required`);
     }
   }
