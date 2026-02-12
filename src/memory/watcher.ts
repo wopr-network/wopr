@@ -1,6 +1,7 @@
 // File watcher for auto-sync - uses chokidar for cross-platform watching
 // chokidar types are optional - use any for the watcher
 import { logger } from "../logger.js";
+
 type FSWatcher = { close(): Promise<void>; on(event: string, handler: (...args: any[]) => void): FSWatcher };
 
 let watcher: FSWatcher | null = null;

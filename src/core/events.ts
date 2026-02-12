@@ -337,6 +337,7 @@ class WOPREventBusImpl implements WOPREventBus {
           logger.debug(`[events] memory:filesChanged handler ${i}/${listeners.length} starting (heap=${heapMB}MB)`);
         }
         try {
+          // biome-ignore lint/complexity/noBannedTypes: EventEmitter listeners are untyped
           const result = (listeners[i] as Function)(payload, meta);
           if (result && typeof result.then === "function") {
             await result;
@@ -355,6 +356,7 @@ class WOPREventBusImpl implements WOPREventBus {
       const promises: Promise<void>[] = [];
       for (let i = 0; i < listeners.length; i++) {
         try {
+          // biome-ignore lint/complexity/noBannedTypes: EventEmitter listeners are untyped
           const result = (listeners[i] as Function)(payload, meta);
           if (result && typeof result.then === "function") {
             promises.push(
@@ -384,6 +386,7 @@ class WOPREventBusImpl implements WOPREventBus {
     const wcPromises: Promise<void>[] = [];
     for (const listener of wildcardListeners) {
       try {
+        // biome-ignore lint/complexity/noBannedTypes: EventEmitter listeners are untyped
         const result = (listener as Function)(wildcardEvent, meta);
         if (result && typeof result.then === "function") {
           wcPromises.push(
