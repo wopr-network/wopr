@@ -176,7 +176,7 @@ export class MemoryIndexManager {
   ): Promise<MemorySearchResult[]> {
     if (this.config.sync.onSearch && this.dirty) {
       await this.sync().catch((err) => {
-        console.warn(`memory sync failed (search): ${String(err)}`);
+        logger.warn(`memory sync failed (search): ${String(err)}`);
       });
     }
     const cleaned = query.trim();
@@ -268,7 +268,7 @@ export class MemoryIndexManager {
         source: row.source,
       }));
     } catch (err) {
-      console.warn(`FTS search failed: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(`FTS search failed: ${err instanceof Error ? err.message : String(err)}`);
       return [];
     }
   }
@@ -286,7 +286,7 @@ export class MemoryIndexManager {
   private async runSync(_params?: { force?: boolean }): Promise<void> {
     const heapMB = () => Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     const needsFullReindex = await this.checkNeedsFullReindex();
-    console.log(`[memory-sync] start (heap: ${heapMB()}MB, fullReindex: ${needsFullReindex})`);
+    logger.info(`[memory-sync] start (heap: ${heapMB()}MB, fullReindex: ${needsFullReindex})`);
 
     // Emit per-source to keep memory bounded (don't accumulate all changes at once)
 
@@ -296,36 +296,36 @@ export class MemoryIndexManager {
       source: "global",
       needsFullReindex,
     });
-    console.log(`[memory-sync] global: ${globalChanges.length} changes (heap: ${heapMB()}MB)`);
+    logger.info(`[memory-sync] global: ${globalChanges.length} changes (heap: ${heapMB()}MB)`);
     if (globalChanges.length > 0) {
       await eventBus.emit("memory:filesChanged", { changes: globalChanges }, "core");
-      console.log(`[memory-sync] global emitted (heap: ${heapMB()}MB)`);
+      logger.info(`[memory-sync] global emitted (heap: ${heapMB()}MB)`);
     }
 
     // Session memory files (current session + all session memory dirs)
     const sessionMemoryDirs = await discoverSessionMemoryDirs();
-    console.log(`[memory-sync] session dirs: ${sessionMemoryDirs.length} (heap: ${heapMB()}MB)`);
+    logger.info(`[memory-sync] session dirs: ${sessionMemoryDirs.length} (heap: ${heapMB()}MB)`);
     const sessionChanges = await this.scanMemoryFiles({
       dirs: [this.sessionDir, ...sessionMemoryDirs],
       source: "session",
       needsFullReindex,
     });
-    console.log(`[memory-sync] session: ${sessionChanges.length} changes (heap: ${heapMB()}MB)`);
+    logger.info(`[memory-sync] session: ${sessionChanges.length} changes (heap: ${heapMB()}MB)`);
     if (sessionChanges.length > 0) {
       await eventBus.emit("memory:filesChanged", { changes: sessionChanges }, "core");
-      console.log(`[memory-sync] session emitted (heap: ${heapMB()}MB)`);
+      logger.info(`[memory-sync] session emitted (heap: ${heapMB()}MB)`);
     }
 
     // Session transcripts — index one file at a time to avoid OOM
     if (this.config.sync.indexSessions !== false) {
-      console.log(`[memory-sync] starting transcript streaming (heap: ${heapMB()}MB)`);
+      logger.info(`[memory-sync] starting transcript streaming (heap: ${heapMB()}MB)`);
       await this.syncSessionTranscriptsStreaming(needsFullReindex);
-      console.log(`[memory-sync] transcripts done (heap: ${heapMB()}MB)`);
+      logger.info(`[memory-sync] transcripts done (heap: ${heapMB()}MB)`);
     }
 
     this.writeMeta();
     this.dirty = false;
-    console.log(`[memory-sync] complete (heap: ${heapMB()}MB)`);
+    logger.info(`[memory-sync] complete (heap: ${heapMB()}MB)`);
   }
 
   /**
@@ -574,7 +574,7 @@ export class MemoryIndexManager {
     this.fts.available = result.ftsAvailable;
     if (result.ftsError) {
       this.fts.loadError = result.ftsError;
-      console.warn(`fts unavailable: ${result.ftsError}`);
+      logger.warn(`fts unavailable: ${result.ftsError}`);
     }
   }
 

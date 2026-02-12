@@ -8,6 +8,7 @@
 
 import { timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
+import { logger } from "../../logger.js";
 import { ensureToken } from "../auth-token.js";
 
 const SKIP_AUTH_PATHS = new Set(["/health", "/ready"]);
@@ -38,7 +39,7 @@ export function bearerAuth(): MiddlewareHandler {
       expected = cachedToken;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[auth] Failed to load token: ${msg}`);
+      logger.error(`[auth] Failed to load token: ${msg}`);
       return c.json({ error: "Internal server error" }, 500);
     }
 
