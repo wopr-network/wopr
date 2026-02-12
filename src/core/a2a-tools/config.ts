@@ -2,6 +2,7 @@
  * Config tools: config_get, config_set, config_provider_defaults
  */
 
+import { redactSensitive } from "../../security/redact.js";
 import { centralConfig, tool, withSecurityCheck, z } from "./_base.js";
 
 export function createConfigTools(sessionName: string): any[] {
@@ -18,31 +19,6 @@ export function createConfigTools(sessionName: string): any[] {
         return withSecurityCheck("config_get", sessionName, async () => {
           await centralConfig.load();
           const { key } = args;
-
-          const redactSensitive = (obj: any, path: string = ""): any => {
-            if (obj === null || obj === undefined) return obj;
-            if (typeof obj !== "object") {
-              const keyName = path.split(".").pop()?.toLowerCase() || "";
-              const sensitiveKeys = [
-                "apikey",
-                "api_key",
-                "secret",
-                "token",
-                "password",
-                "private",
-                "privatekey",
-                "private_key",
-              ];
-              if (sensitiveKeys.some((sk) => keyName.includes(sk))) return "[REDACTED]";
-              return obj;
-            }
-            if (Array.isArray(obj)) return obj.map((item, i) => redactSensitive(item, `${path}[${i}]`));
-            const result: any = {};
-            for (const [k, v] of Object.entries(obj)) {
-              result[k] = redactSensitive(v, path ? `${path}.${k}` : k);
-            }
-            return result;
-          };
 
           if (key) {
             const value = centralConfig.getValue(key);

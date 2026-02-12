@@ -4,13 +4,14 @@
 
 import { Hono } from "hono";
 import { config } from "../../core/config.js";
+import { redactSensitive } from "../../security/redact.js";
 
 export const configRouter = new Hono();
 
 // GET /config - Get all config
 configRouter.get("/", async (c) => {
   await config.load();
-  return c.json(config.get());
+  return c.json(redactSensitive(config.get()));
 });
 
 // GET /config/:key - Get specific config value
@@ -23,7 +24,7 @@ configRouter.get("/:key", async (c) => {
     return c.json({ error: `Config key "${key}" not found` }, 404);
   }
 
-  return c.json({ key, value });
+  return c.json({ key, value: redactSensitive(value, key) });
 });
 
 // PUT /config/:key - Set config value
@@ -39,7 +40,7 @@ configRouter.put("/:key", async (c) => {
   config.setValue(key, value);
   await config.save();
 
-  return c.json({ key, value });
+  return c.json({ key, value: redactSensitive(value, key) });
 });
 
 // DELETE /config - Reset to defaults
