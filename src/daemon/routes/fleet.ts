@@ -207,9 +207,12 @@ fleetRouter.post("/bots", async (c) => {
     return c.json({ error: "Either 'template' or 'profile' is required" }, 400);
   }
 
-  // Override name if explicitly provided
+  // Override name if explicitly provided, trimming whitespace
   if (name) {
     profileData.name = name;
+  }
+  if (typeof profileData.name === "string") {
+    profileData.name = profileData.name.trim();
   }
 
   // Validate the final profile
@@ -230,21 +233,35 @@ fleetRouter.post("/bots", async (c) => {
     return c.json({ error: `Bot "${profile.name}" already exists` }, 409);
   }
 
-  // Create bot directory and write profile
-  mkdirSync(botPath, { recursive: true });
-  writeFileSync(join(botPath, "profile.yaml"), stringifyYaml(profile as Record<string, unknown>));
-
-  // Write .env file if provided
+  // Validate env values before any side-effects
   if (env && typeof env === "object") {
     for (const [key, value] of Object.entries(env)) {
       if (/[\n\r\0]/.test(value)) {
         return c.json({ error: `Invalid characters in env var ${key}` }, 400);
       }
     }
-    const envLines = Object.entries(env)
-      .map(([k, v]) => `${k}=${v}`)
-      .join("\n");
-    writeFileSync(join(botPath, ".env"), `${envLines}\n`);
+  }
+
+  // Create bot directory and write profile
+  mkdirSync(botPath, { recursive: true });
+  try {
+    writeFileSync(join(botPath, "profile.yaml"), stringifyYaml(profile as Record<string, unknown>));
+
+    // Write .env file if provided
+    if (env && typeof env === "object") {
+      const envLines = Object.entries(env)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("\n");
+      writeFileSync(join(botPath, ".env"), `${envLines}\n`);
+    }
+
+    // TODO(WOP-220): Call fm.create(profile) here when Docker integration is wired in.
+    // If fm.create() throws, the catch block below rolls back the persisted profile.
+  } catch (err) {
+    // Rollback: remove bot directory if creation fails to prevent ghost bots
+    rmSync(botPath, { recursive: true, force: true });
+    logger.error({ msg: "[fleet] Bot creation failed, rolled back profile", bot: profile.name, err });
+    return c.json({ error: "Bot creation failed" }, 500);
   }
 
   logger.info({ msg: "[fleet] Bot created", bot: profile.name, template });
@@ -320,6 +337,14 @@ fleetRouter.patch("/bots/:id", async (c) => {
     profile?: Record<string, unknown>;
     env?: Record<string, string>;
   };
+
+  // Validate name if provided in update (must be non-empty after trimming)
+  if (profileUpdates && typeof profileUpdates.name === "string") {
+    profileUpdates.name = profileUpdates.name.trim();
+    if (!profileUpdates.name) {
+      return c.json({ error: "Bot name cannot be empty" }, 400);
+    }
+  }
 
   // Update profile if provided
   if (profileUpdates) {
@@ -411,7 +436,10 @@ fleetRouter.post("/bots/:id/:action", (c) => {
 
   // Container lifecycle actions require Docker integration (WOP-220).
   // For now, acknowledge the request and return a pending status.
-  // When WOP-220 merges, this will integrate with the Fleet Manager core.
+  // When wiring Docker integration:
+  //   - restart MUST pull the new image BEFORE stopping/removing the old container
+  //     to prevent data loss if the pull fails.
+  //   - Correct order: pull image → stop old container → remove old → create new.
   logger.info({ msg: `[fleet] Bot ${action} requested`, bot: id });
 
   return c.json({
