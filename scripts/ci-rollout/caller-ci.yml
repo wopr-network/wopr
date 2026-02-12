@@ -1,0 +1,17 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  ci:
+    uses: wopr-network/.github/.github/workflows/ci-shared.yml@main
+    with:
+      node-version: '22.x'
+      package-manager: 'npm'
+      build-command: 'npm run build'
+      lint-command: 'npm run check'
+      has-tests: false
