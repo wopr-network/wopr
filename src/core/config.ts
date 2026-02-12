@@ -6,6 +6,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { logger } from "../logger.js";
 import { CONFIG_FILE, WOPR_HOME } from "../paths.js";
+import type { SoulEvilConfig } from "./workspace.js";
 /**
  * Per-provider default settings
  */
@@ -60,6 +61,8 @@ export interface WoprConfig {
   providers?: Record<string, ProviderDefaults>;
   /** Memory system configuration (chunking, sync, etc.) */
   memory?: Partial<import("../memory/types.js").MemoryConfig>;
+  /** SOUL_EVIL personality override configuration */
+  soulEvil?: SoulEvilConfig;
   /**
    * Sandbox configuration for Docker-based isolation
    */

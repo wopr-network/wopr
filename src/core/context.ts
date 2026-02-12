@@ -22,8 +22,9 @@ import { join } from "node:path";
 import { SESSIONS_DIR } from "../paths.js";
 import { getChannel } from "../plugins.js";
 import type { ChannelRef } from "../types.js";
+import { config } from "./config.js";
 import { discoverSkills, formatSkillsXml } from "./skills.js";
-import { applySoulEvilOverride, formatBootstrapContext, loadBootstrapFiles, type SoulEvilConfig } from "./workspace.js";
+import { applySoulEvilOverride, formatBootstrapContext, loadBootstrapFiles } from "./workspace.js";
 
 // ============================================================================
 // Types
@@ -169,8 +170,7 @@ const bootstrapFilesProvider: ContextProvider = {
       let files = await loadBootstrapFiles();
 
       // Apply SOUL_EVIL override if configured
-      // TODO: Get SoulEvilConfig from app config when available
-      const soulEvilConfig: SoulEvilConfig | undefined = undefined;
+      const soulEvilConfig = config.get().soulEvil;
       files = await applySoulEvilOverride(files, undefined, soulEvilConfig);
 
       // Filter out missing and empty files
