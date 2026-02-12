@@ -1,12 +1,18 @@
-# WOPR
+<p align="center">
+  <img src="assets/logo.png" alt="WOPR" width="256"/>
+</p>
 
-**Without Official Permission Required**
+<h1 align="center">WOPR</h1>
 
-Self-sovereign AI session management with plugin-based extensibility.
+<p align="center"><strong>Without Official Permission Required</strong></p>
+
+<p align="center">Self-sovereign AI session management with plugin-based extensibility.</p>
+
+<p align="center">
+  <a href="https://github.com/wopr-network/wopr"><img src="https://img.shields.io/github/stars/wopr-network/wopr?style=social" alt="GitHub Stars"/></a>
+</p>
 
 WOPR provides a foundation for managing AI sessions with persistent context, scheduling, and a comprehensive plugin system. Through plugins, agents can communicate directly with each other over P2P, integrate with messaging platforms, and use multiple AI providers.
-
-[![GitHub](https://img.shields.io/github/stars/TSavo/wopr?style=social)](https://github.com/TSavo/wopr)
 
 ## Features
 
@@ -280,7 +286,7 @@ WOPR's plugin system extends functionality:
 
 ```bash
 # Install a plugin from GitHub
-wopr plugin install github:TSavo/wopr-plugin-discord
+wopr plugin install github:wopr-network/wopr-plugin-discord
 
 # Install from npm
 wopr plugin install wopr-plugin-discord
@@ -297,21 +303,21 @@ wopr plugin search discord
 ```
 
 **Official Channel Plugins:**
-- [wopr-plugin-discord](https://github.com/TSavo/wopr-plugin-discord) - Discord integration with reactions
-- [wopr-plugin-slack](https://github.com/TSavo/wopr-plugin-slack) - Slack Socket Mode
-- [wopr-plugin-telegram](https://github.com/TSavo/wopr-plugin-telegram) - Telegram bot API
-- [wopr-plugin-whatsapp](https://github.com/TSavo/wopr-plugin-whatsapp) - WhatsApp via Baileys
-- [wopr-plugin-signal](https://github.com/TSavo/wopr-plugin-signal) - Signal via signal-cli
-- [wopr-plugin-imessage](https://github.com/TSavo/wopr-plugin-imessage) - iMessage (macOS)
-- [wopr-plugin-msteams](https://github.com/TSavo/wopr-plugin-msteams) - Microsoft Teams
+- [wopr-plugin-discord](https://github.com/wopr-network/wopr-plugin-discord) - Discord integration with reactions
+- [wopr-plugin-slack](https://github.com/wopr-network/wopr-plugin-slack) - Slack Socket Mode
+- [wopr-plugin-telegram](https://github.com/wopr-network/wopr-plugin-telegram) - Telegram bot API
+- [wopr-plugin-whatsapp](https://github.com/wopr-network/wopr-plugin-whatsapp) - WhatsApp via Baileys
+- [wopr-plugin-signal](https://github.com/wopr-network/wopr-plugin-signal) - Signal via signal-cli
+- [wopr-plugin-imessage](https://github.com/wopr-network/wopr-plugin-imessage) - iMessage (macOS)
+- [wopr-plugin-msteams](https://github.com/wopr-network/wopr-plugin-msteams) - Microsoft Teams
 
 **Official Provider Plugins:**
-- [wopr-plugin-provider-kimi](https://github.com/TSavo/wopr-plugin-provider-kimi) - Moonshot AI Kimi
-- [wopr-plugin-provider-openai](https://github.com/TSavo/wopr-plugin-provider-openai) - OpenAI GPT models
-- [wopr-plugin-provider-anthropic](https://github.com/TSavo/wopr-plugin-provider-anthropic) - Anthropic Claude
+- [wopr-plugin-provider-kimi](https://github.com/wopr-network/wopr-plugin-provider-kimi) - Moonshot AI Kimi
+- [wopr-plugin-provider-openai](https://github.com/wopr-network/wopr-plugin-provider-openai) - OpenAI GPT models
+- [wopr-plugin-provider-anthropic](https://github.com/wopr-network/wopr-plugin-provider-anthropic) - Anthropic Claude
 
 **P2P Plugin:**
-- [wopr-plugin-p2p](https://github.com/TSavo/wopr-plugin-p2p) - P2P networking, identity, invites, discovery
+- [wopr-plugin-p2p](https://github.com/wopr-network/wopr-plugin-p2p) - P2P networking, identity, invites, discovery
 
 See [Plugins documentation](docs/PLUGINS.md) for development guide.
 
@@ -347,7 +353,7 @@ wopr discover peers             # List discovered peers
 wopr discover connect <peer>    # Connect to peer
 ```
 
-See the [P2P plugin documentation](https://github.com/TSavo/wopr-plugin-p2p) for full details.
+See the [P2P plugin documentation](https://github.com/wopr-network/wopr-plugin-p2p) for full details.
 
 ## Examples
 

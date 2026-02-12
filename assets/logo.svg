@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <filter id="phosphor-glow">
+      <feGaussianBlur stdDeviation="3" result="blur1"/>
+      <feGaussianBlur stdDeviation="10" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="soft-glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- CRT curvature simulation -->
+    <radialGradient id="crt-vignette" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="transparent"/>
+      <stop offset="70%" stop-color="transparent"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.7"/>
+    </radialGradient>
+    <!-- Screen glow -->
+    <radialGradient id="screen-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#003300" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Outer bezel -->
+  <rect width="512" height="512" rx="40" fill="#1a1a1a"/>
+  <rect x="8" y="8" width="496" height="496" rx="36" fill="#111"/>
+
+  <!-- Screen area -->
+  <rect x="28" y="28" width="456" height="456" rx="20" fill="#000a00"/>
+  <rect x="28" y="28" width="456" height="456" rx="20" fill="url(#screen-glow)"/>
+
+  <!-- Scanlines (subtle) -->
+  <g opacity="0.04">
+    <line x1="28" y1="30" x2="484" y2="30" stroke="#00ff41" stroke-width="1"/>
+    <line x1="28" y1="34" x2="484" y2="34" stroke="#00ff41" stroke-width="1"/>
+    <line x1="28" y1="38" x2="484" y2="38" stroke="#00ff41" stroke-width="1"/>
+    <line x1="28" y1="42" x2="484" y2="42" stroke="#00ff41" stroke-width="1"/>
+    <line x1="28" y1="46" x2="484" y2="46" stroke="#00ff41" stroke-width="1"/>
+    <line x1="28" y1="50" x2="484" y2="50" stroke="#00ff41" stroke-width="1"/>
+    <line x1="28" y1="54" x2="484" y2="54" stroke="#00ff41" stroke-width="1"/>
+    <line x1="28" y1="58" x2="484" y2="58" stroke="#00ff41" stroke-width="1"/>
+    <!-- repeating pattern suggestion -->
+  </g>
+
+  <!-- Terminal header -->
+  <text x="60" y="78" fill="#00ff41" opacity="0.3" font-family="monospace" font-size="12" filter="url(#soft-glow)">WOPR MAINFRAME v4.0.1</text>
+  <line x1="48" y1="88" x2="464" y2="88" stroke="#00ff41" stroke-width="0.5" opacity="0.15"/>
+
+  <!-- Prompt line -->
+  <text x="60" y="140" fill="#00ff41" opacity="0.4" font-family="monospace" font-size="13" filter="url(#soft-glow)">GREETINGS, PROFESSOR FALKEN.</text>
+
+  <!-- SHALL WE PLAY A GAME? -->
+  <g filter="url(#soft-glow)">
+    <text x="60" y="175" fill="#00ff41" opacity="0.4" font-family="monospace" font-size="13">SHALL WE PLAY A GAME?</text>
+  </g>
+
+  <!-- Big WOPR -->
+  <g filter="url(#phosphor-glow)">
+    <text x="256" y="310" text-anchor="middle" fill="#00ff41" font-family="'Courier New', 'Consolas', monospace" font-size="110" font-weight="bold" letter-spacing="14">WOPR</text>
+  </g>
+
+  <!-- Decorative data readout -->
+  <g fill="#00ff41" font-family="monospace" font-size="10" opacity="0.25" filter="url(#soft-glow)">
+    <text x="60" y="380">DEFCON: 5    STATUS: ACTIVE</text>
+    <text x="60" y="396">AGENTS: 18   MERGED: 18/18</text>
+    <text x="60" y="412">SESSIONS: NOMINAL</text>
+    <text x="60" y="428">THREAT: NONE DETECTED</text>
+  </g>
+
+  <!-- Bottom prompt -->
+  <g filter="url(#soft-glow)">
+    <text x="60" y="460" fill="#00ff41" opacity="0.35" font-family="monospace" font-size="12">&gt; _</text>
+    <rect x="74" y="449" width="8" height="13" fill="#00ff41" opacity="0.5">
+      <animate attributeName="opacity" values="0.5;0;0.5" dur="1s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- CRT vignette -->
+  <rect x="28" y="28" width="456" height="456" rx="20" fill="url(#crt-vignette)"/>
+
+  <!-- Bezel highlights -->
+  <rect x="8" y="8" width="496" height="496" rx="36" fill="none" stroke="#333" stroke-width="1" opacity="0.3"/>
+</svg>
