@@ -63,15 +63,13 @@ jobs:
           load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
       - name: Get short SHA
         id: short-sha
         run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        id: trivy
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: ghcr.io/wopr-network/${{ matrix.image }}:sha-${{ steps.short-sha.outputs.sha }}
           scan-type: image
@@ -81,17 +79,14 @@ jobs:
           output: trivy-results.sarif
 
       - name: Upload Trivy SARIF to GitHub Security
-        if: always()
+        if: always() && steps.trivy.outcome == 'success'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
 
       - name: Push image
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+        run: |
+          echo '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done
