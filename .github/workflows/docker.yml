@@ -31,10 +31,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -55,14 +56,18 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-,format=short
 
-      - name: Build image
+      # Pass 1: single-platform build for Trivy scanning
+      - name: Build image for scanning
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          push: false
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Get short SHA
         id: short-sha
         run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
@@ -85,10 +90,15 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-      - name: Push image
+      # Pass 2: multi-arch build + push (only on main/tags, reuses GHA cache)
+      - name: Build and push multi-arch
         if: github.event_name != 'pull_request'
-        run: |
-          set -euo pipefail
-          echo '${{ steps.meta.outputs.tags }}' | while IFS= read -r tag; do
-            [ -n "$tag" ] && docker push "$tag"
-          done
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
