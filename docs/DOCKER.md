@@ -6,7 +6,7 @@ Running WOPR in Docker for isolated, reproducible deployments.
 
 ```bash
 # Clone repository
-git clone https://github.com/TSavo/wopr.git
+git clone https://github.com/wopr-network/wopr.git
 cd wopr
 
 # Build image
@@ -122,7 +122,7 @@ services:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
     command: >
       sh -c "
-        wopr plugin install github:TSavo/wopr-plugin-discord &&
+        wopr plugin install github:wopr-network/wopr-plugin-discord &&
         wopr plugin enable wopr-plugin-discord &&
         wopr daemon start --foreground
       "

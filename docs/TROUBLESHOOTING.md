@@ -148,7 +148,7 @@ export KIMI_API_KEY="..."
 export OPENAI_API_KEY="sk-..."
 
 # Or install a provider plugin
-wopr plugin install github:TSavo/wopr-plugin-provider-kimi
+wopr plugin install github:wopr-network/wopr-plugin-provider-kimi
 
 # Check available providers
 wopr providers list
@@ -434,7 +434,7 @@ If issues persist:
    - [Plugins](PLUGINS.md)
 
 2. **Search issues:**
-   - https://github.com/TSavo/wopr/issues
+   - https://github.com/wopr-network/wopr/issues
 
 3. **Report bug:**
    - Include WOPR version: `wopr --version`

@@ -136,6 +136,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin system foundation
 - Discord plugin prototype
 
-[Unreleased]: https://github.com/TSavo/wopr/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/TSavo/wopr/compare/v0.9.0...v1.0.0
-[0.9.0]: https://github.com/TSavo/wopr/releases/tag/v0.9.0
+[Unreleased]: https://github.com/wopr-network/wopr/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/wopr-network/wopr/compare/v0.9.0...v1.0.0
+[0.9.0]: https://github.com/wopr-network/wopr/releases/tag/v0.9.0

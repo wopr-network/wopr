@@ -81,7 +81,7 @@ docs(readme): Update installation instructions
 
 ```bash
 # Clone repository
-git clone https://github.com/TSavo/wopr.git
+git clone https://github.com/wopr-network/wopr.git
 cd wopr
 
 # Install dependencies

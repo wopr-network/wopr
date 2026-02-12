@@ -25,7 +25,7 @@ export const securityStep: OnboardStep = async (ctx: OnboardContext) => {
       "  • Don't expose the gateway to the public internet without auth",
       "  • Run destructive commands only when explicitly asked",
       "",
-      pc.blue("Learn more: https://github.com/TSavo/wopr#security"),
+      pc.blue("Learn more: https://github.com/wopr-network/wopr#security"),
     ].join("\n"),
     "Security Notice",
   );

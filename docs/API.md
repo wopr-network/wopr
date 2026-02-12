@@ -193,7 +193,7 @@ POST /plugins
 Content-Type: application/json
 
 {
-  "source": "github:TSavo/wopr-plugin-discord"
+  "source": "github:wopr-network/wopr-plugin-discord"
 }
 ```
 

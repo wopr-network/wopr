@@ -10,13 +10,13 @@ Connect WOPR to external messaging platforms:
 
 | Plugin | Platform | Status | Repository |
 |--------|----------|--------|------------|
-| `wopr-plugin-discord` | Discord | ✅ Ready | [TSavo/wopr-plugin-discord](https://github.com/TSavo/wopr-plugin-discord) |
-| `wopr-plugin-slack` | Slack | ✅ Ready | [TSavo/wopr-plugin-slack](https://github.com/TSavo/wopr-plugin-slack) |
-| `wopr-plugin-telegram` | Telegram | ✅ Ready | [TSavo/wopr-plugin-telegram](https://github.com/TSavo/wopr-plugin-telegram) |
-| `wopr-plugin-whatsapp` | WhatsApp | ✅ Ready | [TSavo/wopr-plugin-whatsapp](https://github.com/TSavo/wopr-plugin-whatsapp) |
-| `wopr-plugin-signal` | Signal | ✅ Ready | [TSavo/wopr-plugin-signal](https://github.com/TSavo/wopr-plugin-signal) |
-| `wopr-plugin-imessage` | iMessage | ✅ Ready (macOS) | [TSavo/wopr-plugin-imessage](https://github.com/TSavo/wopr-plugin-imessage) |
-| `wopr-plugin-msteams` | Microsoft Teams | ✅ Ready | [TSavo/wopr-plugin-msteams](https://github.com/TSavo/wopr-plugin-msteams) |
+| `wopr-plugin-discord` | Discord | ✅ Ready | [wopr-network/wopr-plugin-discord](https://github.com/wopr-network/wopr-plugin-discord) |
+| `wopr-plugin-slack` | Slack | ✅ Ready | [wopr-network/wopr-plugin-slack](https://github.com/wopr-network/wopr-plugin-slack) |
+| `wopr-plugin-telegram` | Telegram | ✅ Ready | [wopr-network/wopr-plugin-telegram](https://github.com/wopr-network/wopr-plugin-telegram) |
+| `wopr-plugin-whatsapp` | WhatsApp | ✅ Ready | [wopr-network/wopr-plugin-whatsapp](https://github.com/wopr-network/wopr-plugin-whatsapp) |
+| `wopr-plugin-signal` | Signal | ✅ Ready | [wopr-network/wopr-plugin-signal](https://github.com/wopr-network/wopr-plugin-signal) |
+| `wopr-plugin-imessage` | iMessage | ✅ Ready (macOS) | [wopr-network/wopr-plugin-imessage](https://github.com/wopr-network/wopr-plugin-imessage) |
+| `wopr-plugin-msteams` | Microsoft Teams | ✅ Ready | [wopr-network/wopr-plugin-msteams](https://github.com/wopr-network/wopr-plugin-msteams) |
 
 ### Provider Plugins
 
@@ -24,15 +24,15 @@ AI model provider integrations. Note that `anthropic` and `codex` providers are 
 
 | Plugin | Provider | Status | Repository |
 |--------|----------|--------|------------|
-| `wopr-plugin-provider-kimi` | Moonshot AI Kimi | ✅ Ready | [TSavo/wopr-plugin-provider-kimi](https://github.com/TSavo/wopr-plugin-provider-kimi) |
-| `wopr-plugin-provider-openai` | OpenAI GPT | ✅ Ready | [TSavo/wopr-plugin-provider-openai](https://github.com/TSavo/wopr-plugin-provider-openai) |
-| `wopr-plugin-provider-anthropic` | Anthropic Claude | ✅ Ready | [TSavo/wopr-plugin-provider-anthropic](https://github.com/TSavo/wopr-plugin-provider-anthropic) |
+| `wopr-plugin-provider-kimi` | Moonshot AI Kimi | ✅ Ready | [wopr-network/wopr-plugin-provider-kimi](https://github.com/wopr-network/wopr-plugin-provider-kimi) |
+| `wopr-plugin-provider-openai` | OpenAI GPT | ✅ Ready | [wopr-network/wopr-plugin-provider-openai](https://github.com/wopr-network/wopr-plugin-provider-openai) |
+| `wopr-plugin-provider-anthropic` | Anthropic Claude | ✅ Ready | [wopr-network/wopr-plugin-provider-anthropic](https://github.com/wopr-network/wopr-plugin-provider-anthropic) |
 
 ### P2P Plugin
 
 | Plugin | Purpose | Status | Repository |
 |--------|---------|--------|------------|
-| `wopr-plugin-p2p` | P2P networking, identity, invites, discovery | ✅ Ready | [TSavo/wopr-plugin-p2p](https://github.com/TSavo/wopr-plugin-p2p) |
+| `wopr-plugin-p2p` | P2P networking, identity, invites, discovery | ✅ Ready | [wopr-network/wopr-plugin-p2p](https://github.com/wopr-network/wopr-plugin-p2p) |
 
 The P2P plugin adds:
 - Cryptographic identity (Ed25519/X25519 keypairs)
@@ -65,7 +65,7 @@ Commands added by the P2P plugin:
 
 ```bash
 # Install from GitHub
-wopr plugin install github:TSavo/wopr-plugin-discord
+wopr plugin install github:wopr-network/wopr-plugin-discord
 
 # Enable the plugin
 wopr plugin enable wopr-plugin-discord

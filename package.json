@@ -1,5 +1,5 @@
 {
-  "name": "@tsavo/wopr",
+  "name": "@wopr-network/wopr",
   "version": "1.0.0",
   "type": "module",
   "engines": {
@@ -8,8 +8,15 @@
   "bin": {
     "wopr": "./dist/cli.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "dev": "tsx src/cli.ts",
     "daemon": "tsx src/daemon/index.ts",
     "daemon:start": "tsx src/cli.ts daemon start",
