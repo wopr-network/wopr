@@ -1,0 +1,22 @@
+name: my-multi-bot
+description: Multi-channel bot with Discord, Slack, and Telegram
+
+release_channel: stable
+update_policy: nightly
+
+plugins:
+  channels: [discord, slack, telegram]
+  providers: [anthropic, openai]
+  voice: []
+  other: [memory-semantic, webhooks]
+
+resources:
+  memory: 1g
+  restart: unless-stopped
+
+volumes:
+  persist: true
+
+health:
+  check: true
+  alert_on_failure: true

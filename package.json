@@ -20,7 +20,8 @@
     "check": "biome check src/ && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "generate:compose": "tsx scripts/generate-compose.ts"
   },
   "overrides": {
     "cmake-js": "^8.0.0",
@@ -39,6 +40,7 @@
     "sqlite-vec": "0.1.7-alpha.2",
     "winston": "^3.19.0",
     "ws": "^8.19.0",
+    "yaml": "^2.8.2",
     "zod": "^4.3.6"
   },
   "optionalDependencies": {

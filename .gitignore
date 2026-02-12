@@ -15,3 +15,5 @@ sessions/
 web/node_modules/
 /plugins/
 .pnpm-store
+bots/*/.env
+docker-compose.generated.yml
