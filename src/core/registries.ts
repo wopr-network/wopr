@@ -158,7 +158,7 @@ async function fetchGitHubSkills(
         const { frontmatter, warnings } = parseSkillFrontmatter(content);
         if (warnings.length > 0) {
           for (const w of warnings) {
-            console.warn(`[registries] ${w.skillPath}: ${w.message}`);
+            logger.warn(`[registries] ${w.skillPath}: ${w.message}`);
           }
         }
         if (!q || entry.name.toLowerCase().includes(q) || content.toLowerCase().includes(q)) {

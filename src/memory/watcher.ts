@@ -1,5 +1,6 @@
 // File watcher for auto-sync - uses chokidar for cross-platform watching
 // chokidar types are optional - use any for the watcher
+import { logger } from "../logger.js";
 type FSWatcher = { close(): Promise<void>; on(event: string, handler: (...args: any[]) => void): FSWatcher };
 
 let watcher: FSWatcher | null = null;
@@ -45,7 +46,7 @@ export async function startWatcher(params: {
         try {
           await params.onSync();
         } catch (err) {
-          console.warn(`[memory-watcher] Sync failed: ${err instanceof Error ? err.message : String(err)}`);
+          logger.warn(`[memory-watcher] Sync failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       }, params.debounceMs);
     };
@@ -61,9 +62,9 @@ export async function startWatcher(params: {
     });
 
     await watcherPromise;
-    console.log(`[memory-watcher] Watching: ${params.dirs.join(", ")}`);
+    logger.info(`[memory-watcher] Watching: ${params.dirs.join(", ")}`);
   } catch (err) {
-    console.warn(`[memory-watcher] Failed to start: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(`[memory-watcher] Failed to start: ${err instanceof Error ? err.message : String(err)}`);
     watcher = null;
   }
 }
@@ -80,7 +81,7 @@ export async function stopWatcher(): Promise<void> {
     await watcher.close();
     watcher = null;
     watcherPromise = null;
-    console.log("[memory-watcher] Stopped");
+    logger.info("[memory-watcher] Stopped");
   }
 }
 

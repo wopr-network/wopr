@@ -5,6 +5,7 @@
  */
 
 import { EventEmitter } from "node:events";
+import { logger } from "../logger.js";
 import type { STTProvider, TTSProvider, VoiceRegistry } from "./types.js";
 
 export class WOPRVoiceRegistry extends EventEmitter implements VoiceRegistry {
@@ -30,7 +31,7 @@ export class WOPRVoiceRegistry extends EventEmitter implements VoiceRegistry {
     }
 
     this.emit("stt:registered", { name, provider });
-    console.log(`[voice] STT registered: ${name} (${provider.metadata.description})`);
+    logger.info(`[voice] STT registered: ${name} (${provider.metadata.description})`);
   }
 
   /**
@@ -50,7 +51,7 @@ export class WOPRVoiceRegistry extends EventEmitter implements VoiceRegistry {
     }
 
     this.emit("tts:registered", { name, provider });
-    console.log(`[voice] TTS registered: ${name} (${provider.metadata.description})`);
+    logger.info(`[voice] TTS registered: ${name} (${provider.metadata.description})`);
   }
 
   /**
@@ -92,7 +93,7 @@ export class WOPRVoiceRegistry extends EventEmitter implements VoiceRegistry {
     }
     this.activeSTT = name;
     this.emit("stt:activated", { name });
-    console.log(`[voice] STT activated: ${name}`);
+    logger.info(`[voice] STT activated: ${name}`);
     return true;
   }
 
@@ -105,7 +106,7 @@ export class WOPRVoiceRegistry extends EventEmitter implements VoiceRegistry {
     }
     this.activeTTS = name;
     this.emit("tts:activated", { name });
-    console.log(`[voice] TTS activated: ${name}`);
+    logger.info(`[voice] TTS activated: ${name}`);
     return true;
   }
 
@@ -204,7 +205,7 @@ export class WOPRVoiceRegistry extends EventEmitter implements VoiceRegistry {
     this.activeSTT = null;
     this.activeTTS = null;
 
-    console.log("[voice] All providers shut down");
+    logger.info("[voice] All providers shut down");
   }
 }
 
@@ -220,7 +221,7 @@ export function getVoiceRegistry(): WOPRVoiceRegistry {
 
 export function resetVoiceRegistry(): void {
   if (voiceRegistry) {
-    voiceRegistry.shutdown().catch(console.error);
+    voiceRegistry.shutdown().catch((err) => logger.error(`[voice] ${String(err)}`));
   }
   voiceRegistry = null;
 }

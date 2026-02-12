@@ -1,5 +1,6 @@
 // Memory system initialization - wires up session hooks
 import { eventBus } from "../core/events.js";
+import { logger } from "../logger.js";
 import { createSessionDestroyHandler } from "./session-hook.js";
 
 let initialized = false;
@@ -21,5 +22,5 @@ export function initMemoryHooks(): void {
     await sessionDestroyHandler(payload.session, payload.reason);
   });
 
-  console.log("[memory] Session memory hooks initialized");
+  logger.info("[memory] Session memory hooks initialized");
 }

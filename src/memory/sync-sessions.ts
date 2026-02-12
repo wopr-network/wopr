@@ -1,6 +1,7 @@
 // Session file sync - indexes session transcripts for search
 // Adapted from OpenClaw for WOPR
 import type { DatabaseSync } from "node:sqlite";
+import { logger } from "../logger.js";
 import { buildSessionEntry, listSessionFiles, type SessionFileEntry, sessionPathForFile } from "./session-files.js";
 
 export async function syncSessionFiles(params: {
@@ -56,7 +57,7 @@ export async function syncSessionFiles(params: {
           )
           .run(stale.path, "sessions");
       } catch (err) {
-        console.warn(`[sync-sessions] Vector table delete failed for ${stale.path}: ${err}`);
+        logger.warn(`[sync-sessions] Vector table delete failed for ${stale.path}: ${err}`);
       }
     }
     params.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "sessions");
@@ -66,7 +67,7 @@ export async function syncSessionFiles(params: {
           .prepare(`DELETE FROM ${params.ftsTable} WHERE path = ? AND source = ? AND model = ?`)
           .run(stale.path, "sessions", params.model);
       } catch (err) {
-        console.warn(`[sync-sessions] FTS delete failed for ${stale.path}: ${err}`);
+        logger.warn(`[sync-sessions] FTS delete failed for ${stale.path}: ${err}`);
       }
     }
   }

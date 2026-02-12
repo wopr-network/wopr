@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getConversationLogPath } from "../core/sessions.js";
+import { logger } from "../logger.js";
 import { WOPR_HOME } from "../paths.js";
 import { getRecentSessionContent } from "./session-files.js";
 
@@ -94,7 +95,7 @@ export async function saveSessionToMemory(sessionName: string): Promise<string |
 
     return memoryFilePath;
   } catch (err) {
-    console.error("[session-memory] Failed to save session memory:", err instanceof Error ? err.message : String(err));
+    logger.error(`[session-memory] Failed to save session memory: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
@@ -111,7 +112,7 @@ export function createSessionDestroyHandler(): (sessionName: string, reason?: st
 
     const savedPath = await saveSessionToMemory(sessionName);
     if (savedPath) {
-      console.log(`[session-memory] Saved to ${savedPath.replace(WOPR_HOME, "~/.wopr")}`);
+      logger.info(`[session-memory] Saved to ${savedPath.replace(WOPR_HOME, "~/.wopr")}`);
     }
   };
 }
