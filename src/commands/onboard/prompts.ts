@@ -50,7 +50,7 @@ export async function text(options: {
   message: string;
   placeholder?: string;
   initialValue?: string;
-  validate?: (value: string) => string | undefined;
+  validate?: (value: string | undefined) => string | undefined;
 }): Promise<string> {
   const result = await p.text({
     message: options.message,
@@ -63,7 +63,7 @@ export async function text(options: {
 
 export async function password(options: {
   message: string;
-  validate?: (value: string) => string | undefined;
+  validate?: (value: string | undefined) => string | undefined;
 }): Promise<string> {
   const result = await p.password({
     message: options.message,

@@ -147,8 +147,8 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
           apiKey = await password({
             message: chosenMethod.inputLabel || "Enter credential",
             validate: (value) => {
-              if (!value.trim()) return "Value is required";
-              if (value.length < 10) return "Value seems too short";
+              if (!value?.trim()) return "Value is required";
+              if ((value?.length ?? 0) < 10) return "Value seems too short";
             },
           });
 
@@ -190,8 +190,8 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
       apiKey = await password({
         message: `Enter your ${providerInfo.name} API key`,
         validate: (value) => {
-          if (!value.trim()) return "API key is required";
-          if (value.length < 10) return "API key seems too short";
+          if (!value?.trim()) return "API key is required";
+          if ((value?.length ?? 0) < 10) return "API key seems too short";
         },
       });
     }

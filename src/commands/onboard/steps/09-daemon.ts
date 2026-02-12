@@ -38,7 +38,7 @@ export const daemonStep: OnboardStep = async (ctx: OnboardContext) => {
       message: "Gateway port",
       initialValue: String(DEFAULT_PORT),
       validate: (value) => {
-        const num = parseInt(value, 10);
+        const num = parseInt(value ?? "", 10);
         if (Number.isNaN(num) || num < 1 || num > 65535) {
           return "Please enter a valid port number (1-65535)";
         }

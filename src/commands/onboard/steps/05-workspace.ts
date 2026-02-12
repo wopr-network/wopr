@@ -28,7 +28,7 @@ export const workspaceStep: OnboardStep = async (ctx: OnboardContext) => {
       message: "Workspace directory",
       initialValue: ctx.nextConfig.workspace || DEFAULT_WORKSPACE,
       validate: (value) => {
-        if (!value.trim()) return "Workspace directory is required";
+        if (!value?.trim()) return "Workspace directory is required";
       },
     });
   }
