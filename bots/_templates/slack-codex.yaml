@@ -1,0 +1,22 @@
+name: my-slack-bot
+description: Slack bot powered by OpenAI Codex
+
+release_channel: stable
+update_policy: nightly
+
+plugins:
+  channels: [slack]
+  providers: [openai]
+  voice: []
+  other: [webhooks]
+
+resources:
+  memory: 512m
+  restart: unless-stopped
+
+volumes:
+  persist: true
+
+health:
+  check: true
+  alert_on_failure: true

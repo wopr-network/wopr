@@ -1,0 +1,22 @@
+name: my-discord-bot
+description: Discord bot powered by Anthropic Claude
+
+release_channel: stable
+update_policy: nightly
+
+plugins:
+  channels: [discord]
+  providers: [anthropic]
+  voice: []
+  other: [memory-semantic]
+
+resources:
+  memory: 512m
+  restart: unless-stopped
+
+volumes:
+  persist: true
+
+health:
+  check: true
+  alert_on_failure: true
