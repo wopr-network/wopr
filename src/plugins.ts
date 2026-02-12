@@ -36,7 +36,14 @@ export {
 } from "./plugins/installation.js";
 export type { LoadPluginOptions } from "./plugins/loading.js";
 // Loading
-export { getLoadedPlugin, loadAllPlugins, loadPlugin, shutdownAllPlugins, unloadPlugin } from "./plugins/loading.js";
+export {
+  getAllPluginManifests,
+  getLoadedPlugin,
+  loadAllPlugins,
+  loadPlugin,
+  shutdownAllPlugins,
+  unloadPlugin,
+} from "./plugins/loading.js";
 export type { DiscoveredPlugin } from "./plugins/registry.js";
 // Registry & discovery
 export {

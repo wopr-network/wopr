@@ -1,8 +1,12 @@
 /**
  * Plugins API routes
+ *
+ * Provides full plugin management: listing, installation, removal,
+ * enable/disable, config, health, and npm registry search.
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { getSessions, inject } from "../../core/sessions.js";
 import { logger } from "../../logger.js";
@@ -10,6 +14,9 @@ import {
   addRegistry,
   disablePlugin,
   enablePlugin,
+  getAllPluginManifests,
+  getConfigSchemas,
+  getLoadedPlugin,
   getPluginExtension,
   getUiComponents,
   getWebUiExtensions,
@@ -37,9 +44,10 @@ function createInjectors() {
   };
 }
 
-// List installed plugins
+// List installed plugins (with manifest metadata)
 pluginsRouter.get("/", (c) => {
   const plugins = listPlugins();
+  const manifests = getAllPluginManifests();
   return c.json({
     plugins: plugins.map(
       (p: {
@@ -49,16 +57,39 @@ pluginsRouter.get("/", (c) => {
         source: string;
         enabled: boolean;
         installedAt: number;
-      }) => ({
-        name: p.name,
-        version: p.version,
-        description: p.description || null,
-        source: p.source,
-        enabled: p.enabled,
-        installedAt: p.installedAt,
-      }),
+      }) => {
+        const manifest = manifests.get(p.name);
+        return {
+          name: p.name,
+          version: p.version,
+          description: p.description || null,
+          source: p.source,
+          enabled: p.enabled,
+          installedAt: p.installedAt,
+          loaded: getLoadedPlugin(p.name) !== undefined,
+          manifest: manifest
+            ? {
+                capabilities: manifest.capabilities,
+                category: manifest.category || null,
+                tags: manifest.tags || [],
+                icon: manifest.icon || null,
+                author: manifest.author || null,
+                license: manifest.license || null,
+                homepage: manifest.homepage || null,
+                configSchema: manifest.configSchema || null,
+              }
+            : null,
+        };
+      },
     ),
   });
+});
+
+// Search npm registry for available @wopr-network/plugin-* packages
+pluginsRouter.get("/available", async (c) => {
+  const query = c.req.query("q") || "";
+  const results = await searchPlugins(query);
+  return c.json({ results });
 });
 
 // List plugin-provided Web UI extensions
@@ -73,13 +104,13 @@ pluginsRouter.get("/components", (c) => {
   return c.json({ components });
 });
 
-// Install plugin
-pluginsRouter.post("/", async (c) => {
+// Install plugin (POST / — legacy, POST /install — new)
+async function handleInstall(c: Context) {
   const body = await c.req.json();
-  const { source } = body;
+  const source = body.source || body.package;
 
   if (!source) {
-    return c.json({ error: "source is required" }, 400);
+    return c.json({ error: "source (or package) is required" }, 400);
   }
 
   try {
@@ -112,9 +143,31 @@ pluginsRouter.post("/", async (c) => {
     logger.error({ msg: "[plugins] Install failed", error: err.message });
     return c.json({ error: "Plugin installation failed" }, 400);
   }
+}
+
+pluginsRouter.post("/", handleInstall);
+pluginsRouter.post("/install", handleInstall);
+
+// Uninstall plugin (POST /uninstall — new endpoint)
+pluginsRouter.post("/uninstall", async (c) => {
+  const body = await c.req.json();
+  const { name } = body;
+
+  if (!name) {
+    return c.json({ error: "name is required" }, 400);
+  }
+
+  try {
+    await unloadPlugin(name);
+    await removePlugin(name);
+    return c.json({ removed: true, unloaded: true });
+  } catch (err: any) {
+    logger.error({ msg: "[plugins] Uninstall failed", plugin: name, error: err.message });
+    return c.json({ error: "Plugin uninstall failed" }, 400);
+  }
 });
 
-// Remove plugin (hot-unloads first)
+// Remove plugin (hot-unloads first) — legacy DELETE endpoint
 pluginsRouter.delete("/:name", async (c) => {
   const name = c.req.param("name");
 
@@ -205,6 +258,96 @@ pluginsRouter.post("/:name/reload", async (c) => {
   }
 });
 
+// Get plugin config
+pluginsRouter.get("/:name/config", async (c) => {
+  const name = c.req.param("name");
+
+  const plugins = listPlugins();
+  const plugin = plugins.find((p: { name: string }) => p.name === name);
+  if (!plugin) {
+    return c.json({ error: "Plugin not found" }, 404);
+  }
+
+  await centralConfig.load();
+  const cfg = centralConfig.get();
+  const pluginConfig = (cfg as any).plugins?.data?.[name] || {};
+
+  const schemas = getConfigSchemas();
+  const schema = schemas.get(name) || null;
+
+  return c.json({ name, config: pluginConfig, configSchema: schema });
+});
+
+// Update plugin config
+pluginsRouter.put("/:name/config", async (c) => {
+  const name = c.req.param("name");
+
+  const plugins = listPlugins();
+  const plugin = plugins.find((p: { name: string }) => p.name === name);
+  if (!plugin) {
+    return c.json({ error: "Plugin not found" }, 404);
+  }
+
+  const body = await c.req.json();
+  const { config: newConfig } = body;
+
+  if (newConfig === undefined) {
+    return c.json({ error: "config is required in request body" }, 400);
+  }
+
+  // Validate against configSchema if available
+  const schemas = getConfigSchemas();
+  const schema = schemas.get(name);
+  if (schema) {
+    const errors = validateConfigAgainstSchema(newConfig, schema);
+    if (errors.length > 0) {
+      return c.json({ error: "Config validation failed", details: errors }, 400);
+    }
+  }
+
+  // Save to central config
+  await centralConfig.load();
+  const cfg = centralConfig.get();
+  if (!(cfg as any).plugins) (cfg as any).plugins = {};
+  if (!(cfg as any).plugins.data) (cfg as any).plugins.data = {};
+  (cfg as any).plugins.data[name] = newConfig;
+  centralConfig.setValue("plugins.data", (cfg as any).plugins.data);
+  await centralConfig.save();
+
+  return c.json({ name, config: newConfig, updated: true });
+});
+
+// Plugin health/status
+pluginsRouter.get("/:name/health", (c) => {
+  const name = c.req.param("name");
+
+  const plugins = listPlugins();
+  const plugin = plugins.find((p: { name: string }) => p.name === name);
+  if (!plugin) {
+    return c.json({ error: "Plugin not found" }, 404);
+  }
+
+  const loaded = getLoadedPlugin(name);
+  const manifests = getAllPluginManifests();
+  const manifest = manifests.get(name);
+
+  return c.json({
+    name,
+    installed: true,
+    enabled: plugin.enabled,
+    loaded: loaded !== undefined,
+    version: plugin.version,
+    source: plugin.source,
+    manifest: manifest
+      ? {
+          capabilities: manifest.capabilities,
+          category: manifest.category || null,
+          lifecycle: manifest.lifecycle || null,
+        }
+      : null,
+  });
+});
+
 // Search npm for plugins
 pluginsRouter.get("/search", async (c) => {
   const query = c.req.query("q");
@@ -240,6 +383,28 @@ pluginsRouter.delete("/registries/:name", (c) => {
   removeRegistry(name);
   return c.json({ removed: true });
 });
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Validate a config object against a plugin's ConfigSchema.
+ * Returns an array of error strings (empty = valid).
+ */
+function validateConfigAgainstSchema(
+  config: Record<string, unknown>,
+  schema: { fields: Array<{ name: string; required?: boolean; type: string }> },
+): string[] {
+  const errors: string[] = [];
+  for (const field of schema.fields) {
+    const value = config[field.name];
+    if (field.required && (value === undefined || value === null || value === "")) {
+      errors.push(`Field "${field.name}" is required`);
+    }
+  }
+  return errors;
+}
 
 // Discord owner claim - call the Discord plugin's claimOwnership function
 pluginsRouter.post("/discord/claim", async (c) => {
