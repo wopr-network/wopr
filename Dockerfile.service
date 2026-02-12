@@ -2,7 +2,7 @@
 # - No Tailscale, no Docker-in-Docker, no privileged mode
 # - Only /data mounted for persistence
 # - Credentials via env vars, not file mounts
-# - All official plugins pre-installed (fat image strategy, WOP-69)
+# - Plugins installed at runtime via 'wopr plugin install'
 #
 # For self-hosted power-user image, see Dockerfile
 
@@ -19,65 +19,12 @@ COPY src/ ./src/
 
 RUN npm run build
 
-# --- Plugin pre-install stage ---
-# Clone and build all official wopr-network plugins so the final image
-# ships with every plugin ready to go. Users enable/disable at runtime
-# via config — no git clone or npm install needed at container start.
-FROM node:22-slim AS plugins
-
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /plugins
-
-# Official wopr-network plugins — add new repos here as they are created.
-# Each plugin is cloned, dependencies installed, and TypeScript built.
-# The resulting directories are copied into the final image.
-RUN set -e; for repo in \
-      wopr-plugin-discord \
-      wopr-plugin-telegram \
-      wopr-plugin-slack \
-      wopr-plugin-signal \
-      wopr-plugin-whatsapp \
-      wopr-plugin-msteams \
-      wopr-plugin-imessage \
-      wopr-plugin-github \
-      wopr-plugin-p2p \
-      wopr-plugin-memory-semantic \
-      wopr-plugin-provider-anthropic \
-      wopr-plugin-provider-openai \
-      wopr-plugin-provider-opencode \
-      wopr-plugin-provider-kimi \
-      wopr-plugin-webui \
-      wopr-plugin-router \
-      wopr-plugin-webhooks \
-      wopr-plugin-tailscale-funnel \
-      wopr-plugin-voice-cli \
-      wopr-plugin-voice-chatterbox \
-      wopr-plugin-voice-deepgram-stt \
-      wopr-plugin-voice-elevenlabs-tts \
-      wopr-plugin-voice-openai-tts \
-      wopr-plugin-voice-piper-tts \
-      wopr-plugin-voice-whisper-local \
-      wopr-plugin-channel-discord-voice \
-    ; do \
-      echo "--- cloning $repo ---"; \
-      git clone --depth 1 "https://github.com/wopr-network/${repo}.git" "/plugins/${repo}" \
-        && rm -rf "/plugins/${repo}/.git"; \
-      if [ -f "/plugins/${repo}/package.json" ]; then \
-        (cd "/plugins/${repo}" && npm install --omit=dev 2>/dev/null || true); \
-        if [ -f "/plugins/${repo}/tsconfig.json" ]; then \
-          (cd "/plugins/${repo}" && npm run build 2>/dev/null || true); \
-        fi; \
-      fi; \
-    done
-
 # --- Production stage ---
 FROM node:22-slim
 
 WORKDIR /app
 
-# Install only git (needed at runtime for ad-hoc plugin operations)
+# Install only git (needed at runtime for plugin install)
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates jq \
     && rm -rf /var/lib/apt/lists/*
 
@@ -86,27 +33,15 @@ RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
 
-# Copy pre-built plugins into the image at a fixed path.
-# The entrypoint will symlink these into $WOPR_HOME/plugins/ on first boot.
-COPY --from=plugins /plugins /app/bundled-plugins
-
-# Ship the bundled-plugin bootstrap and service entrypoint scripts
-COPY scripts/register-bundled-plugins.sh /app/scripts/register-bundled-plugins.sh
-COPY scripts/docker-service-entrypoint.sh /app/scripts/docker-service-entrypoint.sh
-RUN chmod +x /app/scripts/register-bundled-plugins.sh /app/scripts/docker-service-entrypoint.sh
-
 # Create data directory owned by node
 RUN mkdir -p /data && chown -R node:node /data
 
 ENV WOPR_HOME=/data
 ENV NODE_ENV=production
-# Path where pre-installed plugins live inside the image
-ENV WOPR_BUNDLED_PLUGINS=/app/bundled-plugins
 
 # Drop to non-root user
 USER node
 
 EXPOSE 7437
 
-ENTRYPOINT ["/app/scripts/docker-service-entrypoint.sh"]
 CMD ["node", "dist/cli.js", "daemon", "run"]
