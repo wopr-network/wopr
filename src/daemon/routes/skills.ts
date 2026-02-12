@@ -7,9 +7,12 @@ import { addRegistry, getRegistries, removeRegistry, searchAllRegistries } from 
 import {
   clearSkillCache,
   createSkill,
+  disableSkill,
   discoverSkills,
+  enableSkill,
   installSkillFromGitHub,
   installSkillFromUrl,
+  readAllSkillStates,
   removeSkill,
 } from "../../core/skills.js";
 
@@ -18,7 +21,34 @@ export const skillsRouter = new Hono();
 // List installed skills
 skillsRouter.get("/", (c) => {
   const { skills, warnings } = discoverSkills();
-  return c.json({ skills, warnings: warnings.length > 0 ? warnings : undefined });
+  const skillStates = readAllSkillStates();
+  return c.json({
+    skills: skills.map((s) => ({
+      name: s.name,
+      description: s.description,
+      source: s.source,
+      enabled: skillStates[s.name]?.enabled !== false,
+      category: s.metadata?.emoji ? "custom" : "general",
+      version: null,
+      metadata: s.metadata ?? null,
+    })),
+    warnings: warnings.length > 0 ? warnings : undefined,
+  });
+});
+
+// Search registries for available skills
+skillsRouter.get("/available", async (c) => {
+  const query = c.req.query("q") || "";
+  const results = await searchAllRegistries(query);
+  return c.json({
+    skills: results.map((r) => ({
+      name: r.skill.name,
+      description: r.skill.description,
+      source: r.skill.source,
+      version: r.skill.version ?? null,
+      registry: r.registry,
+    })),
+  });
 });
 
 // Create a new skill
@@ -63,7 +93,24 @@ skillsRouter.post("/install", async (c) => {
   }
 });
 
-// Remove skill
+// Uninstall skill (POST-based)
+skillsRouter.post("/uninstall", async (c) => {
+  const body = await c.req.json();
+  const { name } = body;
+
+  if (!name) {
+    return c.json({ error: "name is required" }, 400);
+  }
+
+  try {
+    removeSkill(name);
+    return c.json({ removed: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+// Remove skill (DELETE-based, kept for backward compatibility)
 skillsRouter.delete("/:name", (c) => {
   const name = c.req.param("name");
 
@@ -75,7 +122,39 @@ skillsRouter.delete("/:name", (c) => {
   }
 });
 
-// Search registries for skills
+// Enable a skill
+skillsRouter.post("/:name/enable", (c) => {
+  const name = c.req.param("name");
+  try {
+    const found = enableSkill(name);
+
+    if (!found) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json({ enabled: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// Disable a skill
+skillsRouter.post("/:name/disable", (c) => {
+  const name = c.req.param("name");
+  try {
+    const found = disableSkill(name);
+
+    if (!found) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json({ disabled: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// Search registries for skills (with required query)
 skillsRouter.get("/search", async (c) => {
   const query = c.req.query("q");
 

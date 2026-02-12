@@ -52,6 +52,10 @@ import {
   checkSkillDependencies,
   installSkillDependencies,
   describeInstallStep,
+  enableSkill,
+  disableSkill,
+  isSkillEnabled,
+  getSkillByName,
 } from "../../src/core/skills.js";
 import type {
   Skill,
@@ -1162,5 +1166,123 @@ describe("installSkillDependencies", () => {
     // Should stop at first decline
     expect(provider.calls).toHaveLength(1);
     expect(provider.calls[0].command).toBe("brew install jq");
+  });
+});
+
+// ============================================================================
+// Skill State Management (Enable / Disable)
+// ============================================================================
+
+describe("isSkillEnabled", () => {
+  const skillsDir = "/tmp/wopr-test-skills-home/skills";
+  const stateFile = "/tmp/wopr-test-skills-home/skills-state.json";
+
+  beforeEach(() => {
+    mkdirSync(skillsDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync("/tmp/wopr-test-skills-home", { recursive: true, force: true });
+  });
+
+  it("should return true by default when no state file exists", () => {
+    expect(isSkillEnabled("any-skill")).toBe(true);
+  });
+
+  it("should return true when skill state file exists but skill not in it", () => {
+    writeFileSync(stateFile, JSON.stringify({ "other-skill": { enabled: false } }));
+    expect(isSkillEnabled("any-skill")).toBe(true);
+  });
+
+  it("should return false when skill is explicitly disabled", () => {
+    writeFileSync(stateFile, JSON.stringify({ "my-skill": { enabled: false } }));
+    expect(isSkillEnabled("my-skill")).toBe(false);
+  });
+
+  it("should return true when skill is explicitly enabled", () => {
+    writeFileSync(stateFile, JSON.stringify({ "my-skill": { enabled: true } }));
+    expect(isSkillEnabled("my-skill")).toBe(true);
+  });
+
+  it("should handle malformed state file gracefully", () => {
+    writeFileSync(stateFile, "not-json");
+    expect(isSkillEnabled("any-skill")).toBe(true);
+  });
+});
+
+describe("enableSkill", () => {
+  const skillsDir = "/tmp/wopr-test-skills-home/skills";
+  const stateFile = "/tmp/wopr-test-skills-home/skills-state.json";
+
+  beforeEach(() => {
+    mkdirSync(skillsDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync("/tmp/wopr-test-skills-home", { recursive: true, force: true });
+  });
+
+  it("should return false for nonexistent skill", () => {
+    expect(enableSkill("nonexistent")).toBe(false);
+  });
+
+  it("should enable an installed skill and persist state", () => {
+    createSkill("enable-test", "Test skill");
+    // Disable it first
+    writeFileSync(stateFile, JSON.stringify({ "enable-test": { enabled: false } }));
+    expect(isSkillEnabled("enable-test")).toBe(false);
+
+    const result = enableSkill("enable-test");
+    expect(result).toBe(true);
+    expect(isSkillEnabled("enable-test")).toBe(true);
+  });
+});
+
+describe("disableSkill", () => {
+  const skillsDir = "/tmp/wopr-test-skills-home/skills";
+
+  beforeEach(() => {
+    mkdirSync(skillsDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync("/tmp/wopr-test-skills-home", { recursive: true, force: true });
+  });
+
+  it("should return false for nonexistent skill", () => {
+    expect(disableSkill("nonexistent")).toBe(false);
+  });
+
+  it("should disable an installed skill and persist state", () => {
+    createSkill("disable-test", "Test skill");
+    expect(isSkillEnabled("disable-test")).toBe(true);
+
+    const result = disableSkill("disable-test");
+    expect(result).toBe(true);
+    expect(isSkillEnabled("disable-test")).toBe(false);
+  });
+});
+
+describe("getSkillByName", () => {
+  const skillsDir = "/tmp/wopr-test-skills-home/skills";
+
+  beforeEach(() => {
+    mkdirSync(skillsDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync("/tmp/wopr-test-skills-home", { recursive: true, force: true });
+  });
+
+  it("should return null for nonexistent skill", () => {
+    expect(getSkillByName("nonexistent")).toBeNull();
+  });
+
+  it("should return a skill object for an installed skill", () => {
+    createSkill("find-me", "Findable skill");
+    const skill = getSkillByName("find-me");
+    expect(skill).not.toBeNull();
+    expect(skill!.name).toBe("find-me");
+    expect(skill!.description).toBe("Findable skill");
   });
 });
