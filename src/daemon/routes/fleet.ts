@@ -54,8 +54,8 @@ function maskSecrets(envContent: string): Record<string, string> {
     // Mask values for keys that look like secrets
     const isSecret = /token|key|secret|password|credential/i.test(key);
     masked[key] = isSecret && value.length > 4
-      ? value.slice(0, 2) + "*".repeat(Math.min(value.length - 4, 20)) + value.slice(-2)
-      : value;
+      ? value.slice(0, 2) + "*".repeat(Math.max(value.length - 4, 8)) + value.slice(-2)
+      : isSecret ? "****" : value;
   }
   return masked;
 }
@@ -228,6 +228,11 @@ fleetRouter.post("/bots", async (c) => {
 
   // Write .env file if provided
   if (env && typeof env === "object") {
+    for (const [key, value] of Object.entries(env)) {
+      if (/[\n\r\0]/.test(value)) {
+        return c.json({ error: `Invalid characters in env var ${key}` }, 400);
+      }
+    }
     const envLines = Object.entries(env)
       .map(([k, v]) => `${k}=${v}`)
       .join("\n");
@@ -323,6 +328,11 @@ fleetRouter.patch("/bots/:id", async (c) => {
 
   // Update env if provided
   if (env && typeof env === "object") {
+    for (const [key, value] of Object.entries(env)) {
+      if (/[\n\r\0]/.test(value)) {
+        return c.json({ error: `Invalid characters in env var ${key}` }, 400);
+      }
+    }
     const envPath = join(botPath, ".env");
     // Merge with existing env
     let existing: Record<string, string> = {};
