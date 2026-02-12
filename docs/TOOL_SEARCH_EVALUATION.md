@@ -8,15 +8,15 @@
 
 Anthropic's Tool Search feature enables Claude to dynamically discover tools on-demand instead of loading all definitions into the context window upfront. This document evaluates whether WOPR should adopt it, based on measured tool surface area, architecture fit, and cost/benefit analysis.
 
-**Recommendation: YES, implement — but only after the plugin ecosystem grows beyond ~10 A2A tools total. Current core-only overhead is moderate (~4-6K tokens), below the threshold where Tool Search provides meaningful benefit. The feature becomes high-value once 3+ plugins register tools.**
+**Recommendation: YES, implement — but only after 3+ plugins register A2A tools, pushing total token overhead past the ~10K threshold where Tool Search provides meaningful benefit. Current core-only overhead is moderate (~5.5K tokens for 28 tools), well below that threshold.**
 
 ---
 
 ## 1. Current Token Usage from Tool Definitions
 
-### Core A2A Tools (27 tools)
+### Core A2A Tools (28 tools)
 
-WOPR registers 27 core tools via `src/core/a2a-mcp.ts`:
+WOPR registers 28 core tools via `src/core/a2a-mcp.ts`:
 
 | Category | Tools | Est. Tokens |
 |----------|-------|-------------|
@@ -30,7 +30,7 @@ WOPR registers 27 core tools via `src/core/a2a-mcp.ts`:
 | Security | `security_whoami`, `security_check` | ~300 |
 | HTTP/Exec | `http_fetch`, `exec_command` | ~600 |
 | Notify | `notify` | ~150 |
-| **Total** | **27 core tools** | **~5,450** |
+| **Total** | **28 core tools** | **~5,450** |
 
 Token estimates are based on typical JSON Schema serialization of Zod schemas with descriptions. Each tool definition includes name, description, and full input_schema.
 
@@ -47,7 +47,7 @@ Plugins register additional tools via `registerA2ATool()` or `registerA2AServer(
 
 | Plugin Count | Est. Tools | Est. Token Overhead |
 |--------------|-----------|-------------------|
-| Core only | 27 | ~5.5K |
+| Core only | 28 | ~5.5K |
 | +3 plugins | 40-50 | ~10-15K |
 | +8 plugins | 70-100 | ~20-30K |
 | +15 plugins | 120-180 | ~40-60K |
@@ -122,9 +122,11 @@ If the SDK or MCP protocol gains annotation support, WOPR's tools map cleanly:
 | `sessions_spawn` | false | false | false |
 | `config_get` | true | false | true |
 | `config_set` | false | false | true |
+| `config_provider_defaults` | true | false | true |
 | `memory_read` | true | false | true |
 | `memory_write` | false | false | false |
 | `memory_search` | true | false | true |
+| `memory_get` | true | false | true |
 | `self_reflect` | false | false | false |
 | `identity_get` | true | false | true |
 | `identity_update` | false | false | true |
@@ -133,7 +135,14 @@ If the SDK or MCP protocol gains annotation support, WOPR's tools map cleanly:
 | `http_fetch` | varies | false | varies |
 | `exec_command` | false | true | false |
 | `cron_schedule` | false | false | false |
+| `cron_once` | false | false | false |
+| `cron_list` | true | false | true |
 | `cron_cancel` | false | true | true |
+| `cron_history` | true | false | true |
+| `event_emit` | false | false | false |
+| `event_list` | true | false | true |
+| `security_whoami` | true | false | true |
+| `security_check` | true | false | true |
 | `notify` | false | false | false |
 
 ### Safety Benefits
@@ -163,7 +172,7 @@ Tool annotations would enable:
 
 **Phase 0 (Now — minimal effort):**
 - Add MCP tool annotations to `RegisteredTool` type
-- Classify all 27 core tools with `readOnly`/`destructive`/`idempotent` hints
+- Classify all 28 core tools with `readOnly`/`destructive`/`idempotent` hints
 - This is useful independent of Tool Search
 
 **Phase 1 (When 3+ plugins register A2A tools):**
@@ -179,7 +188,7 @@ Tool annotations would enable:
 
 ### What NOT to Do
 
-- Do not implement Tool Search now for 27 core-only tools — the overhead is too low to justify the complexity
+- Do not implement Tool Search now for 28 core-only tools — the overhead is too low to justify the complexity
 - Do not build a custom search implementation before trying the built-in regex/BM25 variants
 - Do not couple this to the existing security system — they solve different problems
 
