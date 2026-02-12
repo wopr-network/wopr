@@ -1,5 +1,8 @@
 FROM node:24-alpine
 
+# Patch npm's bundled transitive deps (tar, brace-expansion CVEs)
+RUN npm install -g npm@latest
+
 WORKDIR /app
 
 # Install runtime dependencies

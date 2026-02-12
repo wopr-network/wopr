@@ -9,6 +9,9 @@
 # --- Build stage ---
 FROM node:24-alpine AS build
 
+# Patch npm's bundled transitive deps (tar, brace-expansion CVEs)
+RUN npm install -g npm@latest
+
 WORKDIR /app
 
 COPY package*.json ./
@@ -21,6 +24,9 @@ RUN npm run build
 
 # --- Production stage ---
 FROM node:24-alpine
+
+# Patch npm's bundled transitive deps (tar, brace-expansion CVEs)
+RUN npm install -g npm@latest
 
 WORKDIR /app
 
