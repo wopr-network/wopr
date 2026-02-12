@@ -1,0 +1,22 @@
+name: whatsapp-opencode
+description: WhatsApp bot powered by OpenCode
+
+release_channel: canary
+update_policy: nightly
+
+plugins:
+  channels: [whatsapp]
+  providers: [opencode]
+  voice: []
+  other: [memory-semantic]
+
+resources:
+  memory: 512m
+  restart: unless-stopped
+
+volumes:
+  persist: true
+
+health:
+  check: true
+  alert_on_failure: true

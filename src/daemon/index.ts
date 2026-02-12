@@ -39,6 +39,7 @@ import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { skillsRouter } from "./routes/skills.js";
+import { fleetRouter } from "./routes/fleet.js";
 import { handleWebSocketClose, handleWebSocketMessage, setupWebSocket } from "./ws.js";
 
 const DEFAULT_PORT = parseInt(process.env.WOPR_DAEMON_PORT || "7437", 10);
@@ -98,6 +99,7 @@ export function createApp() {
   app.route("/skills", skillsRouter);
   app.route("/hooks", hooksRouter);
   app.route("/providers", providersRouter);
+  app.route("/fleet", fleetRouter);
 
   return app;
 }
