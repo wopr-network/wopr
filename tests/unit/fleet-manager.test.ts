@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FleetManager } from "../../src/daemon/fleet/fleet-manager.js";
 import type { BotProfile } from "../../src/daemon/fleet/types.js";
 
@@ -72,7 +72,7 @@ describe("FleetManager", () => {
     });
 
     it("returns existing container ID if one already exists", async () => {
-      const { docker, mockContainer } = createMockDocker();
+      const { docker } = createMockDocker();
       docker.listContainers.mockResolvedValue([{ Id: "existing-container-456" }]);
       docker.getContainer.mockReturnValue({
         inspect: vi.fn().mockResolvedValue({ Id: "existing-container-456" }),
