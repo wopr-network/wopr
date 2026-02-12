@@ -221,7 +221,7 @@ export function getVoiceRegistry(): WOPRVoiceRegistry {
 
 export function resetVoiceRegistry(): void {
   if (voiceRegistry) {
-    voiceRegistry.shutdown().catch((err) => logger.error(String(err)));
+    voiceRegistry.shutdown().catch((err) => logger.error(`[voice] ${String(err)}`));
   }
   voiceRegistry = null;
 }
