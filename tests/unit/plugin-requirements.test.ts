@@ -281,7 +281,7 @@ describe("checkNodeRequirement", () => {
   });
 
   it("should return true when range is not parseable", () => {
-    expect(checkNodeRequirement("~1.0.0")).toBe(true);
+    expect(checkNodeRequirement(">>>invalid")).toBe(true);
   });
 
   it("should return true when current node satisfies >=0.0.0", () => {
