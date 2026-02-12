@@ -134,8 +134,8 @@ export const finalizeStep: OnboardStep = async (ctx: OnboardContext) => {
       `${pc.cyan("wopr configure")}        Reconfigure settings`,
       `${pc.cyan("wopr onboard")}          Run this wizard again`,
       "",
-      pc.dim("Docs: https://github.com/TSavo/wopr"),
-      pc.dim("Issues: https://github.com/TSavo/wopr/issues"),
+      pc.dim("Docs: https://github.com/wopr-network/wopr"),
+      pc.dim("Issues: https://github.com/wopr-network/wopr/issues"),
     ].join("\n"),
     "Useful Commands",
   );

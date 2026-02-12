@@ -38,8 +38,8 @@ export const voiceStep: OnboardStep = async (ctx: OnboardContext) => {
         "Could not discover voice plugins.",
         "",
         "You can install manually:",
-        pc.cyan("  wopr plugin install github:TSavo/wopr-plugin-voice-whisper-local"),
-        pc.cyan("  wopr plugin install github:TSavo/wopr-plugin-voice-openai-tts"),
+        pc.cyan("  wopr plugin install github:wopr-network/wopr-plugin-voice-whisper-local"),
+        pc.cyan("  wopr plugin install github:wopr-network/wopr-plugin-voice-openai-tts"),
       ].join("\n"),
       "Voice Plugins",
     );

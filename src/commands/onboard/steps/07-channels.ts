@@ -150,7 +150,7 @@ export const channelsStep: OnboardStep = async (ctx: OnboardContext) => {
         "  2. Get your bot token",
         "  3. Configure with: wopr configure --plugin discord",
         "",
-        pc.blue("Docs: https://github.com/TSavo/wopr-plugin-discord"),
+        pc.blue("Docs: https://github.com/wopr-network/wopr-plugin-discord"),
       ].join("\n"),
       "Discord Setup",
     );
@@ -168,7 +168,7 @@ export const channelsStep: OnboardStep = async (ctx: OnboardContext) => {
         "  4. Install to workspace, copy Bot Token (xoxb-...)",
         "  5. Configure with: wopr configure --plugin slack",
         "",
-        pc.blue("Docs: https://github.com/TSavo/wopr-plugin-slack"),
+        pc.blue("Docs: https://github.com/wopr-network/wopr-plugin-slack"),
       ].join("\n"),
       "Slack Setup",
     );
@@ -189,7 +189,7 @@ export const channelsStep: OnboardStep = async (ctx: OnboardContext) => {
         "",
         "Test with: imsg chats --limit 5",
         "",
-        pc.blue("Docs: https://github.com/TSavo/wopr-plugin-imessage"),
+        pc.blue("Docs: https://github.com/wopr-network/wopr-plugin-imessage"),
       ].join("\n"),
       "iMessage Setup",
     );
@@ -210,7 +210,7 @@ export const channelsStep: OnboardStep = async (ctx: OnboardContext) => {
         "Self-chat mode (for personal phones):",
         "  Set dmPolicy: 'allowlist' and add your number to allowFrom",
         "",
-        pc.blue("Docs: https://github.com/TSavo/wopr-plugin-whatsapp"),
+        pc.blue("Docs: https://github.com/wopr-network/wopr-plugin-whatsapp"),
       ].join("\n"),
       "WhatsApp Setup",
     );
@@ -234,7 +234,7 @@ export const channelsStep: OnboardStep = async (ctx: OnboardContext) => {
         "",
         "The plugin will auto-start signal-cli daemon",
         "",
-        pc.blue("Docs: https://github.com/TSavo/wopr-plugin-signal"),
+        pc.blue("Docs: https://github.com/wopr-network/wopr-plugin-signal"),
       ].join("\n"),
       "Signal Setup",
     );
@@ -257,7 +257,7 @@ export const channelsStep: OnboardStep = async (ctx: OnboardContext) => {
         "",
         "Get your user ID from @userinfobot for allowlist",
         "",
-        pc.blue("Docs: https://github.com/TSavo/wopr-plugin-telegram"),
+        pc.blue("Docs: https://github.com/wopr-network/wopr-plugin-telegram"),
       ].join("\n"),
       "Telegram Setup",
     );
@@ -285,7 +285,7 @@ export const channelsStep: OnboardStep = async (ctx: OnboardContext) => {
         "  4. Configure WOPR:",
         "     wopr configure --plugin msteams",
         "",
-        pc.blue("Docs: https://github.com/TSavo/wopr-plugin-msteams"),
+        pc.blue("Docs: https://github.com/wopr-network/wopr-plugin-msteams"),
       ].join("\n"),
       "Microsoft Teams Setup",
     );
