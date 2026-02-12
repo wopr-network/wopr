@@ -34,6 +34,7 @@ import { checkReadiness, markCronRunning, markStartupComplete } from "./readines
 import { authRouter } from "./routes/auth.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
+import { fleetRouter } from "./routes/fleet.js";
 import { hooksRouter } from "./routes/hooks.js";
 import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
@@ -98,6 +99,7 @@ export function createApp() {
   app.route("/skills", skillsRouter);
   app.route("/hooks", hooksRouter);
   app.route("/providers", providersRouter);
+  app.route("/fleet", fleetRouter);
 
   return app;
 }

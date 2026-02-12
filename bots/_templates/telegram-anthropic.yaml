@@ -1,0 +1,22 @@
+name: telegram-anthropic
+description: Telegram bot powered by Anthropic Claude
+
+release_channel: canary
+update_policy: nightly
+
+plugins:
+  channels: [telegram]
+  providers: [anthropic]
+  voice: []
+  other: [memory-semantic]
+
+resources:
+  memory: 512m
+  restart: unless-stopped
+
+volumes:
+  persist: true
+
+health:
+  check: true
+  alert_on_failure: true

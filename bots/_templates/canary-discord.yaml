@@ -1,0 +1,22 @@
+name: canary-discord
+description: Bleeding-edge Discord bot for testing latest features
+
+release_channel: canary
+update_policy: on-merge
+
+plugins:
+  channels: [discord]
+  providers: [anthropic]
+  voice: []
+  other: [memory-semantic]
+
+resources:
+  memory: 512m
+  restart: unless-stopped
+
+volumes:
+  persist: true
+
+health:
+  check: true
+  alert_on_failure: true

@@ -1,0 +1,22 @@
+name: staging-discord
+description: Staging Discord bot for soak testing before stable release
+
+release_channel: staging
+update_policy: nightly
+
+plugins:
+  channels: [discord]
+  providers: [anthropic]
+  voice: []
+  other: [memory-semantic]
+
+resources:
+  memory: 512m
+  restart: unless-stopped
+
+volumes:
+  persist: true
+
+health:
+  check: true
+  alert_on_failure: true
