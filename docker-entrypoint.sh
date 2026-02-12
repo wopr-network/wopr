@@ -53,4 +53,4 @@ fi
 
 # Run the main command as node user
 export NODE_OPTIONS="--max-old-space-size=4096"
-exec runuser -u node -- "$@"
+exec su-exec node "$@"
