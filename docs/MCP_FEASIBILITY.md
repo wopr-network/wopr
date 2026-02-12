@@ -43,7 +43,7 @@ WOPR currently discovers plugins through:
 - **Local installation**: `~/wopr/plugins/` directory scan
 - **GitHub search**: `gh repo list` filtering for `wopr-plugin-*` repos
 - **npm search**: `npm search wopr-plugin-*`
-- **Plugin registries**: URL-based registries (stored in `registries.json`)
+- **Plugin registries**: URL-based registries (stored in `plugin-registries.json`)
 - **P2P discovery**: Hyperswarm DHT-based peer discovery (via `wopr-plugin-p2p`)
 
 ### 1.4 Plugin Context API
@@ -308,7 +308,7 @@ For plugins that don't declare explicit MCP mappings, the bridge can auto-genera
 | WOPR Source | Generated MCP Primitive |
 |-------------|------------------------|
 | `plugin.commands.*` | Tool per command |
-| `ctx.registerContextProvider(name, handler)` | Resource `wopr://context/{name}` |
+| `ctx.registerContextProvider(provider)` | Resource `wopr://context/{name}` |
 | `ctx.inject(session, message)` | Tool `session_inject` |
 | `ctx.getSessions()` | Resource `wopr://sessions` |
 | Session context `.md` files | Prompt templates |
@@ -316,7 +316,7 @@ For plugins that don't declare explicit MCP mappings, the bridge can auto-genera
 
 ### 6.4 Transport Integration
 
-Since the WOPR daemon already runs an Express HTTP server, add MCP endpoints:
+Since the WOPR daemon already runs a Hono HTTP server, add MCP endpoints:
 
 - `POST /mcp` -- Streamable HTTP transport for MCP clients
 - `GET /.well-known/mcp.json` -- MCP server metadata for registry discovery
@@ -335,7 +335,7 @@ Publish WOPR's MCP endpoint to the official MCP Registry:
     "type": "streamable-http",
     "url": "https://{host}/mcp"
   },
-  "tools": ["session_inject", "session_list", "discord_send", ...],
+  "tools": ["session_inject", "sessions_list", "discord_send", ...],
   "resources": ["wopr://sessions", "wopr://context/*", ...]
 }
 ```
@@ -346,7 +346,7 @@ Publish WOPR's MCP endpoint to the official MCP Registry:
 
 1. Add `@modelcontextprotocol/sdk` dependency
 2. Create `src/mcp/bridge.ts` that reads loaded plugins and generates MCP tool/resource/prompt registrations
-3. Create `src/mcp/transport.ts` for Streamable HTTP integration with existing Express server
+3. Create `src/mcp/transport.ts` for Streamable HTTP integration with existing Hono server
 4. Add `POST /mcp` and `GET /.well-known/mcp.json` endpoints
 5. Auto-generate tools from plugin commands and `inject()`
 6. Auto-generate resources from context providers and sessions
