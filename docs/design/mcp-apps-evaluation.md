@@ -101,7 +101,7 @@ interface UiComponentExtension {
 }
 ```
 
-These are served via the daemon's HTTP API at `GET /api/plugins/ui` and `GET /api/plugins/components`.
+These are served via the daemon's HTTP API at `GET /plugins/ui` and `GET /plugins/components`.
 
 ### 2.3 MCP Feasibility Study (WOP-95)
 
@@ -349,6 +349,6 @@ Total incremental effort beyond WOP-95: **4-5 weeks, low risk.**
 - [MCP Apps Documentation](https://modelcontextprotocol.io/docs/extensions/apps)
 - [MCP Apps GitHub (ext-apps)](https://github.com/modelcontextprotocol/ext-apps)
 - [MCP Apps Specification (2026-01-26)](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx)
-- [MCP Apps Launch Blog Post](http://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/)
+- [MCP Apps Launch Blog Post](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/)
 - [MCP Apps SDK API Docs](https://modelcontextprotocol.github.io/ext-apps/api/)
 - [WOPR MCP Feasibility Study (WOP-95)](../MCP_FEASIBILITY.md)
