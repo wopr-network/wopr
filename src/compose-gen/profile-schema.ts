@@ -9,13 +9,9 @@ import { z } from "zod";
 
 const releaseChannelSchema = z
   .string()
-  .refine(
-    (v) =>
-      ["stable", "canary", "staging"].includes(v) || /^pinned:[A-Za-z0-9._-]+$/.test(v),
-    {
-      message: "Must be stable | canary | staging | pinned:<version>",
-    },
-  );
+  .refine((v) => ["stable", "canary", "staging"].includes(v) || /^pinned:[A-Za-z0-9._-]+$/.test(v), {
+    message: "Must be stable | canary | staging | pinned:<version>",
+  });
 
 const updatePolicySchema = z.enum(["nightly", "on-merge", "manual"]);
 

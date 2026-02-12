@@ -5,7 +5,7 @@
  * enable/disable, config, health, and npm registry search.
  */
 
-import { Hono, type Context } from "hono";
+import { type Context, Hono } from "hono";
 import { rateLimiter } from "hono-rate-limiter";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
