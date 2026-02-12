@@ -751,6 +751,13 @@ export function removeSkill(name: string): void {
     throw new Error(`Skill "${name}" not found`);
   }
   rmSync(targetDir, { recursive: true, force: true });
+
+  // Clean up orphaned state entry
+  const state = readSkillsState();
+  if (name in state) {
+    delete state[name];
+    writeSkillsState(state);
+  }
 }
 
 export function installSkillFromGitHub(owner: string, repo: string, skillPath: string, name?: string): Skill {
@@ -858,14 +865,27 @@ interface SkillsState {
 function readSkillsState(): SkillsState {
   if (!existsSync(SKILLS_STATE_FILE)) return {};
   try {
-    return JSON.parse(readFileSync(SKILLS_STATE_FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync(SKILLS_STATE_FILE, "utf-8"));
+    // Sanitize against prototype pollution
+    const state: SkillsState = Object.create(null);
+    for (const key of Object.keys(raw)) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
+      state[key] = raw[key];
+    }
+    return state;
   } catch {
     return {};
   }
 }
 
 function writeSkillsState(state: SkillsState): void {
-  writeFileSync(SKILLS_STATE_FILE, JSON.stringify(state, null, 2));
+  const dir = dirname(SKILLS_STATE_FILE);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  const tmpFile = `${SKILLS_STATE_FILE}.tmp`;
+  writeFileSync(tmpFile, JSON.stringify(state, null, 2));
+  renameSync(tmpFile, SKILLS_STATE_FILE);
 }
 
 /**
@@ -874,6 +894,15 @@ function writeSkillsState(state: SkillsState): void {
 export function isSkillEnabled(name: string): boolean {
   const state = readSkillsState();
   return state[name]?.enabled !== false;
+}
+
+/**
+ * Returns the enabled/disabled state for all skills at once.
+ * Use this instead of calling isSkillEnabled() in a loop to avoid
+ * repeated file reads.
+ */
+export function readAllSkillStates(): Record<string, { enabled: boolean }> {
+  return readSkillsState();
 }
 
 /**

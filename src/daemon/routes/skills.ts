@@ -12,7 +12,7 @@ import {
   enableSkill,
   installSkillFromGitHub,
   installSkillFromUrl,
-  isSkillEnabled,
+  readAllSkillStates,
   removeSkill,
 } from "../../core/skills.js";
 
@@ -21,12 +21,13 @@ export const skillsRouter = new Hono();
 // List installed skills
 skillsRouter.get("/", (c) => {
   const { skills, warnings } = discoverSkills();
+  const skillStates = readAllSkillStates();
   return c.json({
     skills: skills.map((s) => ({
       name: s.name,
       description: s.description,
       source: s.source,
-      enabled: isSkillEnabled(s.name),
+      enabled: skillStates[s.name]?.enabled !== false,
       category: s.metadata?.emoji ? "custom" : "general",
       version: null,
       metadata: s.metadata ?? null,
@@ -124,25 +125,33 @@ skillsRouter.delete("/:name", (c) => {
 // Enable a skill
 skillsRouter.post("/:name/enable", (c) => {
   const name = c.req.param("name");
-  const found = enableSkill(name);
+  try {
+    const found = enableSkill(name);
 
-  if (!found) {
-    return c.json({ error: "Skill not found" }, 404);
+    if (!found) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json({ enabled: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
   }
-
-  return c.json({ enabled: true });
 });
 
 // Disable a skill
 skillsRouter.post("/:name/disable", (c) => {
   const name = c.req.param("name");
-  const found = disableSkill(name);
+  try {
+    const found = disableSkill(name);
 
-  if (!found) {
-    return c.json({ error: "Skill not found" }, 404);
+    if (!found) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+
+    return c.json({ disabled: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
   }
-
-  return c.json({ disabled: true });
 });
 
 // Search registries for skills (with required query)
