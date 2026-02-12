@@ -64,9 +64,7 @@ export function createCronTools(sessionName: string): any[] {
           addCron({ name, schedule, session, message, scripts: scripts || undefined });
           const scriptInfo = scripts?.length ? ` (${scripts.length} script(s))` : "";
           return {
-            content: [
-              { type: "text", text: `Cron job '${name}' scheduled: ${schedule} -> ${session}${scriptInfo}` },
-            ],
+            content: [{ type: "text", text: `Cron job '${name}' scheduled: ${schedule} -> ${session}${scriptInfo}` }],
           };
         });
       },

@@ -6,9 +6,9 @@
  * $WOPR_HOME/daemon-token with mode 0600.
  */
 
+import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { WOPR_HOME } from "../paths.js";
 
 export const TOKEN_FILE = join(WOPR_HOME, "daemon-token");

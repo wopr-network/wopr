@@ -11,9 +11,7 @@ import { fileURLToPath } from "node:url";
 import type { OnboardConfig, OnboardRuntime } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const pkgVersion: string = JSON.parse(
-  readFileSync(path.resolve(__dirname, "../../../package.json"), "utf-8"),
-).version;
+const pkgVersion: string = JSON.parse(readFileSync(path.resolve(__dirname, "../../../package.json"), "utf-8")).version;
 
 export const DEFAULT_WORKSPACE = path.join(os.homedir(), ".wopr", "workspace");
 export const DEFAULT_PORT = 3000;

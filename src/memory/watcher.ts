@@ -57,8 +57,8 @@ export async function startWatcher(params: {
 
     // Wait for watcher to be ready
     watcherPromise = new Promise<void>((resolve, reject) => {
-      watcher!.on("ready", resolve);
-      watcher!.on("error", reject);
+      watcher?.on("ready", resolve);
+      watcher?.on("error", reject);
     });
 
     await watcherPromise;

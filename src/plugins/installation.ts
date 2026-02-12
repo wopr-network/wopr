@@ -7,8 +7,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { logger } from "../logger.js";
 import type { InstalledPlugin } from "../types.js";
 import { PLUGINS_DIR, PLUGINS_FILE } from "./state.js";

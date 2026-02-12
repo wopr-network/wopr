@@ -38,7 +38,12 @@ import type {
 import { getVoiceRegistry } from "../voice/index.js";
 import type { STTProvider, TTSProvider } from "../voice/types.js";
 import { createPluginEventBus } from "./event-bus.js";
-import { registerPluginExtension, unregisterPluginExtension, getPluginExtension, listPluginExtensions } from "./extensions.js";
+import {
+  getPluginExtension,
+  listPluginExtensions,
+  registerPluginExtension,
+  unregisterPluginExtension,
+} from "./extensions.js";
 import { createPluginHookManager } from "./hook-manager.js";
 import { createPluginLogger } from "./plugin-logger.js";
 import { registerA2AServerImpl } from "./schema-converter.js";
@@ -46,10 +51,10 @@ import {
   channelAdapters,
   channelKey,
   configSchemas,
+  PLUGINS_DIR,
   providerPlugins,
   uiComponents,
   webUiExtensions,
-  PLUGINS_DIR,
 } from "./state.js";
 
 export function createPluginContext(

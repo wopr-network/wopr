@@ -54,8 +54,7 @@ cronsRouter.post("/", async (c) => {
     if (scripts.length > 0 && !config.get().daemon.cronScriptsEnabled) {
       return c.json(
         {
-          error:
-            "Cron script execution is disabled. Set cronScriptsEnabled: true in daemon config to enable.",
+          error: "Cron script execution is disabled. Set cronScriptsEnabled: true in daemon config to enable.",
         },
         400,
       );
