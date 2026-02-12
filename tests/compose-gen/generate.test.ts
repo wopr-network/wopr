@@ -68,7 +68,7 @@ health:
     expect(result.yaml).toContain("ghcr.io/wopr-network/wopr:latest");
     expect(result.yaml).toContain("test-bot-data:/data");
     expect(result.yaml).toContain("com.centurylinklabs.watchtower.enable");
-    expect(result.yaml).toContain("bots/test-bot/.env");
+    expect(result.yaml).toContain(`${tmpDir}/test-bot/.env`);
     expect(result.yaml).toContain("wopr-net");
     expect(result.yaml).toContain("AUTO-GENERATED");
   });
@@ -184,6 +184,29 @@ health:
     const result = generateCompose(tmpDir);
     expect(result.errors).toHaveLength(0);
     expect(result.yaml).not.toContain("healthcheck");
+  });
+
+  it("rejects profile name that does not match directory name", () => {
+    const botDir = join(tmpDir, "actual-dir");
+    mkdirSync(botDir);
+    writeFileSync(join(botDir, "profile.yaml"), "name: different-name\n");
+
+    const result = generateCompose(tmpDir);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].error).toContain("does not match directory name");
+    expect(result.profiles).toHaveLength(0);
+    expect(result.yaml).toBe("");
+  });
+
+  it("returns empty yaml when all profiles fail validation", () => {
+    const botDir = join(tmpDir, "bad-bot");
+    mkdirSync(botDir);
+    writeFileSync(join(botDir, "profile.yaml"), "name: INVALID!!\n");
+
+    const result = generateCompose(tmpDir);
+    expect(result.errors).toHaveLength(1);
+    expect(result.profiles).toHaveLength(0);
+    expect(result.yaml).toBe("");
   });
 
   it("continues generating with mix of valid and invalid profiles", () => {

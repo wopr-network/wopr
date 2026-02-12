@@ -36,13 +36,13 @@ export interface GenerateResult {
 /**
  * Build a docker-compose service definition from a validated bot profile.
  */
-function buildService(profile: BotProfile): Record<string, unknown> {
+function buildService(profile: BotProfile, botsDir: string): Record<string, unknown> {
   const svc: Record<string, unknown> = {
     image: `${IMAGE_BASE}:${imageTag(profile.release_channel)}`,
     container_name: profile.name,
     restart: profile.resources.restart,
     networks: ["wopr-net"],
-    env_file: [`bots/${profile.name}/.env`],
+    env_file: [`${botsDir}/${profile.name}/.env`],
     environment: {
       WOPR_HOME: "/data",
       WOPR_BOT_NAME: profile.name,
@@ -137,11 +137,29 @@ export function generateCompose(botsDir: string): GenerateResult {
       continue;
     }
 
+    if (result.data.name !== entry.name) {
+      errors.push({
+        dir: entry.name,
+        error: `Profile name "${result.data.name}" does not match directory name "${entry.name}"`,
+      });
+      continue;
+    }
+
     profiles.push(result.data);
   }
 
-  if (profiles.length === 0 && errors.length === 0) {
-    return { yaml: "", profiles: [], errors: [] };
+  if (profiles.length === 0) {
+    return { yaml: "", profiles: [], errors };
+  }
+
+  // Detect duplicate names
+  const seen = new Set<string>();
+  for (const profile of profiles) {
+    if (seen.has(profile.name)) {
+      errors.push({ dir: profile.name, error: `Duplicate profile name "${profile.name}"` });
+      return { yaml: "", profiles: [], errors };
+    }
+    seen.add(profile.name);
   }
 
   // Build compose document
@@ -149,7 +167,7 @@ export function generateCompose(botsDir: string): GenerateResult {
   const volumeNames: string[] = [];
 
   for (const profile of profiles) {
-    services[profile.name] = buildService(profile);
+    services[profile.name] = buildService(profile, botsDir);
     if (profile.volumes.persist) {
       volumeNames.push(`${profile.name}-data`);
     }

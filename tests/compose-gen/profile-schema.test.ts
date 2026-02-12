@@ -70,6 +70,14 @@ describe("profileSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("rejects pinned release channel with empty version", () => {
+    const result = profileSchema.safeParse({
+      name: "pinned-bot",
+      release_channel: "pinned:",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("rejects invalid release channel", () => {
     const result = profileSchema.safeParse({
       name: "bad-channel",
