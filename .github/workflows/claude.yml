@@ -29,7 +29,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           path_to_claude_code_executable: /home/runner/.local/bin/claude
-          review_prompt: |
+          prompt: |
             Review this PR for:
             - Code correctness and potential bugs
             - Security issues (injection, path traversal, secrets)
