@@ -256,21 +256,19 @@ describe("applyTemplate", () => {
     expect(() => applyTemplate("instance-1", "nonexistent")).toThrow('Template "nonexistent" not found');
   });
 
-  it("should generate config with plugin data entries", () => {
+  it("should generate config with plugin entries", () => {
     const result = applyTemplate("test-inst", "discord-bot");
-    const pluginData = result.config.plugins as Record<string, unknown>;
-    const dataEntries = pluginData.data as Record<string, unknown>;
+    const plugins = result.config.plugins as Record<string, unknown>;
 
-    expect(dataEntries["@wopr-network/plugin-discord"]).toEqual({});
-    expect(dataEntries["@wopr-network/plugin-memory-semantic"]).toEqual({});
+    expect(plugins["@wopr-network/plugin-discord"]).toEqual({});
+    expect(plugins["@wopr-network/plugin-memory-semantic"]).toEqual({});
   });
 
-  it("should generate config with provider data entries", () => {
+  it("should generate config with provider entries", () => {
     const result = applyTemplate("test-inst", "slack-bot");
-    const providerData = result.config.providers as Record<string, unknown>;
-    const dataEntries = providerData.data as Record<string, unknown>;
+    const providers = result.config.providers as Record<string, unknown>;
 
-    expect(dataEntries["@wopr-network/provider-anthropic"]).toEqual({});
+    expect(providers["@wopr-network/provider-anthropic"]).toEqual({});
   });
 
   it("should apply a custom template", () => {

@@ -53,7 +53,12 @@ templatesRouter.get("/:name", (c) => {
 
 // Create custom template
 templatesRouter.post("/", async (c) => {
-  const body = await c.req.json();
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
   const { name, description, plugins, providers, config, tags } = body as Partial<InstanceTemplate>;
 
   if (!name || typeof name !== "string") {
@@ -97,7 +102,12 @@ templatesRouter.post("/", async (c) => {
 // Apply template to an instance
 templatesRouter.post("/:name/apply", async (c) => {
   const name = c.req.param("name");
-  const body = await c.req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
   const { instanceId } = body;
 
   if (!instanceId || typeof instanceId !== "string") {

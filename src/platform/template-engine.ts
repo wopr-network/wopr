@@ -35,12 +35,8 @@ export function applyTemplate(instanceId: string, templateName: string): Templat
     ...template.config,
     instanceId,
     templateName: template.name,
-    plugins: {
-      data: Object.fromEntries(template.plugins.map((p) => [p, {}])),
-    },
-    providers: {
-      data: Object.fromEntries(template.providers.map((p) => [p, {}])),
-    },
+    plugins: Object.fromEntries(template.plugins.map((p) => [p, {}])),
+    providers: Object.fromEntries(template.providers.map((p) => [p, {}])),
   };
 
   return {
