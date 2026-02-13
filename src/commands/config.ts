@@ -32,7 +32,7 @@ export async function configCommand(subcommand: string | undefined, args: string
         process.exit(1);
       }
       const key = args[0];
-      let value: any = args.slice(1).join(" ");
+      let value: string | number | boolean | Record<string, unknown> | unknown[] = args.slice(1).join(" ");
 
       // Try to parse as JSON for objects/arrays/numbers/booleans
       try {

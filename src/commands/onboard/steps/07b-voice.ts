@@ -31,7 +31,7 @@ export const voiceStep: OnboardStep = async (ctx: OnboardContext) => {
   try {
     voicePlugins = await discoverVoicePlugins();
     s.stop("Found voice plugins");
-  } catch (_err: any) {
+  } catch (_err: unknown) {
     s.stop("Plugin discovery failed");
     await note(
       [
@@ -163,13 +163,13 @@ export const voiceStep: OnboardStep = async (ctx: OnboardContext) => {
     s.start(`Installing ${pluginName}...`);
     try {
       // Install from GitHub if we have a URL, otherwise use npm package name
-      const source = (plugin as any).url || (plugin as any).npm || pluginName;
+      const source = plugin.url || pluginName;
       await installPlugin(source);
       installed.push(pluginName);
       s.stop(`${pluginName} installed`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       s.stop(`${pluginName} failed`);
-      errors.push(`${pluginName}: ${err.message}`);
+      errors.push(`${pluginName}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
