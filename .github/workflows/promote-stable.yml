@@ -55,10 +55,12 @@ jobs:
 
           # Wait up to 60s for the health endpoint to respond
           HEALTHY=false
+          echo "Polling http://localhost:${HOST_PORT}/health ..."
           for i in $(seq 1 30); do
             # Check container is still running
             if ! docker ps --filter "name=$CONTAINER_NAME" --format '{{.Status}}' | grep -q "Up"; then
-              echo "Container crashed"
+              echo "Container exited unexpectedly"
+              docker logs "$CONTAINER_NAME" 2>&1 | tail -40
               break
             fi
             if curl -sf --max-time 5 --connect-timeout 3 "http://localhost:${HOST_PORT}/health" > /dev/null 2>&1; then
@@ -67,6 +69,13 @@ jobs:
             fi
             sleep 2
           done
+
+          # Dump container logs on failure before cleanup
+          if [ "$HEALTHY" != "true" ]; then
+            echo "--- container logs (last 60 lines) ---"
+            docker logs "$CONTAINER_NAME" 2>&1 | tail -60
+            echo "--- end container logs ---"
+          fi
 
           # Cleanup
           docker rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true

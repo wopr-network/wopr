@@ -42,6 +42,7 @@ COPY --from=build /app/dist ./dist
 RUN mkdir -p /data && chown -R node:node /data
 
 ENV WOPR_HOME=/data
+ENV WOPR_DAEMON_HOST=0.0.0.0
 ENV NODE_ENV=production
 
 # Drop to non-root user
