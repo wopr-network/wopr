@@ -1,23 +1,28 @@
 /**
- * Bearer Token Authentication Middleware
+ * Bearer Token & API Key Authentication Middleware
  *
- * Requires a valid Authorization: Bearer <token> header on all
- * routes except /health. Uses constant-time comparison to prevent
- * timing attacks.
+ * Requires a valid Authorization header on all routes except /health and /ready.
+ * Accepts two forms:
+ *   - Bearer <daemon-token>  (original control plane auth)
+ *   - Bearer wopr_<key>      (long-lived API keys, WOP-209)
+ * Uses constant-time comparison to prevent timing attacks.
  */
 
 import { timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import { logger } from "../../logger.js";
+import { validateApiKey } from "../api-keys.js";
 import { ensureToken } from "../auth-token.js";
 
 const SKIP_AUTH_PATHS = new Set(["/health", "/ready"]);
+
+const API_KEY_PREFIX = "wopr_";
 
 // Cache the token so we don't hit disk on every request
 let cachedToken: string | null = null;
 
 /**
- * Hono middleware that validates bearer tokens.
+ * Hono middleware that validates bearer tokens and API keys.
  * Must be applied after CORS but before route handlers.
  */
 export function bearerAuth(): MiddlewareHandler {
@@ -31,6 +36,26 @@ export function bearerAuth(): MiddlewareHandler {
       return c.json({ error: "Missing or invalid Authorization header" }, 401);
     }
 
+    const provided = authHeader.slice(7);
+
+    // Check if this is a wopr_ API key
+    if (provided.startsWith(API_KEY_PREFIX)) {
+      try {
+        const keyRecord = validateApiKey(provided);
+        if (keyRecord) {
+          // Attach key metadata to request context for downstream use
+          c.set("apiKey", keyRecord);
+          return next();
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(`[auth] API key validation error: ${msg}`);
+        // Fall through to "Invalid token" response
+      }
+      return c.json({ error: "Invalid token" }, 401);
+    }
+
+    // Standard daemon bearer token
     let expected: string;
     try {
       if (!cachedToken) {
@@ -42,8 +67,6 @@ export function bearerAuth(): MiddlewareHandler {
       logger.error(`[auth] Failed to load token: ${msg}`);
       return c.json({ error: "Internal server error" }, 500);
     }
-
-    const provided = authHeader.slice(7);
 
     // Constant-time comparison to prevent timing attacks
     const providedBuf = Buffer.from(provided, "utf-8");

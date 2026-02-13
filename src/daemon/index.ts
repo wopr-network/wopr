@@ -31,6 +31,7 @@ import { ensureToken } from "./auth-token.js";
 import { bearerAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rate-limit.js";
 import { checkReadiness, markCronRunning, markStartupComplete } from "./readiness.js";
+import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
@@ -90,6 +91,7 @@ export function createApp() {
   });
 
   // Mount routers
+  app.route("/api/keys", apiKeysRouter);
   app.route("/auth", authRouter);
   app.route("/config", configRouter);
   app.route("/sessions", sessionsRouter);
