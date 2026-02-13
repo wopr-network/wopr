@@ -6,15 +6,7 @@
  * the string "[REDACTED]".
  */
 
-const SENSITIVE_KEYS = [
-  "apikey",
-  "api_key",
-  "secret",
-  "token",
-  "password",
-  "privatekey",
-  "private_key",
-];
+const SENSITIVE_KEYS = ["apikey", "api_key", "secret", "token", "password", "privatekey", "private_key"];
 
 export function redactSensitive(obj: any, path: string = ""): any {
   if (obj === null || obj === undefined) return obj;

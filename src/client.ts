@@ -568,5 +568,255 @@ export class WoprClient {
   }
 }
 
+// ─── WebSocket streaming client (WOP-204) ───
+
+export interface WsClientConfig {
+  /** Base HTTP URL of the daemon (default: http://127.0.0.1:7437) */
+  baseUrl?: string;
+  /** Override token */
+  token?: string;
+  /** Auto-reconnect on disconnect (default: true) */
+  autoReconnect?: boolean;
+  /** Max reconnection attempts (default: Infinity) */
+  maxReconnectAttempts?: number;
+  /** Base delay between reconnect attempts in ms (default: 1000) */
+  reconnectBaseDelay?: number;
+  /** Max delay between reconnect attempts in ms (default: 30000) */
+  reconnectMaxDelay?: number;
+  /** Heartbeat interval in ms for client-side pings (default: 25000) */
+  heartbeatInterval?: number;
+}
+
+export type WsEventHandler = (event: Record<string, unknown>) => void;
+
+/**
+ * WebSocket client for real-time event streaming from the WOPR daemon.
+ *
+ * Supports topic-based subscriptions with auto-reconnect and heartbeat.
+ *
+ * ```ts
+ * const ws = new WoprWsClient({ baseUrl: "http://localhost:7437" });
+ * ws.on("instance:status", (event) => console.log(event));
+ * ws.subscribe(["instances", "instance:abc123:logs"]);
+ * await ws.connect();
+ * ```
+ */
+export class WoprWsClient {
+  private baseUrl: string;
+  private tokenOverride?: string;
+  private autoReconnect: boolean;
+  private maxReconnectAttempts: number;
+  private reconnectBaseDelay: number;
+  private reconnectMaxDelay: number;
+  private heartbeatIntervalMs: number;
+
+  private ws: import("ws").WebSocket | null = null;
+  private handlers = new Map<string, Set<WsEventHandler>>();
+  private pendingTopics = new Set<string>();
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private closed = false;
+
+  constructor(config: WsClientConfig = {}) {
+    this.baseUrl = config.baseUrl ?? DEFAULT_URL;
+    this.tokenOverride = config.token;
+    this.autoReconnect = config.autoReconnect ?? true;
+    this.maxReconnectAttempts = config.maxReconnectAttempts ?? Number.POSITIVE_INFINITY;
+    this.reconnectBaseDelay = config.reconnectBaseDelay ?? 1000;
+    this.reconnectMaxDelay = config.reconnectMaxDelay ?? 30_000;
+    this.heartbeatIntervalMs = config.heartbeatInterval ?? 25_000;
+  }
+
+  /**
+   * Register a handler for events of a given type.
+   * Use "*" to receive all events.
+   */
+  on(eventType: string, handler: WsEventHandler): void {
+    let set = this.handlers.get(eventType);
+    if (!set) {
+      set = new Set();
+      this.handlers.set(eventType, set);
+    }
+    set.add(handler);
+  }
+
+  /**
+   * Remove a handler for events of a given type.
+   */
+  off(eventType: string, handler: WsEventHandler): void {
+    this.handlers.get(eventType)?.delete(handler);
+  }
+
+  /**
+   * Subscribe to topics on the server.
+   */
+  subscribe(topics: string[]): void {
+    for (const t of topics) this.pendingTopics.add(t);
+    if (this.ws) {
+      this.send({ type: "subscribe", topics });
+    }
+  }
+
+  /**
+   * Unsubscribe from topics on the server.
+   */
+  unsubscribe(topics: string[]): void {
+    for (const t of topics) this.pendingTopics.delete(t);
+    if (this.ws) {
+      this.send({ type: "unsubscribe", topics });
+    }
+  }
+
+  /**
+   * Connect to the daemon WebSocket endpoint.
+   * Resolves when the connection is established.
+   */
+  async connect(): Promise<void> {
+    this.closed = false;
+    return this.doConnect();
+  }
+
+  /**
+   * Close the connection and stop auto-reconnect.
+   */
+  close(): void {
+    this.closed = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+
+  private async doConnect(): Promise<void> {
+    const wsUrl = this.baseUrl.replace(/^http/, "ws") + "/api/ws";
+    const token = this.tokenOverride ?? getToken();
+
+    // Dynamically import ws (Node.js WebSocket client)
+    const { default: WebSocket } = await import("ws");
+
+    return new Promise<void>((resolve, reject) => {
+      // Token is sent via Authorization header for the HTTP upgrade, and
+      // as a first-message "auth" ticket after connection opens.
+      // NEVER pass token in URL query params (leaks via logs/referrer/history).
+      const ws = new WebSocket(wsUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      ws.on("open", () => {
+        this.ws = ws;
+        this.reconnectAttempt = 0;
+        this.startHeartbeat();
+
+        // Authenticate via first-message ticket exchange
+        if (token) {
+          this.send({ type: "auth", token });
+        }
+
+        // Re-subscribe to pending topics (server will queue until auth completes)
+        if (this.pendingTopics.size > 0) {
+          this.send({ type: "subscribe", topics: Array.from(this.pendingTopics) });
+        }
+
+        this.emit("connected", { type: "connected" });
+        resolve();
+      });
+
+      ws.on("message", (data: Buffer | string) => {
+        const str = typeof data === "string" ? data : data.toString("utf-8");
+        try {
+          const event = JSON.parse(str) as Record<string, unknown>;
+          const eventType = typeof event.type === "string" ? event.type : "unknown";
+          this.emit(eventType, event);
+          this.emit("*", event);
+        } catch {
+          // Ignore unparseable messages
+        }
+      });
+
+      ws.on("close", () => {
+        this.stopHeartbeat();
+        this.ws = null;
+        this.emit("disconnected", { type: "disconnected" });
+        if (!this.closed && this.autoReconnect) {
+          this.scheduleReconnect();
+        }
+      });
+
+      ws.on("error", (err: Error) => {
+        this.emit("error", { type: "error", message: err.message });
+        if (!this.ws) {
+          // Connection never opened
+          reject(err);
+        }
+      });
+    });
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectAttempt >= this.maxReconnectAttempts) {
+      this.emit("reconnect_failed", { type: "reconnect_failed", attempts: this.reconnectAttempt });
+      return;
+    }
+
+    // Exponential backoff with jitter
+    const delay = Math.min(
+      this.reconnectBaseDelay * 2 ** this.reconnectAttempt + Math.random() * 500,
+      this.reconnectMaxDelay,
+    );
+    this.reconnectAttempt++;
+
+    this.emit("reconnecting", { type: "reconnecting", attempt: this.reconnectAttempt, delay });
+
+    this.reconnectTimer = setTimeout(() => {
+      this.doConnect().catch(() => {
+        // doConnect rejection means the connection failed;
+        // the close handler will schedule the next attempt
+      });
+    }, delay);
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      this.send({ type: "ping" });
+    }, this.heartbeatIntervalMs);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  private send(msg: Record<string, unknown>): void {
+    if (this.ws && this.ws.readyState === 1 /* OPEN */) {
+      this.ws.send(JSON.stringify(msg));
+    }
+  }
+
+  private emit(eventType: string, event: Record<string, unknown>): void {
+    const handlers = this.handlers.get(eventType);
+    if (handlers) {
+      for (const h of handlers) {
+        try {
+          h(event);
+        } catch {
+          // Don't let user handler errors crash the client
+        }
+      }
+    }
+  }
+}
+
 // Default singleton
 export const client = new WoprClient();

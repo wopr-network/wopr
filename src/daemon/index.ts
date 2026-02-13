@@ -44,7 +44,14 @@ import { providersRouter } from "./routes/providers.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { skillsRouter } from "./routes/skills.js";
 import { templatesRouter } from "./routes/templates.js";
-import { handleWebSocketClose, handleWebSocketMessage, setupWebSocket } from "./ws.js";
+import {
+  getSubscriptionStats,
+  HEARTBEAT_INTERVAL_MS,
+  handleWebSocketClose,
+  handleWebSocketMessage,
+  heartbeatTick,
+  setupWebSocket,
+} from "./ws.js";
 
 const DEFAULT_PORT = parseInt(process.env.WOPR_DAEMON_PORT || "7437", 10);
 const DEFAULT_HOST = process.env.WOPR_DAEMON_HOST || "127.0.0.1";
@@ -112,6 +119,9 @@ export function createApp() {
   app.route("/api/marketplace", marketplaceRouter);
   // Instance CRUD (WOP-202)
   app.route("/instances", instancesRouter);
+
+  // WebSocket stats endpoint (authenticated via bearerAuth middleware — not in SKIP_AUTH_PATHS)
+  app.get("/ws/stats", (c) => c.json(getSubscriptionStats()));
   return app;
 }
 
@@ -163,41 +173,42 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // Setup WebSocket using @hono/node-ws
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
-  // WebSocket endpoint
-  app.get(
-    "/ws",
-    upgradeWebSocket(() => ({
-      onOpen(_event, ws) {
-        setupWebSocket(ws as unknown as { send(data: string): void });
-      },
-      onMessage(event, ws) {
-        const data = event.data;
-        if (data == null) return;
-        let message: string;
-        if (typeof data === "string") {
-          message = data;
-        } else if (Buffer.isBuffer(data)) {
-          message = data.toString("utf-8");
-        } else if (data instanceof ArrayBuffer) {
-          message = Buffer.from(data).toString("utf-8");
-        } else if (Array.isArray(data)) {
-          message = Buffer.concat(data).toString("utf-8");
-        } else {
-          message = String(data);
-        }
-        try {
-          handleWebSocketMessage(ws as unknown as { send(data: string): void }, message);
-        } catch (err) {
-          winstonLogger.error(
-            `[daemon] WebSocket message handler error: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      },
-      onClose(_event, ws) {
-        handleWebSocketClose(ws as unknown as { send(data: string): void });
-      },
-    })),
-  );
+  // WebSocket handler factory (shared by /ws and /api/ws)
+  const wsHandler = upgradeWebSocket(() => ({
+    onOpen(_event, ws) {
+      setupWebSocket(ws as unknown as { send(data: string): void });
+    },
+    onMessage(event, ws) {
+      const data = event.data;
+      if (data == null) return;
+      let message: string;
+      if (typeof data === "string") {
+        message = data;
+      } else if (Buffer.isBuffer(data)) {
+        message = data.toString("utf-8");
+      } else if (data instanceof ArrayBuffer) {
+        message = Buffer.from(data).toString("utf-8");
+      } else if (Array.isArray(data)) {
+        message = Buffer.concat(data).toString("utf-8");
+      } else {
+        message = String(data);
+      }
+      try {
+        handleWebSocketMessage(ws as unknown as { send(data: string): void }, message);
+      } catch (err) {
+        winstonLogger.error(
+          `[daemon] WebSocket message handler error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
+    onClose(_event, ws) {
+      handleWebSocketClose(ws as unknown as { send(data: string): void });
+    },
+  }));
+
+  // WebSocket endpoints (WOP-204: /api/ws is the canonical path; /ws kept for backward compat)
+  app.get("/ws", wsHandler);
+  app.get("/api/ws", wsHandler);
 
   // Create injectors for plugins
   const injectors = {
@@ -458,9 +469,18 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   markCronRunning();
   cronTick();
 
+  // WebSocket heartbeat interval (WOP-204)
+  const heartbeatInterval = setInterval(() => {
+    const disconnected = heartbeatTick();
+    if (disconnected > 0) {
+      daemonLog(`[ws] Heartbeat: disconnected ${disconnected} stale client(s)`);
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+
   // Shutdown handler
   const shutdown = async () => {
     daemonLog("Daemon stopping...");
+    clearInterval(heartbeatInterval);
     await shutdownAllPlugins();
     if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
     daemonLog("Daemon stopped");
