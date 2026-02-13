@@ -120,7 +120,7 @@ export function createApp() {
   // Instance CRUD (WOP-202)
   app.route("/instances", instancesRouter);
 
-  // WebSocket stats endpoint
+  // WebSocket stats endpoint (authenticated via bearerAuth middleware — not in SKIP_AUTH_PATHS)
   app.get("/ws/stats", (c) => c.json(getSubscriptionStats()));
   return app;
 }

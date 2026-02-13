@@ -2,14 +2,15 @@
  * WebSocket Real-time Streaming Tests (WOP-204)
  *
  * Tests topic-based pub/sub, heartbeat, backpressure handling,
- * and legacy backward-compatible subscription patterns.
+ * ticket-based authentication, and legacy backward-compatible subscription patterns.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CLIENT_TIMEOUT_MS,
   HEARTBEAT_INTERVAL_MS,
   _resetForTesting,
+  _setTokenVerifier,
   broadcast,
   broadcastInjection,
   broadcastStream,
@@ -25,6 +26,8 @@ import {
   setupWebSocket,
 } from "../../src/daemon/ws.js";
 import type { StreamMessage } from "../../src/types.js";
+
+const TEST_TOKEN = "test-secret-token";
 
 /** Mock WebSocket that records sent messages */
 function createMockWs() {
@@ -45,6 +48,17 @@ function createMockWs() {
   };
 }
 
+/** Helper: set up a client and authenticate it */
+function setupAndAuth(ws: ReturnType<typeof createMockWs>) {
+  setupWebSocket(ws);
+  handleWebSocketMessage(ws, JSON.stringify({ type: "auth", token: TEST_TOKEN }));
+}
+
+beforeEach(() => {
+  // Use a test token verifier so we don't need the real auth-token file
+  _setTokenVerifier((token) => token === TEST_TOKEN);
+});
+
 afterEach(() => {
   _resetForTesting();
 });
@@ -62,7 +76,6 @@ describe("WebSocket connection lifecycle", () => {
     setupWebSocket(ws);
     const msg = ws.lastMessage();
     expect(msg.type).toBe("connected");
-    expect(msg.message).toBe("WOPR WebSocket connected");
     expect(msg.ts).toBeTypeOf("number");
   });
 
@@ -87,10 +100,72 @@ describe("WebSocket connection lifecycle", () => {
   });
 });
 
+describe("Ticket-based authentication", () => {
+  it("should authenticate with valid token", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws);
+
+    handleWebSocketMessage(ws, JSON.stringify({ type: "auth", token: TEST_TOKEN }));
+
+    const msg = ws.lastMessage();
+    expect(msg.type).toBe("authenticated");
+    expect(msg.ts).toBeTypeOf("number");
+  });
+
+  it("should reject invalid token", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws);
+
+    handleWebSocketMessage(ws, JSON.stringify({ type: "auth", token: "wrong-token" }));
+
+    const msg = ws.lastMessage();
+    expect(msg.type).toBe("error");
+    expect(msg.message).toBe("Authentication failed");
+  });
+
+  it("should reject missing token", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws);
+
+    handleWebSocketMessage(ws, JSON.stringify({ type: "auth" }));
+
+    const msg = ws.lastMessage();
+    expect(msg.type).toBe("error");
+    expect(msg.message).toBe("Authentication failed");
+  });
+
+  it("should reject subscribe before auth", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws);
+
+    handleWebSocketMessage(ws, JSON.stringify({
+      type: "subscribe",
+      topics: ["instances"],
+    }));
+
+    const msg = ws.lastMessage();
+    expect(msg.type).toBe("error");
+    expect(msg.message).toContain("Not authenticated");
+  });
+
+  it("should allow subscribe after auth", () => {
+    const ws = createMockWs();
+    setupAndAuth(ws);
+
+    handleWebSocketMessage(ws, JSON.stringify({
+      type: "subscribe",
+      topics: ["instances"],
+    }));
+
+    const msg = ws.lastMessage();
+    expect(msg.type).toBe("subscribed");
+  });
+});
+
 describe("Topic-based subscriptions (WOP-204)", () => {
   it("should subscribe to topics", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({
       type: "subscribe",
@@ -105,7 +180,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 
   it("should unsubscribe from topics", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({
       type: "subscribe",
@@ -124,7 +199,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 
   it("should receive events for subscribed topics", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({
       type: "subscribe",
@@ -143,7 +218,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 
   it("should NOT receive events for unsubscribed topics", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     // Subscribe to a different instance
     handleWebSocketMessage(ws, JSON.stringify({
@@ -160,7 +235,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 
   it("should match wildcard * subscription", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({
       type: "subscribe",
@@ -177,7 +252,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 
   it("should match 'instances' topic to all instance events", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({
       type: "subscribe",
@@ -195,7 +270,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 
   it("should match instance prefix to sub-topics", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     // Subscribe to all events for instance abc123
     handleWebSocketMessage(ws, JSON.stringify({
@@ -217,7 +292,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 
   it("should ignore invalid topics in subscribe", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({
       type: "subscribe",
@@ -235,7 +310,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 describe("Legacy session-based subscriptions", () => {
   it("should handle sessions array in subscribe", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({
       type: "subscribe",
@@ -249,7 +324,7 @@ describe("Legacy session-based subscriptions", () => {
 
   it("should handle single session in subscribe", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({
       type: "subscribe",
@@ -263,7 +338,7 @@ describe("Legacy session-based subscriptions", () => {
 
   it("should handle sessions array in unsubscribe", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", sessions: ["main"] }));
     handleWebSocketMessage(ws, JSON.stringify({ type: "unsubscribe", sessions: ["main"] }));
@@ -275,7 +350,7 @@ describe("Legacy session-based subscriptions", () => {
 
   it("should handle single session in unsubscribe", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
 
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", session: "main" }));
     handleWebSocketMessage(ws, JSON.stringify({ type: "unsubscribe", session: "main" }));
@@ -288,7 +363,7 @@ describe("Legacy session-based subscriptions", () => {
 describe("Event emission functions", () => {
   it("emitInstanceStatus sends correct event shape", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["*"] }));
 
     emitInstanceStatus("id1", "healthy", { cpu: 42 });
@@ -305,7 +380,7 @@ describe("Event emission functions", () => {
 
   it("emitInstanceLog sends correct event shape", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["*"] }));
 
     emitInstanceLog("id1", "error", "Something failed", { stack: "trace" });
@@ -322,7 +397,7 @@ describe("Event emission functions", () => {
 
   it("emitInstanceSession sends correct event shape", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["*"] }));
 
     emitInstanceSession("id1", "inject", "main", { user: "admin" });
@@ -341,7 +416,7 @@ describe("Event emission functions", () => {
 describe("Legacy broadcast functions", () => {
   it("broadcastStream delivers to session subscribers", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", sessions: ["main"] }));
 
     const msg: StreamMessage = { type: "text", content: "Hello" };
@@ -358,7 +433,7 @@ describe("Legacy broadcast functions", () => {
 
   it("broadcastInjection delivers to session subscribers", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", sessions: ["main"] }));
 
     broadcastInjection("main", "api", "hello", "world");
@@ -447,12 +522,9 @@ describe("Error handling", () => {
 });
 
 describe("Backpressure handling", () => {
-  it("should drop messages when pending exceeds limit", () => {
-    // We can't easily reach 1000 pending messages in a sync test since
-    // the counter increments and decrements immediately. But we can verify
-    // the safeSend path works with a slow client.
+  it("should handle sync sends without backpressure issues", () => {
     const ws = createMockWs();
-    setupWebSocket(ws);
+    setupAndAuth(ws);
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["*"] }));
 
     // Emit many messages - they should all succeed in sync mode
@@ -460,9 +532,27 @@ describe("Backpressure handling", () => {
       emitInstanceLog("id1", "info", `msg ${i}`);
     }
 
-    // All 100 logs plus welcome + subscribed = 102
     const logMessages = ws.allMessages().filter((m) => m.type === "instance:log");
     expect(logMessages).toHaveLength(100);
+  });
+
+  it("should disconnect slow consumer that throws on send", () => {
+    let callCount = 0;
+    const slowWs = {
+      send() {
+        callCount++;
+        // Fail after welcome message
+        if (callCount > 1) throw new Error("Connection buffer full");
+      },
+    };
+
+    setupWebSocket(slowWs);
+    // Welcome succeeded (callCount=1), next message will throw
+    expect(getClientCount()).toBe(1);
+
+    handleWebSocketMessage(slowWs, JSON.stringify({ type: "auth", token: TEST_TOKEN }));
+    // auth response send throws -> client removed
+    expect(getClientCount()).toBe(0);
   });
 });
 
@@ -489,10 +579,7 @@ describe("Heartbeat", () => {
     setupWebSocket(ws);
     expect(getClientCount()).toBe(1);
 
-    // Simulate time passing beyond timeout by manipulating lastActivity
-    // We can't directly set lastActivity, but heartbeatTick checks Date.now()
-    // versus lastActivity. On fresh connection, lastActivity = Date.now(),
-    // so the client won't be disconnected.
+    // On fresh connection, lastActivity = Date.now(), so the client won't be disconnected
     const disconnected = heartbeatTick();
     expect(disconnected).toBe(0);
     expect(getClientCount()).toBe(1);
@@ -509,8 +596,8 @@ describe("publishToTopic", () => {
   it("should deliver to matching subscribers only", () => {
     const ws1 = createMockWs();
     const ws2 = createMockWs();
-    setupWebSocket(ws1);
-    setupWebSocket(ws2);
+    setupAndAuth(ws1);
+    setupAndAuth(ws2);
 
     handleWebSocketMessage(ws1, JSON.stringify({ type: "subscribe", topics: ["instance:a:logs"] }));
     handleWebSocketMessage(ws2, JSON.stringify({ type: "subscribe", topics: ["instance:b:logs"] }));
@@ -526,8 +613,8 @@ describe("Subscription stats", () => {
   it("should report correct stats", () => {
     const ws1 = createMockWs();
     const ws2 = createMockWs();
-    setupWebSocket(ws1);
-    setupWebSocket(ws2);
+    setupAndAuth(ws1);
+    setupAndAuth(ws2);
 
     handleWebSocketMessage(ws1, JSON.stringify({ type: "subscribe", topics: ["instances", "instance:a:logs"] }));
     handleWebSocketMessage(ws2, JSON.stringify({ type: "subscribe", topics: ["*"] }));
@@ -551,9 +638,9 @@ describe("Multiple clients", () => {
     const ws1 = createMockWs();
     const ws2 = createMockWs();
     const ws3 = createMockWs();
-    setupWebSocket(ws1);
-    setupWebSocket(ws2);
-    setupWebSocket(ws3);
+    setupAndAuth(ws1);
+    setupAndAuth(ws2);
+    setupAndAuth(ws3);
 
     handleWebSocketMessage(ws1, JSON.stringify({ type: "subscribe", topics: ["instance:a:status"] }));
     handleWebSocketMessage(ws2, JSON.stringify({ type: "subscribe", topics: ["instance:a:status"] }));
@@ -576,21 +663,22 @@ describe("Multiple clients", () => {
     const badWs = {
       send() {
         callCount++;
-        if (callCount > 1) throw new Error("gone");
+        if (callCount > 2) throw new Error("gone");
       },
     };
 
-    setupWebSocket(ws1);
+    setupAndAuth(ws1);
     setupWebSocket(badWs);
-
-    handleWebSocketMessage(ws1, JSON.stringify({ type: "subscribe", topics: ["*"] }));
-    // badWs got welcome (callCount=1), next send will throw
+    // badWs got welcome (callCount=1)
+    handleWebSocketMessage(badWs, JSON.stringify({ type: "auth", token: TEST_TOKEN }));
+    // auth response (callCount=2), next will throw
     handleWebSocketMessage(badWs, JSON.stringify({ type: "subscribe", topics: ["*"] }));
-    // callCount=2 -> throws, client removed
+    // subscribe response: callCount=3 -> throws, client removed
 
     expect(getClientCount()).toBe(1);
 
     // ws1 should still receive events
+    handleWebSocketMessage(ws1, JSON.stringify({ type: "subscribe", topics: ["*"] }));
     emitInstanceStatus("a", "ok");
     expect(ws1.allMessages().filter((m) => m.type === "instance:status")).toHaveLength(1);
   });

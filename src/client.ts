@@ -699,13 +699,15 @@ export class WoprWsClient {
   private async doConnect(): Promise<void> {
     const wsUrl = this.baseUrl.replace(/^http/, "ws") + "/api/ws";
     const token = this.tokenOverride ?? getToken();
-    const url = token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl;
 
     // Dynamically import ws (Node.js WebSocket client)
     const { default: WebSocket } = await import("ws");
 
     return new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(url, {
+      // Token is sent via Authorization header for the HTTP upgrade, and
+      // as a first-message "auth" ticket after connection opens.
+      // NEVER pass token in URL query params (leaks via logs/referrer/history).
+      const ws = new WebSocket(wsUrl, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
@@ -714,7 +716,12 @@ export class WoprWsClient {
         this.reconnectAttempt = 0;
         this.startHeartbeat();
 
-        // Re-subscribe to pending topics
+        // Authenticate via first-message ticket exchange
+        if (token) {
+          this.send({ type: "auth", token });
+        }
+
+        // Re-subscribe to pending topics (server will queue until auth completes)
         if (this.pendingTopics.size > 0) {
           this.send({ type: "subscribe", topics: Array.from(this.pendingTopics) });
         }

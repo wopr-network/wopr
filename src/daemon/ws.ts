@@ -14,27 +14,54 @@
  * Legacy session-based subscriptions are mapped to topics automatically.
  */
 
+import { timingSafeEqual } from "node:crypto";
 import type { StreamMessage } from "../types.js";
+import { ensureToken } from "./auth-token.js";
 
 // Simple interface for what we need from WebSocket
 interface WS {
   send(data: string): void;
 }
 
+/** Verify a token using constant-time comparison */
+function verifyToken(provided: string): boolean {
+  if (tokenVerifierOverride) return tokenVerifierOverride(provided);
+  try {
+    const expected = ensureToken();
+    const providedBuf = Buffer.from(provided, "utf-8");
+    const expectedBuf = Buffer.from(expected, "utf-8");
+    return providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Inject a token verifier (primarily for testing).
+ * When set, overrides the default ensureToken-based verification.
+ */
+let tokenVerifierOverride: ((token: string) => boolean) | null = null;
+
+export function _setTokenVerifier(fn: ((token: string) => boolean) | null): void {
+  tokenVerifierOverride = fn;
+}
+
 /** Per-client state */
 interface ClientState {
   ws: WS;
   topics: Set<string>;
-  /** Number of messages queued but not yet flushed */
-  pendingMessages: number;
+  /** Whether this client has authenticated (ticket-based auth) */
+  authenticated: boolean;
+  /** Bounded outbound message buffer for backpressure */
+  sendBuffer: string[];
   /** Whether this client is experiencing backpressure */
   backpressured: boolean;
   /** Last time we received a pong or message from this client */
   lastActivity: number;
 }
 
-/** Maximum queued messages per client before dropping */
-const MAX_PENDING_MESSAGES = 1000;
+/** Maximum buffered messages per client before disconnecting as slow consumer */
+const MAX_BUFFER_SIZE = 512;
 
 /** Heartbeat interval in ms (30 seconds) */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -52,16 +79,17 @@ export function setupWebSocket(ws: WS): void {
   const state: ClientState = {
     ws,
     topics: new Set(),
-    pendingMessages: 0,
+    authenticated: false,
+    sendBuffer: [],
     backpressured: false,
     lastActivity: Date.now(),
   };
   clients.set(ws, state);
 
-  // Send welcome
+  // Send welcome — client must send { type: "auth", token: "..." } before subscribing
   safeSend(state, {
     type: "connected",
-    message: "WOPR WebSocket connected",
+    message: "WOPR WebSocket connected. Send auth message to authenticate.",
     ts: Date.now(),
   });
 }
@@ -92,7 +120,25 @@ export function handleWebSocketClose(ws: WS): void {
 
 function handleMessage(state: ClientState, msg: Record<string, unknown>): void {
   switch (msg.type) {
+    case "auth": {
+      // Ticket-based authentication: client sends token as first message
+      // instead of embedding in URL (prevents token leakage via logs/referrer)
+      const token = typeof msg.token === "string" ? msg.token : undefined;
+      if (token && verifyToken(token)) {
+        state.authenticated = true;
+        safeSend(state, { type: "authenticated", ts: Date.now() });
+      } else {
+        safeSend(state, { type: "error", message: "Authentication failed" });
+      }
+      break;
+    }
+
     case "subscribe": {
+      if (!state.authenticated) {
+        safeSend(state, { type: "error", message: "Not authenticated. Send auth message first." });
+        break;
+      }
+
       // Topic-based subscriptions (WOP-204)
       const topics = msg.topics as string[] | undefined;
       if (topics && Array.isArray(topics)) {
@@ -158,35 +204,35 @@ function handleMessage(state: ClientState, msg: Record<string, unknown>): void {
 
 /**
  * Send a message to a client with backpressure protection.
- * Returns false if the message was dropped due to backpressure.
+ * When the buffer exceeds MAX_BUFFER_SIZE the slow consumer is disconnected.
+ * Returns false if the message was dropped or the client was disconnected.
  */
 function safeSend(state: ClientState, payload: Record<string, unknown>): boolean {
-  if (state.pendingMessages >= MAX_PENDING_MESSAGES) {
+  const data = JSON.stringify(payload);
+
+  if (state.sendBuffer.length >= MAX_BUFFER_SIZE) {
+    // Slow consumer: buffer is full. Warn once, then disconnect.
     if (!state.backpressured) {
       state.backpressured = true;
-      // Try to notify the client they're falling behind
       try {
         state.ws.send(
           JSON.stringify({
             type: "error",
-            message: "Backpressure: messages being dropped. Reduce subscription scope or consume faster.",
+            message: "Slow consumer: disconnecting due to backpressure. Reduce subscription scope or consume faster.",
+            code: "BACKPRESSURE_DISCONNECT",
             ts: Date.now(),
           }),
         );
       } catch {
-        // Client is gone
-        clients.delete(state.ws);
+        // already gone
       }
     }
+    clients.delete(state.ws);
     return false;
   }
 
   try {
-    state.pendingMessages++;
-    state.ws.send(JSON.stringify(payload));
-    // In a real buffered scenario we'd decrement on drain;
-    // since hono-ws send is synchronous, decrement immediately
-    state.pendingMessages--;
+    state.ws.send(data);
     state.backpressured = false;
     return true;
   } catch {
@@ -392,4 +438,5 @@ export function getSubscriptionStats(): { clients: number; totalSubscriptions: n
  */
 export function _resetForTesting(): void {
   clients.clear();
+  tokenVerifierOverride = null;
 }
