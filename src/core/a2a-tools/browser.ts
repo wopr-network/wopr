@@ -13,6 +13,129 @@ import { logger, tool, withSecurityCheck, z } from "./_base.js";
 import { loadProfile, saveProfile } from "./browser-profile.js";
 
 // ---------------------------------------------------------------------------
+// SSRF protection: URL validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether a URL is safe for browser navigation.
+ * Blocks non-HTTP(S) schemes and private/internal IP addresses.
+ */
+export function isUrlSafe(rawUrl: string): { safe: boolean; reason?: string } {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return { safe: false, reason: "Invalid URL" };
+  }
+
+  // Only allow http and https schemes
+  const scheme = parsed.protocol.toLowerCase();
+  if (scheme !== "http:" && scheme !== "https:") {
+    return { safe: false, reason: `Blocked URL scheme: ${scheme}` };
+  }
+
+  // Extract hostname (strip brackets from IPv6)
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+
+  // Check for private/internal IP ranges
+  if (isPrivateHost(hostname)) {
+    return { safe: false, reason: `Blocked private/internal address: ${hostname}` };
+  }
+
+  return { safe: true };
+}
+
+function isPrivateHost(hostname: string): boolean {
+  // Localhost names
+  if (hostname === "localhost" || hostname === "localhost.") {
+    return true;
+  }
+
+  // Try parsing as IPv4
+  const ipv4 = parseIPv4(hostname);
+  if (ipv4) {
+    return isPrivateIPv4(ipv4);
+  }
+
+  // Try parsing as IPv6
+  const ipv6 = parseIPv6(hostname);
+  if (ipv6) {
+    return isPrivateIPv6(ipv6);
+  }
+
+  return false;
+}
+
+function parseIPv4(host: string): number[] | null {
+  const parts = host.split(".");
+  if (parts.length !== 4) return null;
+  const nums = parts.map(Number);
+  if (nums.some((n) => isNaN(n) || n < 0 || n > 255 || !Number.isInteger(n))) return null;
+  return nums;
+}
+
+function isPrivateIPv4(octets: number[]): boolean {
+  const [a, b] = octets;
+  // 127.0.0.0/8 (loopback)
+  if (a === 127) return true;
+  // 10.0.0.0/8
+  if (a === 10) return true;
+  // 172.16.0.0/12
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  // 192.168.0.0/16
+  if (a === 192 && b === 168) return true;
+  // 169.254.0.0/16 (link-local)
+  if (a === 169 && b === 254) return true;
+  // 0.0.0.0
+  if (octets.every((o) => o === 0)) return true;
+  return false;
+}
+
+function parseIPv6(host: string): string | null {
+  // Quick check: must contain a colon to be IPv6
+  if (!host.includes(":")) return null;
+  // Normalize and return the lowercase form for checking
+  try {
+    // Use a dummy URL to let the URL parser normalize IPv6
+    const u = new URL(`http://[${host}]`);
+    return u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isPrivateIPv6(normalized: string): boolean {
+  // ::1 (loopback)
+  if (normalized === "::1") return true;
+  // :: (unspecified)
+  if (normalized === "::") return true;
+  // fe80::/10 (link-local)
+  if (normalized.startsWith("fe80:") || normalized.startsWith("fe80")) return true;
+  // fd00::/8 (unique local)
+  if (normalized.startsWith("fd")) return true;
+  // fc00::/7 (unique local)
+  if (normalized.startsWith("fc")) return true;
+
+  // IPv4-mapped IPv6: ::ffff:x.x.x.x (dotted-decimal form)
+  const v4MappedMatch = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (v4MappedMatch) {
+    const ipv4 = parseIPv4(v4MappedMatch[1]);
+    if (ipv4 && isPrivateIPv4(ipv4)) return true;
+  }
+
+  // IPv4-mapped IPv6 in hex form: ::ffff:XXYY:ZZWW (Node's URL parser normalizes to this)
+  const v4HexMatch = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (v4HexMatch) {
+    const hi = parseInt(v4HexMatch[1], 16);
+    const lo = parseInt(v4HexMatch[2], 16);
+    const octets = [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff];
+    if (isPrivateIPv4(octets)) return true;
+  }
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Lazy Playwright loading (optional peer dependency)
 // ---------------------------------------------------------------------------
 
@@ -186,6 +309,16 @@ export function createBrowserTools(sessionName: string): any[] {
       async (args: any) => {
         return withSecurityCheck("browser_navigate", sessionName, async () => {
           const { url, profile: profileName = "default", waitFor = "domcontentloaded", timeout = 30000 } = args;
+
+          // SSRF protection: validate URL before navigating
+          const urlCheck = isUrlSafe(url);
+          if (!urlCheck.safe) {
+            return {
+              content: [{ type: "text", text: `Navigation blocked: ${urlCheck.reason}` }],
+              isError: true,
+            };
+          }
+
           try {
             const instance = await getOrCreateInstance(profileName);
             await instance.page.goto(url, { waitUntil: waitFor, timeout });
@@ -352,7 +485,16 @@ export function createBrowserTools(sessionName: string): any[] {
           const { expression, profile: profileName = "default" } = args;
 
           // Block obvious escape attempts
-          const blocked = ["require(", "process.", "child_process", "__dirname", "__filename", "import("];
+          const blocked = [
+            "require(",
+            "process.",
+            "child_process",
+            "__dirname",
+            "__filename",
+            "import(",
+            "eval(",
+            "Function(",
+          ];
           const lower = expression.toLowerCase();
           for (const pattern of blocked) {
             if (lower.includes(pattern.toLowerCase())) {

@@ -234,6 +234,85 @@ async function callTool(tools: any[], name: string, args: any): Promise<any> {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+describe("isUrlSafe", () => {
+  let isUrlSafe: any;
+
+  beforeEach(async () => {
+    const mod = await import("../../src/core/a2a-tools/browser.js");
+    isUrlSafe = mod.isUrlSafe;
+  });
+
+  it("should allow http URLs to public hosts", () => {
+    expect(isUrlSafe("http://example.com").safe).toBe(true);
+    expect(isUrlSafe("https://example.com/path?q=1").safe).toBe(true);
+  });
+
+  it("should reject file:// scheme", () => {
+    expect(isUrlSafe("file:///etc/passwd").safe).toBe(false);
+  });
+
+  it("should reject data: scheme", () => {
+    expect(isUrlSafe("data:text/html,test").safe).toBe(false);
+  });
+
+  it("should reject javascript: scheme", () => {
+    expect(isUrlSafe("javascript:alert(1)").safe).toBe(false);
+  });
+
+  it("should reject loopback IPv4", () => {
+    expect(isUrlSafe("http://127.0.0.1/").safe).toBe(false);
+    expect(isUrlSafe("http://127.0.0.2/").safe).toBe(false);
+  });
+
+  it("should reject private 10.x.x.x range", () => {
+    expect(isUrlSafe("http://10.0.0.1/").safe).toBe(false);
+    expect(isUrlSafe("http://10.255.255.255/").safe).toBe(false);
+  });
+
+  it("should reject private 172.16-31.x.x range", () => {
+    expect(isUrlSafe("http://172.16.0.1/").safe).toBe(false);
+    expect(isUrlSafe("http://172.31.255.255/").safe).toBe(false);
+  });
+
+  it("should allow 172.15.x.x and 172.32.x.x (not private)", () => {
+    expect(isUrlSafe("http://172.15.0.1/").safe).toBe(true);
+    expect(isUrlSafe("http://172.32.0.1/").safe).toBe(true);
+  });
+
+  it("should reject private 192.168.x.x range", () => {
+    expect(isUrlSafe("http://192.168.0.1/").safe).toBe(false);
+    expect(isUrlSafe("http://192.168.1.1/").safe).toBe(false);
+  });
+
+  it("should reject link-local 169.254.x.x range", () => {
+    expect(isUrlSafe("http://169.254.1.1/").safe).toBe(false);
+  });
+
+  it("should reject IPv6 loopback ::1", () => {
+    expect(isUrlSafe("http://[::1]/").safe).toBe(false);
+  });
+
+  it("should reject IPv4-mapped IPv6 ::ffff:127.0.0.1", () => {
+    expect(isUrlSafe("http://[::ffff:127.0.0.1]/").safe).toBe(false);
+  });
+
+  it("should reject IPv4-mapped IPv6 ::ffff:10.0.0.1", () => {
+    expect(isUrlSafe("http://[::ffff:10.0.0.1]/").safe).toBe(false);
+  });
+
+  it("should reject localhost", () => {
+    expect(isUrlSafe("http://localhost/").safe).toBe(false);
+  });
+
+  it("should reject fd00::/8 unique local", () => {
+    expect(isUrlSafe("http://[fd00::1]/").safe).toBe(false);
+  });
+
+  it("should reject invalid URLs", () => {
+    expect(isUrlSafe("not-a-url").safe).toBe(false);
+  });
+});
+
 describe("Browser A2A Tools", () => {
   describe("createBrowserTools", () => {
     it("should return 5 browser tools", () => {
@@ -268,6 +347,91 @@ describe("Browser A2A Tools", () => {
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Navigation failed");
+    });
+
+    // SSRF protection tests
+    it("should block file:// URLs", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "file:///etc/passwd" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked URL scheme");
+    });
+
+    it("should block data: URLs", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "data:text/html,<h1>hi</h1>" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked URL scheme");
+    });
+
+    it("should block javascript: URLs", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "javascript:alert(1)" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Navigation blocked");
+    });
+
+    it("should block http://127.0.0.1", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "http://127.0.0.1/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked private/internal address");
+    });
+
+    it("should block http://10.0.0.1", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "http://10.0.0.1/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked private/internal address");
+    });
+
+    it("should block http://192.168.1.1", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "http://192.168.1.1/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked private/internal address");
+    });
+
+    it("should block http://172.16.0.1", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "http://172.16.0.1/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked private/internal address");
+    });
+
+    it("should block http://[::1]", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "http://[::1]/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked private/internal address");
+    });
+
+    it("should block http://[::ffff:127.0.0.1]", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "http://[::ffff:127.0.0.1]/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked private/internal address");
+    });
+
+    it("should block http://localhost", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "http://localhost/" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked private/internal address");
+    });
+
+    it("should allow http://example.com", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "http://example.com" });
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain("Hello World");
+    });
+
+    it("should allow https://example.com", async () => {
+      const tools = createBrowserTools("test-session");
+      const result = await callTool(tools, "browser_navigate", { url: "https://example.com" });
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain("Hello World");
     });
   });
 
@@ -411,6 +575,26 @@ describe("Browser A2A Tools", () => {
       });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Evaluate failed");
+    });
+
+    it("should block eval() calls", async () => {
+      const tools = createBrowserTools("test-session");
+      await callTool(tools, "browser_navigate", { url: "https://example.com" });
+      const result = await callTool(tools, "browser_evaluate", {
+        expression: 'eval("alert(1)")',
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked");
+    });
+
+    it("should block Function() constructor", async () => {
+      const tools = createBrowserTools("test-session");
+      await callTool(tools, "browser_navigate", { url: "https://example.com" });
+      const result = await callTool(tools, "browser_evaluate", {
+        expression: 'Function("return this")()',
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Blocked");
     });
   });
 });
