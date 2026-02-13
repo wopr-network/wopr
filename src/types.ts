@@ -14,7 +14,7 @@ export type {
   TrustLevel,
 } from "./security/types.js";
 // Re-export provider types for plugins
-export type { ModelProvider } from "./types/provider.js";
+export type { ModelProvider, ProviderResponse, ProviderSource } from "./types/provider.js";
 
 // Import InjectionSource for use within this file
 import type { InjectionSource as _InjectionSource } from "./security/types.js";
@@ -579,6 +579,20 @@ export interface MemorySearchEvent {
   results: unknown[] | null;
 }
 
+// Meter events (for hosted provider usage tracking)
+export interface MeterEvent {
+  /** User or organization ID */
+  tenant: string;
+  /** What capability was used (e.g., "voice-transcription", "embeddings") */
+  capability: string;
+  /** Which adapter handled the call (e.g., "replicate", "modal") */
+  provider: string;
+  /** Upstream cost in USD cents */
+  cost: number;
+  /** When the usage occurred (epoch ms) */
+  timestamp: number;
+}
+
 /**
  * Event map - all core events and their payloads
  */
@@ -597,6 +611,7 @@ export interface WOPREventMap {
   "system:shutdown": SystemShutdownEvent;
   "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
+  "meter:usage": MeterEvent;
   "*": WOPREvent;
 }
 
