@@ -13,7 +13,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../logger.js";
 import { WOPR_HOME } from "../paths.js";
@@ -94,6 +94,8 @@ interface PairingStoreData {
 
 const PAIRING_DIR = join(WOPR_HOME, "pairing");
 const IDENTITIES_FILE = join(PAIRING_DIR, "identities.json");
+const LOCK_FILE = join(PAIRING_DIR, "identities.lock");
+const LOCK_STALE_MS = 10_000; // 10 seconds
 const PAIRING_CODE_LENGTH = 6;
 const PAIRING_CODE_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 const PAIRING_CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No 0/O/1/I confusion
@@ -126,18 +128,73 @@ function saveStore(data: PairingStoreData): void {
   writeFileSync(IDENTITIES_FILE, JSON.stringify(data, null, 2));
 }
 
+function acquireLock(): void {
+  ensureDir();
+  const maxAttempts = 50;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      writeFileSync(LOCK_FILE, String(Date.now()), { flag: "wx" });
+      return;
+    } catch {
+      // Lock exists - check if stale
+      try {
+        const lockTime = Number(readFileSync(LOCK_FILE, "utf-8"));
+        if (Date.now() - lockTime > LOCK_STALE_MS) {
+          unlinkSync(LOCK_FILE);
+          continue;
+        }
+      } catch {
+        // Lock was removed between check and read, retry
+        continue;
+      }
+      // Wait briefly and retry
+      const waitMs = 10 + Math.floor(Math.random() * 20);
+      const start = Date.now();
+      while (Date.now() - start < waitMs) {
+        /* spin */
+      }
+    }
+  }
+  throw new Error("[pairing] Could not acquire store lock");
+}
+
+function releaseLock(): void {
+  try {
+    unlinkSync(LOCK_FILE);
+  } catch {
+    // Already released
+  }
+}
+
+function withStoreLock<T>(fn: () => T): T {
+  acquireLock();
+  try {
+    return fn();
+  } finally {
+    releaseLock();
+  }
+}
+
 // ============================================================================
 // Pairing Code Generation
 // ============================================================================
 
 /**
- * Generate a cryptographically random pairing code
+ * Generate a cryptographically random pairing code using rejection sampling
+ * to eliminate modulo bias.
  */
 function generateCode(): string {
-  const bytes = randomBytes(PAIRING_CODE_LENGTH);
+  const charsetLen = PAIRING_CODE_CHARSET.length;
+  // Largest multiple of charsetLen that fits in a byte (256)
+  const limit = 256 - (256 % charsetLen);
   let code = "";
-  for (let i = 0; i < PAIRING_CODE_LENGTH; i++) {
-    code += PAIRING_CODE_CHARSET[bytes[i] % PAIRING_CODE_CHARSET.length];
+  while (code.length < PAIRING_CODE_LENGTH) {
+    const bytes = randomBytes(PAIRING_CODE_LENGTH - code.length);
+    for (const byte of bytes) {
+      if (byte < limit && code.length < PAIRING_CODE_LENGTH) {
+        code += PAIRING_CODE_CHARSET[byte % charsetLen];
+      }
+    }
   }
   return code;
 }
@@ -157,27 +214,29 @@ function generateId(): string {
  * Create a new WOPR identity
  */
 export function createIdentity(name: string, trustLevel: TrustLevel = "semi-trusted"): WoprIdentity {
-  const store = loadStore();
+  return withStoreLock(() => {
+    const store = loadStore();
 
-  // Check for duplicate name
-  if (store.identities.some((id) => id.name === name)) {
-    throw new Error(`Identity with name "${name}" already exists`);
-  }
+    // Check for duplicate name
+    if (store.identities.some((id) => id.name === name)) {
+      throw new Error(`Identity with name "${name}" already exists`);
+    }
 
-  const identity: WoprIdentity = {
-    id: generateId(),
-    name,
-    trustLevel,
-    links: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  };
+    const identity: WoprIdentity = {
+      id: generateId(),
+      name,
+      trustLevel,
+      links: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
 
-  store.identities.push(identity);
-  saveStore(store);
+    store.identities.push(identity);
+    saveStore(store);
 
-  logger.info(`[pairing] Created identity: ${name} (trust: ${trustLevel})`);
-  return identity;
+    logger.info(`[pairing] Created identity: ${name} (trust: ${trustLevel})`);
+    return identity;
+  });
 }
 
 /**
@@ -216,37 +275,41 @@ export function listIdentities(): WoprIdentity[] {
  * Update an identity's trust level
  */
 export function setIdentityTrustLevel(id: string, trustLevel: TrustLevel): WoprIdentity {
-  const store = loadStore();
-  const identity = store.identities.find((i) => i.id === id);
-  if (!identity) {
-    throw new Error(`Identity not found: ${id}`);
-  }
+  return withStoreLock(() => {
+    const store = loadStore();
+    const identity = store.identities.find((i) => i.id === id);
+    if (!identity) {
+      throw new Error(`Identity not found: ${id}`);
+    }
 
-  identity.trustLevel = trustLevel;
-  identity.updatedAt = Date.now();
-  saveStore(store);
+    identity.trustLevel = trustLevel;
+    identity.updatedAt = Date.now();
+    saveStore(store);
 
-  logger.info(`[pairing] Updated trust level for ${identity.name}: ${trustLevel}`);
-  return identity;
+    logger.info(`[pairing] Updated trust level for ${identity.name}: ${trustLevel}`);
+    return identity;
+  });
 }
 
 /**
  * Remove an identity and all its links
  */
 export function removeIdentity(id: string): boolean {
-  const store = loadStore();
-  const idx = store.identities.findIndex((i) => i.id === id);
-  if (idx === -1) return false;
+  return withStoreLock(() => {
+    const store = loadStore();
+    const idx = store.identities.findIndex((i) => i.id === id);
+    if (idx === -1) return false;
 
-  const removed = store.identities[idx];
-  store.identities.splice(idx, 1);
+    const removed = store.identities[idx];
+    store.identities.splice(idx, 1);
 
-  // Also remove any pending codes for this identity
-  store.pendingCodes = store.pendingCodes.filter((c) => c.identityId !== id);
+    // Also remove any pending codes for this identity
+    store.pendingCodes = store.pendingCodes.filter((c) => c.identityId !== id);
 
-  saveStore(store);
-  logger.info(`[pairing] Removed identity: ${removed.name}`);
-  return true;
+    saveStore(store);
+    logger.info(`[pairing] Removed identity: ${removed.name}`);
+    return true;
+  });
 }
 
 // ============================================================================
@@ -257,59 +320,63 @@ export function removeIdentity(id: string): boolean {
  * Link a platform sender to an identity
  */
 export function linkPlatform(identityId: string, channelType: string, senderId: string): WoprIdentity {
-  const store = loadStore();
-  const identity = store.identities.find((i) => i.id === identityId);
-  if (!identity) {
-    throw new Error(`Identity not found: ${identityId}`);
-  }
+  return withStoreLock(() => {
+    const store = loadStore();
+    const identity = store.identities.find((i) => i.id === identityId);
+    if (!identity) {
+      throw new Error(`Identity not found: ${identityId}`);
+    }
 
-  // Check if this sender is already linked to another identity
-  const existing = store.identities.find(
-    (i) => i.id !== identityId && i.links.some((l) => l.channelType === channelType && l.senderId === senderId),
-  );
-  if (existing) {
-    throw new Error(`Sender ${channelType}:${senderId} is already linked to identity "${existing.name}"`);
-  }
+    // Check if this sender is already linked to another identity
+    const existing = store.identities.find(
+      (i) => i.id !== identityId && i.links.some((l) => l.channelType === channelType && l.senderId === senderId),
+    );
+    if (existing) {
+      throw new Error(`Sender ${channelType}:${senderId} is already linked to identity "${existing.name}"`);
+    }
 
-  // Check if this identity already has a link for this channel type
-  const existingLink = identity.links.find((l) => l.channelType === channelType);
-  if (existingLink) {
-    // Update existing link
-    existingLink.senderId = senderId;
-    existingLink.linkedAt = Date.now();
-  } else {
-    // Add new link
-    identity.links.push({
-      channelType,
-      senderId,
-      linkedAt: Date.now(),
-    });
-  }
+    // Check if this identity already has a link for this channel type
+    const existingLink = identity.links.find((l) => l.channelType === channelType);
+    if (existingLink) {
+      // Update existing link
+      existingLink.senderId = senderId;
+      existingLink.linkedAt = Date.now();
+    } else {
+      // Add new link
+      identity.links.push({
+        channelType,
+        senderId,
+        linkedAt: Date.now(),
+      });
+    }
 
-  identity.updatedAt = Date.now();
-  saveStore(store);
+    identity.updatedAt = Date.now();
+    saveStore(store);
 
-  logger.info(`[pairing] Linked ${channelType}:${senderId} to identity ${identity.name}`);
-  return identity;
+    logger.info(`[pairing] Linked ${channelType}:${senderId} to identity ${identity.name}`);
+    return identity;
+  });
 }
 
 /**
  * Unlink a platform from an identity
  */
 export function unlinkPlatform(identityId: string, channelType: string): boolean {
-  const store = loadStore();
-  const identity = store.identities.find((i) => i.id === identityId);
-  if (!identity) return false;
+  return withStoreLock(() => {
+    const store = loadStore();
+    const identity = store.identities.find((i) => i.id === identityId);
+    if (!identity) return false;
 
-  const idx = identity.links.findIndex((l) => l.channelType === channelType);
-  if (idx === -1) return false;
+    const idx = identity.links.findIndex((l) => l.channelType === channelType);
+    if (idx === -1) return false;
 
-  identity.links.splice(idx, 1);
-  identity.updatedAt = Date.now();
-  saveStore(store);
+    identity.links.splice(idx, 1);
+    identity.updatedAt = Date.now();
+    saveStore(store);
 
-  logger.info(`[pairing] Unlinked ${channelType} from identity ${identity.name}`);
-  return true;
+    logger.info(`[pairing] Unlinked ${channelType} from identity ${identity.name}`);
+    return true;
+  });
 }
 
 // ============================================================================
@@ -325,39 +392,41 @@ export function generatePairingCode(
   trustLevel: TrustLevel = "semi-trusted",
   expiryMs: number = PAIRING_CODE_EXPIRY_MS,
 ): PairingCode {
-  const store = loadStore();
+  return withStoreLock(() => {
+    const store = loadStore();
 
-  // Find or create identity
-  let identity = store.identities.find((i) => i.name === name);
-  if (!identity) {
-    identity = {
-      id: generateId(),
-      name,
+    // Find or create identity
+    let identity = store.identities.find((i) => i.name === name);
+    if (!identity) {
+      identity = {
+        id: generateId(),
+        name,
+        trustLevel,
+        links: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      store.identities.push(identity);
+    }
+
+    // Revoke any existing pending codes for this identity
+    store.pendingCodes = store.pendingCodes.filter((c) => c.identityId !== identity.id);
+
+    // Generate new code
+    const code: PairingCode = {
+      code: generateCode(),
+      identityId: identity.id,
       trustLevel,
-      links: [],
       createdAt: Date.now(),
-      updatedAt: Date.now(),
+      expiresAt: Date.now() + expiryMs,
     };
-    store.identities.push(identity);
-  }
 
-  // Revoke any existing pending codes for this identity
-  store.pendingCodes = store.pendingCodes.filter((c) => c.identityId !== identity.id);
+    store.pendingCodes.push(code);
+    saveStore(store);
 
-  // Generate new code
-  const code: PairingCode = {
-    code: generateCode(),
-    identityId: identity.id,
-    trustLevel,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + expiryMs,
-  };
-
-  store.pendingCodes.push(code);
-  saveStore(store);
-
-  logger.info(`[pairing] Generated pairing code for ${name} (expires in ${expiryMs / 1000}s)`);
-  return code;
+    logger.info(`[pairing] Generated pairing code for ${name} (expires in ${expiryMs / 1000}s)`);
+    return code;
+  });
 }
 
 /**
@@ -369,63 +438,67 @@ export function verifyPairingCode(
   channelType: string,
   senderId: string,
 ): { identity: WoprIdentity; trustLevel: TrustLevel } | null {
-  const store = loadStore();
-  const now = Date.now();
+  return withStoreLock(() => {
+    const store = loadStore();
+    const now = Date.now();
 
-  // Clean up expired codes
-  store.pendingCodes = store.pendingCodes.filter((c) => c.expiresAt > now);
+    // Clean up expired codes
+    store.pendingCodes = store.pendingCodes.filter((c) => c.expiresAt > now);
 
-  // Find matching code (case-insensitive)
-  const codeUpper = code.toUpperCase();
-  const codeIdx = store.pendingCodes.findIndex((c) => c.code === codeUpper);
-  if (codeIdx === -1) {
-    saveStore(store); // Save cleanup
-    return null;
-  }
+    // Find matching code (case-insensitive)
+    const codeUpper = code.toUpperCase();
+    const codeIdx = store.pendingCodes.findIndex((c) => c.code === codeUpper);
+    if (codeIdx === -1) {
+      saveStore(store); // Save cleanup
+      return null;
+    }
 
-  const pairingCode = store.pendingCodes[codeIdx];
-  const identity = store.identities.find((i) => i.id === pairingCode.identityId);
-  if (!identity) {
-    // Orphaned code — clean up
+    const pairingCode = store.pendingCodes[codeIdx];
+    const identity = store.identities.find((i) => i.id === pairingCode.identityId);
+    if (!identity) {
+      // Orphaned code — clean up
+      store.pendingCodes.splice(codeIdx, 1);
+      saveStore(store);
+      return null;
+    }
+
+    // Check if this sender is already linked to another identity
+    const existingIdentity = store.identities.find(
+      (i) => i.id !== identity.id && i.links.some((l) => l.channelType === channelType && l.senderId === senderId),
+    );
+    if (existingIdentity) {
+      logger.warn(
+        `[pairing] Sender ${channelType}:${senderId} already linked to "${existingIdentity.name}", cannot pair to "${identity.name}"`,
+      );
+      return null;
+    }
+
+    // Link the sender
+    const existingLink = identity.links.find((l) => l.channelType === channelType);
+    if (existingLink) {
+      existingLink.senderId = senderId;
+      existingLink.linkedAt = Date.now();
+    } else {
+      identity.links.push({
+        channelType,
+        senderId,
+        linkedAt: Date.now(),
+      });
+    }
+
+    // Apply trust level from code
+    identity.trustLevel = pairingCode.trustLevel;
+    identity.updatedAt = Date.now();
+
+    // Consume the code
     store.pendingCodes.splice(codeIdx, 1);
     saveStore(store);
-    return null;
-  }
 
-  // Check if this sender is already linked to another identity
-  const existingIdentity = store.identities.find(
-    (i) => i.id !== identity.id && i.links.some((l) => l.channelType === channelType && l.senderId === senderId),
-  );
-  if (existingIdentity) {
-    logger.warn(
-      `[pairing] Sender ${channelType}:${senderId} already linked to "${existingIdentity.name}", cannot pair to "${identity.name}"`,
+    logger.info(
+      `[pairing] Verified pairing code: ${channelType}:${senderId} -> ${identity.name} (${pairingCode.trustLevel})`,
     );
-    return null;
-  }
-
-  // Link the sender
-  const existingLink = identity.links.find((l) => l.channelType === channelType);
-  if (existingLink) {
-    existingLink.senderId = senderId;
-    existingLink.linkedAt = Date.now();
-  } else {
-    identity.links.push({
-      channelType,
-      senderId,
-      linkedAt: Date.now(),
-    });
-  }
-
-  // Apply trust level from code
-  identity.trustLevel = pairingCode.trustLevel;
-  identity.updatedAt = Date.now();
-
-  // Consume the code
-  store.pendingCodes.splice(codeIdx, 1);
-  saveStore(store);
-
-  logger.info(`[pairing] Verified pairing code: ${channelType}:${senderId} -> ${identity.name} (${pairingCode.trustLevel})`);
-  return { identity, trustLevel: pairingCode.trustLevel };
+    return { identity, trustLevel: pairingCode.trustLevel };
+  });
 }
 
 /**
@@ -442,13 +515,15 @@ export function listPendingCodes(): PairingCode[] {
  * Revoke a pending pairing code
  */
 export function revokePairingCode(code: string): boolean {
-  const store = loadStore();
-  const idx = store.pendingCodes.findIndex((c) => c.code === code.toUpperCase());
-  if (idx === -1) return false;
+  return withStoreLock(() => {
+    const store = loadStore();
+    const idx = store.pendingCodes.findIndex((c) => c.code === code.toUpperCase());
+    if (idx === -1) return false;
 
-  store.pendingCodes.splice(idx, 1);
-  saveStore(store);
-  return true;
+    store.pendingCodes.splice(idx, 1);
+    saveStore(store);
+    return true;
+  });
 }
 
 // ============================================================================
@@ -471,6 +546,7 @@ export function resolveTrustLevel(channelType: string, senderId: string): TrustL
 export const _testing = {
   PAIRING_DIR,
   IDENTITIES_FILE,
+  LOCK_FILE,
   PAIRING_CODE_LENGTH,
   PAIRING_CODE_EXPIRY_MS,
   PAIRING_CODE_CHARSET,

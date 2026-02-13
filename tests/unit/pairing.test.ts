@@ -429,6 +429,9 @@ describe("Cross-Channel Scenarios", () => {
 // ============================================================================
 
 describe("Channel Commands", () => {
+  // Need the type import for the test helper
+  type ChannelCommandContext = import("../../src/types.js").ChannelCommandContext;
+
   function makeCtx(args: string[] = [], overrides?: Partial<ChannelCommandContext>): ChannelCommandContext {
     return {
       channel: "test-channel",
@@ -441,8 +444,11 @@ describe("Channel Commands", () => {
     };
   }
 
-  // Need the type import for the test helper
-  type ChannelCommandContext = import("../../src/types.js").ChannelCommandContext;
+  /** Link test-user as owner so admin commands pass auth checks */
+  function makeOwner(): void {
+    const owner = pairing.createIdentity("test-owner", "owner");
+    pairing.linkPlatform(owner.id, "discord", "test-user");
+  }
 
   it("should show usage for empty command", async () => {
     const ctx = makeCtx([]);
@@ -450,7 +456,14 @@ describe("Channel Commands", () => {
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
   });
 
+  it("should deny generate for non-owner", async () => {
+    const ctx = makeCtx(["generate", "alice", "trusted"]);
+    await pairingCommands.pairCommand.handler(ctx);
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Permission denied"));
+  });
+
   it("should generate a pairing code", async () => {
+    makeOwner();
     const ctx = makeCtx(["generate", "alice", "trusted"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Pairing code"));
@@ -458,12 +471,14 @@ describe("Channel Commands", () => {
   });
 
   it("should require name for generate", async () => {
+    makeOwner();
     const ctx = makeCtx(["generate"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
   });
 
   it("should reject invalid trust level for generate", async () => {
+    makeOwner();
     const ctx = makeCtx(["generate", "alice", "superadmin"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Invalid trust level"));
@@ -482,7 +497,14 @@ describe("Channel Commands", () => {
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Invalid or expired"));
   });
 
+  it("should deny list for non-owner", async () => {
+    const ctx = makeCtx(["list"]);
+    await pairingCommands.pairCommand.handler(ctx);
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Permission denied"));
+  });
+
   it("should list identities", async () => {
+    makeOwner();
     pairing.createIdentity("alice", "trusted");
     pairing.createIdentity("bob", "untrusted");
     const ctx = makeCtx(["list"]);
@@ -491,13 +513,23 @@ describe("Channel Commands", () => {
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("bob"));
   });
 
-  it("should show empty list message", async () => {
+  it("should show empty list message when only owner exists", async () => {
+    makeOwner();
     const ctx = makeCtx(["list"]);
     await pairingCommands.pairCommand.handler(ctx);
-    expect(ctx.reply).toHaveBeenCalledWith("No paired identities.");
+    // Owner identity exists, so it shows at least that
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Paired identities"));
+  });
+
+  it("should deny revoke for non-owner", async () => {
+    pairing.createIdentity("alice");
+    const ctx = makeCtx(["revoke", "alice"]);
+    await pairingCommands.pairCommand.handler(ctx);
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Permission denied"));
   });
 
   it("should revoke identity", async () => {
+    makeOwner();
     pairing.createIdentity("alice");
     const ctx = makeCtx(["revoke", "alice"]);
     await pairingCommands.pairCommand.handler(ctx);
@@ -506,6 +538,7 @@ describe("Channel Commands", () => {
   });
 
   it("should handle revoking nonexistent identity", async () => {
+    makeOwner();
     const ctx = makeCtx(["revoke", "ghost"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("not found"));
@@ -527,7 +560,14 @@ describe("Channel Commands", () => {
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("not paired"));
   });
 
+  it("should deny codes for non-owner", async () => {
+    const ctx = makeCtx(["codes"]);
+    await pairingCommands.pairCommand.handler(ctx);
+    expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Permission denied"));
+  });
+
   it("should list pending codes", async () => {
+    makeOwner();
     pairing.generatePairingCode("alice", "trusted");
     const ctx = makeCtx(["codes"]);
     await pairingCommands.pairCommand.handler(ctx);
@@ -535,6 +575,7 @@ describe("Channel Commands", () => {
   });
 
   it("should show empty codes message", async () => {
+    makeOwner();
     const ctx = makeCtx(["codes"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith("No pending pairing codes.");

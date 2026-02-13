@@ -23,10 +23,15 @@ import {
   listIdentities,
   listPendingCodes,
   removeIdentity,
+  resolveTrustLevel,
   verifyPairingCode,
 } from "./pairing.js";
 
 const VALID_TRUST_LEVELS: TrustLevel[] = ["owner", "trusted", "semi-trusted", "untrusted"];
+
+function isOwner(ctx: ChannelCommandContext): boolean {
+  return resolveTrustLevel(ctx.channelType, ctx.sender) === "owner";
+}
 
 /**
  * The main !pair command handler
@@ -67,6 +72,11 @@ async function handlePairCommand(ctx: ChannelCommandContext): Promise<void> {
 }
 
 async function handleGenerate(ctx: ChannelCommandContext): Promise<void> {
+  if (!isOwner(ctx)) {
+    await ctx.reply("Permission denied. Only owners can generate pairing codes.");
+    return;
+  }
+
   const name = ctx.args[1];
   if (!name) {
     await ctx.reply("Usage: !pair generate <name> [trustLevel]\nTrust levels: owner, trusted, semi-trusted, untrusted");
@@ -114,6 +124,11 @@ async function handleVerify(ctx: ChannelCommandContext): Promise<void> {
 }
 
 async function handleList(ctx: ChannelCommandContext): Promise<void> {
+  if (!isOwner(ctx)) {
+    await ctx.reply("Permission denied. Only owners can list identities.");
+    return;
+  }
+
   const identities = listIdentities();
   if (identities.length === 0) {
     await ctx.reply("No paired identities.");
@@ -129,6 +144,11 @@ async function handleList(ctx: ChannelCommandContext): Promise<void> {
 }
 
 async function handleRevoke(ctx: ChannelCommandContext): Promise<void> {
+  if (!isOwner(ctx)) {
+    await ctx.reply("Permission denied. Only owners can revoke identities.");
+    return;
+  }
+
   const name = ctx.args[1];
   if (!name) {
     await ctx.reply("Usage: !pair revoke <name>");
@@ -159,6 +179,11 @@ async function handleWhois(ctx: ChannelCommandContext): Promise<void> {
 }
 
 async function handleCodes(ctx: ChannelCommandContext): Promise<void> {
+  if (!isOwner(ctx)) {
+    await ctx.reply("Permission denied. Only owners can list pairing codes.");
+    return;
+  }
+
   const codes = listPendingCodes();
   if (codes.length === 0) {
     await ctx.reply("No pending pairing codes.");
