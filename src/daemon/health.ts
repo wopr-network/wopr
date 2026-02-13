@@ -9,7 +9,7 @@ import { EventEmitter } from "node:events";
 import { providerRegistry } from "../core/providers.js";
 import { getSessions } from "../core/sessions.js";
 import { logger } from "../logger.js";
-import { loadedPlugins, pluginManifests } from "../plugins/state.js";
+import { loadedPlugins } from "../plugins/state.js";
 
 export type HealthStatus = "healthy" | "degraded" | "unhealthy";
 
@@ -152,17 +152,13 @@ export class HealthMonitor extends EventEmitter {
     const now = new Date().toISOString();
 
     for (const [name] of loadedPlugins) {
-      const manifest = pluginManifests.get(name);
-      const hasHealthEndpoint = !!manifest?.lifecycle?.healthEndpoint;
-
       // Plugin is loaded and running -- mark healthy.
-      // If it exposes a lifecycle healthEndpoint, a future iteration could
-      // call it, but for now loaded == healthy.
+      // If it exposes a lifecycle healthEndpoint (via pluginManifests),
+      // a future iteration could call it, but for now loaded == healthy.
       results.push({
         name,
         status: "healthy",
         lastCheck: now,
-        ...(hasHealthEndpoint ? {} : {}),
       });
     }
 

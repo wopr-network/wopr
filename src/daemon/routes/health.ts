@@ -20,7 +20,7 @@ export function createHealthzRouter(monitor: HealthMonitor): Hono {
   router.get("/history", (c) => {
     const limitParam = c.req.query("limit");
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const history = monitor.getHistory(limit);
+    const history = monitor.getHistory(limit && !isNaN(limit) && limit > 0 ? limit : undefined);
     return c.json({ history });
   });
 
