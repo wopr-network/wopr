@@ -42,6 +42,7 @@ import { openaiRouter } from "./routes/openai.js";
 import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
 import { sessionsRouter } from "./routes/sessions.js";
+import { observabilityRouter } from "./routes/observability.js";
 import { skillsRouter } from "./routes/skills.js";
 import { templatesRouter } from "./routes/templates.js";
 import {
@@ -111,6 +112,7 @@ export function createApp() {
   app.route("/hooks", hooksRouter);
   app.route("/providers", providersRouter);
   app.route("/templates", templatesRouter);
+  app.route("/observability", observabilityRouter);
   app.route("/v1", openaiRouter);
 
   // Per-instance plugin management (WOP-203)
