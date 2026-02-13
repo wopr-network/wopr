@@ -3,6 +3,8 @@
  *
  * Records per-instance, per-channel, per-provider, and platform-wide metrics.
  * Stores time-series data in SQLite for persistence and query.
+ *
+ * Inlined from src/platform/observability/metrics.ts as part of WOP-297.
  */
 
 import { DatabaseSync } from "node:sqlite";

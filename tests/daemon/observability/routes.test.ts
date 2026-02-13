@@ -12,7 +12,7 @@ vi.mock("../../src/paths.js", () => ({
 }));
 
 import { observabilityRouter, closeMetricsStore } from "../../../src/daemon/routes/observability.js";
-import { _resetLogsForTesting, healthMonitor, recordLog } from "../../../src/platform/observability/index.js";
+import { _resetLogsForTesting, healthMonitor, recordLog } from "../../../src/daemon/observability/index.js";
 
 describe("observability API routes", () => {
   let app: Hono;
