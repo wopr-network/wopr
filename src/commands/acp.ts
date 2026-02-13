@@ -30,16 +30,21 @@ export async function acpCommand(args: string[]): Promise<void> {
 
       const streamCb = options?.onStream;
 
-      const result = await client.inject(session, message, (msg: StreamMessage) => {
-        if (msg.type === "text") {
-          chunks.push(msg.content);
-          if (streamCb) streamCb({ type: "text", content: msg.content });
-        } else if (msg.type === "complete") {
-          const data = msg as StreamMessage & { sessionId?: string; cost?: number };
-          sessionId = data.sessionId ?? "";
-          cost = data.cost ?? 0;
-        }
-      });
+      const result = await client.inject(
+        session,
+        message,
+        (msg: StreamMessage) => {
+          if (msg.type === "text") {
+            chunks.push(msg.content);
+            if (streamCb) streamCb({ type: "text", content: msg.content });
+          } else if (msg.type === "complete") {
+            const data = msg as StreamMessage & { sessionId?: string; cost?: number };
+            sessionId = data.sessionId ?? "";
+            cost = data.cost ?? 0;
+          }
+        },
+        { from: options?.from },
+      );
 
       response = result.response || chunks.join("");
       sessionId = result.sessionId || sessionId;

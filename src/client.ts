@@ -103,7 +103,15 @@ export class WoprClient {
     return this.request(url);
   }
 
-  async inject(session: string, message: string, onStream?: StreamCallback): Promise<InjectResult> {
+  async inject(
+    session: string,
+    message: string,
+    onStream?: StreamCallback,
+    options?: { from?: string },
+  ): Promise<InjectResult> {
+    const bodyPayload: Record<string, unknown> = { message };
+    if (options?.from) bodyPayload.from = options.from;
+
     if (onStream) {
       // Use SSE for streaming
       const res = await fetch(`${this.baseUrl}/sessions/${encodeURIComponent(session)}/inject`, {
@@ -113,7 +121,7 @@ export class WoprClient {
           Accept: "text/event-stream",
           ...this.authHeaders(),
         },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify(bodyPayload),
       });
 
       if (!res.ok) {
@@ -162,7 +170,7 @@ export class WoprClient {
     // Non-streaming request
     return this.request(`/sessions/${encodeURIComponent(session)}/inject`, {
       method: "POST",
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(bodyPayload),
     });
   }
 

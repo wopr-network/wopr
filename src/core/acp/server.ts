@@ -239,13 +239,11 @@ export class AcpServer {
     const fullMessage = editorContext ? `${editorContext}\n\n${params.message}` : params.message;
 
     // Inject into WOPR session with streaming
-    const chunks: string[] = [];
     const injectResult = await this.bridge.inject(woprSession, fullMessage, {
       silent: true,
       from: "acp",
       onStream: (streamMsg) => {
         if (streamMsg.type === "text") {
-          chunks.push(streamMsg.content);
           // Send streaming notification
           this.sendNotification("chat/streamChunk", {
             sessionId,
@@ -301,7 +299,10 @@ export class AcpServer {
       return;
     }
 
-    updateEditorContext(result.data.params.sessionId, result.data.params);
+    const sessionId = result.data.params.sessionId;
+    // Ensure session is tracked so close() will clear its context
+    this.resolveWoprSession(sessionId);
+    updateEditorContext(sessionId, result.data.params);
     this.send(createResponse(id, { ok: true }));
   }
 
