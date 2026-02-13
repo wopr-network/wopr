@@ -6,6 +6,7 @@ export { authRouter } from "./auth.js";
 export { cronsRouter } from "./crons.js";
 export { hooksRouter } from "./hooks.js";
 export { instancePluginsRouter } from "./instance-plugins.js";
+export { instancesRouter } from "./instances.js";
 export { marketplaceRouter } from "./marketplace.js";
 export { openaiRouter } from "./openai.js";
 export { pluginsRouter } from "./plugins.js";
