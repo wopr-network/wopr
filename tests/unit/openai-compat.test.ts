@@ -43,6 +43,7 @@ vi.mock("../../src/core/sessions.js", () => ({
     }
     return { response: "Hello world", sessionId: "test-session-id", cost: 0.001 };
   }),
+  deleteSession: vi.fn(async () => {}),
   setSessionContext: vi.fn(),
   setSessionProvider: vi.fn(),
   getSessionProvider: vi.fn(() => null),
@@ -65,7 +66,7 @@ vi.mock("../../src/logger.js", () => ({
 
 import { Hono } from "hono";
 import { openaiRouter } from "../../src/daemon/routes/openai.js";
-import { inject, setSessionContext, setSessionProvider } from "../../src/core/sessions.js";
+import { deleteSession, inject, setSessionContext, setSessionProvider } from "../../src/core/sessions.js";
 import { providerRegistry } from "../../src/core/providers.js";
 
 function createTestApp() {
@@ -102,6 +103,7 @@ describe("OpenAI Compatibility Layer", () => {
       }
       return { response: "Hello world", sessionId: "test-session-id", cost: 0.001 };
     });
+    vi.mocked(deleteSession).mockResolvedValue(undefined);
   });
 
   // ==========================================================================
@@ -210,6 +212,26 @@ describe("OpenAI Compatibility Layer", () => {
         expect.any(String),
         "First question\n\n[Assistant]: First answer\n\nFollow-up",
         expect.any(Object),
+      );
+    });
+
+    it("cleans up ephemeral session after request completes", async () => {
+      const app = createTestApp();
+      await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+      });
+
+      // Wait for async cleanup
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(deleteSession).toHaveBeenCalledWith(
+        expect.stringMatching(/^openai-/),
+        "request-complete",
       );
     });
   });
@@ -334,6 +356,50 @@ describe("OpenAI Compatibility Layer", () => {
       // Final chunk has finish_reason: "stop"
       const finalChunk = events[events.length - 1];
       expect(finalChunk.choices[0].finish_reason).toBe("stop");
+    });
+
+    it("sets proper SSE headers", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user", content: "Hello" }],
+          stream: true,
+        }),
+      });
+
+      expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+      expect(res.headers.get("Cache-Control")).toBe("no-cache");
+      expect(res.headers.get("Connection")).toBe("keep-alive");
+
+      // Consume the body to avoid warnings
+      await res.text();
+    });
+
+    it("cleans up ephemeral session after streaming completes", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user", content: "Hello" }],
+          stream: true,
+        }),
+      });
+
+      // Consume the stream to let it complete
+      await res.text();
+
+      // Wait for async cleanup
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(deleteSession).toHaveBeenCalledWith(
+        expect.stringMatching(/^openai-/),
+        "request-complete",
+      );
     });
   });
 

@@ -10,11 +10,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { providerRegistry } from "../../core/providers.js";
-import {
-  inject,
-  setSessionContext,
-  setSessionProvider,
-} from "../../core/sessions.js";
+import { deleteSession, inject, setSessionContext, setSessionProvider } from "../../core/sessions.js";
 import { createInjectionSource } from "../../security/index.js";
 import type { ProviderConfig } from "../../types/provider.js";
 
@@ -118,7 +114,13 @@ openaiRouter.post("/chat/completions", async (c) => {
   }
   if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
     return c.json(
-      { error: { message: "'messages' must be a non-empty array", type: "invalid_request_error", code: "missing_field" } },
+      {
+        error: {
+          message: "'messages' must be a non-empty array",
+          type: "invalid_request_error",
+          code: "missing_field",
+        },
+      },
       400,
     );
   }
@@ -151,10 +153,15 @@ openaiRouter.post("/chat/completions", async (c) => {
 
   if (body.stream) {
     // ---- Streaming response (SSE) ----
+    c.header("Content-Type", "text/event-stream");
+    c.header("Cache-Control", "no-cache");
+    c.header("Connection", "keep-alive");
+
     return stream(c, async (s) => {
-      c.header("Content-Type", "text/event-stream");
-      c.header("Cache-Control", "no-cache");
-      c.header("Connection", "keep-alive");
+      // Clean up the ephemeral session when the client disconnects
+      s.onAbort(() => {
+        deleteSession(sessionName, "client-disconnect").catch(() => {});
+      });
 
       try {
         await inject(sessionName, userPrompt, {
@@ -206,6 +213,9 @@ openaiRouter.post("/chat/completions", async (c) => {
         };
         s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
         s.write("data: [DONE]\n\n");
+      } finally {
+        // Clean up the ephemeral session after streaming completes
+        await deleteSession(sessionName, "request-complete").catch(() => {});
       }
     });
   }
@@ -249,6 +259,9 @@ openaiRouter.post("/chat/completions", async (c) => {
       },
       500,
     );
+  } finally {
+    // Clean up the ephemeral session after request completes
+    deleteSession(sessionName, "request-complete").catch(() => {});
   }
 });
 
