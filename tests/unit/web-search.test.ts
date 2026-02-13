@@ -238,69 +238,67 @@ describe("XaiSearchProvider", () => {
 // ---------------------------------------------------------------------------
 
 describe("SSRF protection", () => {
-  // We test this by importing the web-search module and checking that private URLs
-  // are filtered from results. The filterResults function is internal, so we test
-  // through the tool's behavior.
+  let isPrivateUrl: (urlStr: string) => boolean;
 
-  it("should block localhost URLs", async () => {
-    // We test the isPrivateUrl logic indirectly by checking URL patterns
-    const privateUrls = [
-      "http://localhost/admin",
-      "http://127.0.0.1/secret",
-      "http://[::1]/internal",
-      "http://169.254.169.254/latest/meta-data",
-      "http://metadata.google.internal/computeMetadata/v1",
-      "http://10.0.0.1/internal",
-      "http://172.16.0.1/internal",
-      "http://192.168.1.1/admin",
-      "ftp://example.com/file",
-      "file:///etc/passwd",
-    ];
+  beforeEach(async () => {
+    vi.resetModules();
+    const mod = await import("../../src/core/a2a-tools/web-search.js");
+    isPrivateUrl = mod.isPrivateUrl;
+  });
 
-    const safeUrls = [
-      "https://example.com",
-      "https://google.com/search",
-      "http://public-site.org",
-    ];
+  it("should block private/internal hostnames", () => {
+    expect(isPrivateUrl("http://localhost/admin")).toBe(true);
+    expect(isPrivateUrl("http://127.0.0.1/secret")).toBe(true);
+    expect(isPrivateUrl("http://[::1]/internal")).toBe(true);
+    expect(isPrivateUrl("http://169.254.169.254/latest/meta-data")).toBe(true);
+    expect(isPrivateUrl("http://metadata.google.internal/computeMetadata/v1")).toBe(true);
+    expect(isPrivateUrl("http://0.0.0.0/")).toBe(true);
+  });
 
-    // Import the module to access the filtering logic
-    // Since isPrivateUrl is not exported, we test it through the provider flow
-    // by mocking a provider that returns mixed results
+  it("should block private CIDR ranges", () => {
+    expect(isPrivateUrl("http://10.0.0.1/internal")).toBe(true);
+    expect(isPrivateUrl("http://172.16.0.1/internal")).toBe(true);
+    expect(isPrivateUrl("http://192.168.1.1/admin")).toBe(true);
+    expect(isPrivateUrl("http://100.64.1.1/")).toBe(true);
+    expect(isPrivateUrl("http://198.18.0.1/")).toBe(true);
+  });
 
-    const { GoogleSearchProvider } = await import(
-      "../../src/core/a2a-tools/web-search-providers/google.js"
-    );
+  it("should block non-http(s) schemes", () => {
+    expect(isPrivateUrl("ftp://example.com/file")).toBe(true);
+    expect(isPrivateUrl("file:///etc/passwd")).toBe(true);
+  });
 
-    // Verify safe URLs parse correctly
-    for (const safeUrl of safeUrls) {
-      const parsed = new URL(safeUrl);
-      expect(parsed.hostname).not.toBe("localhost");
-      expect(parsed.hostname).not.toBe("127.0.0.1");
-    }
+  it("should block IPv6-mapped IPv4 private addresses", () => {
+    expect(isPrivateUrl("http://[::ffff:127.0.0.1]/")).toBe(true);
+    expect(isPrivateUrl("http://[::ffff:10.0.0.1]/")).toBe(true);
+    expect(isPrivateUrl("http://[::ffff:192.168.1.1]/")).toBe(true);
+    expect(isPrivateUrl("http://[::ffff:172.16.0.1]/")).toBe(true);
+    expect(isPrivateUrl("http://[::ffff:169.254.169.254]/")).toBe(true);
+  });
 
-    // Verify private URLs are identifiable
-    for (const privateUrl of privateUrls) {
-      try {
-        const parsed = new URL(privateUrl);
-        const hostname = parsed.hostname.toLowerCase();
-        const isPrivate =
-          hostname === "localhost" ||
-          hostname === "127.0.0.1" ||
-          hostname === "::1" ||
-          hostname === "[::1]" ||
-          hostname === "169.254.169.254" ||
-          hostname === "metadata.google.internal" ||
-          hostname.startsWith("10.") ||
-          hostname.startsWith("172.16.") ||
-          hostname.startsWith("192.168.") ||
-          parsed.protocol === "ftp:" ||
-          parsed.protocol === "file:";
-        expect(isPrivate).toBe(true);
-      } catch {
-        // Malformed URLs should also be blocked
-        expect(true).toBe(true);
-      }
-    }
+  it("should block numeric IP encodings (decimal, hex)", () => {
+    // 2130706433 = 127.0.0.1
+    expect(isPrivateUrl("http://2130706433/")).toBe(true);
+    // 0x7f000001 = 127.0.0.1
+    expect(isPrivateUrl("http://0x7f000001/")).toBe(true);
+    // 167772161 = 10.0.0.1
+    expect(isPrivateUrl("http://167772161/")).toBe(true);
+  });
+
+  it("should allow safe public URLs", () => {
+    expect(isPrivateUrl("https://example.com")).toBe(false);
+    expect(isPrivateUrl("https://google.com/search")).toBe(false);
+    expect(isPrivateUrl("http://public-site.org")).toBe(false);
+  });
+
+  it("should block malformed URLs", () => {
+    expect(isPrivateUrl("not-a-url")).toBe(true);
+    expect(isPrivateUrl("")).toBe(true);
+  });
+
+  it("should allow IPv6-mapped public addresses", () => {
+    // ::ffff:8.8.8.8 is a public address
+    expect(isPrivateUrl("http://[::ffff:8.8.8.8]/")).toBe(false);
   });
 });
 
