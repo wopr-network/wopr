@@ -39,6 +39,7 @@ import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { skillsRouter } from "./routes/skills.js";
+import { userAuthRouter } from "./routes/user-auth.js";
 import { handleWebSocketClose, handleWebSocketMessage, setupWebSocket } from "./ws.js";
 
 const DEFAULT_PORT = parseInt(process.env.WOPR_DAEMON_PORT || "7437", 10);
@@ -91,6 +92,7 @@ export function createApp() {
 
   // Mount routers
   app.route("/auth", authRouter);
+  app.route("/api/auth", userAuthRouter);
   app.route("/config", configRouter);
   app.route("/sessions", sessionsRouter);
   app.route("/crons", cronsRouter);
