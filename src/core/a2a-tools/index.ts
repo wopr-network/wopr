@@ -24,4 +24,5 @@ export { createMemoryTools } from "./memory.js";
 export { createNotifyTools } from "./notify.js";
 export { createSecurityTools } from "./security.js";
 export { createSessionTools } from "./sessions.js";
+export { createImageGenerateTools } from "./image-generate.js";
 export { createSoulTools } from "./soul.js";

@@ -63,6 +63,15 @@ export interface WoprConfig {
   memory?: Partial<import("../memory/types.js").MemoryConfig>;
   /** SOUL_EVIL personality override configuration */
   soulEvil?: SoulEvilConfig;
+  /** Tool-specific configuration */
+  tools?: {
+    imageGeneration?: {
+      /** Provider name (default: openai-dalle) */
+      provider?: string;
+      /** API key for the image generation provider */
+      apiKey?: string;
+    };
+  };
   /**
    * Sandbox configuration for Docker-based isolation
    */

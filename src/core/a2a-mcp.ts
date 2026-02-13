@@ -17,6 +17,7 @@ import {
   createEventTools,
   createHttpExecTools,
   createIdentityTools,
+  createImageGenerateTools,
   createMemoryTools,
   createNotifyTools,
   createSecurityTools,
@@ -69,6 +70,7 @@ export function listA2ATools(): string[] {
     "http_fetch",
     "exec_command",
     "notify",
+    "image_generate",
   ];
   return [...coreTools, ...pluginTools.keys()];
 }
@@ -95,6 +97,7 @@ export function getA2AMcpServer(sessionName: string): any {
     ...createSecurityTools(sessionName),
     ...createHttpExecTools(sessionName),
     ...createNotifyTools(sessionName),
+    ...createImageGenerateTools(sessionName),
   ];
 
   // Add plugin tools
