@@ -14,7 +14,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import { logger } from "../../logger.js";
 import { ensureToken } from "../auth-token.js";
-import { auth } from "../better-auth.js";
+import { getAuth } from "../better-auth.js";
 
 // WebSocket upgrade paths skip bearer auth — authentication happens
 // at the WebSocket message level via first-message ticket exchange
@@ -56,8 +56,9 @@ export function bearerAuth(): MiddlewareHandler {
       return next();
     }
 
-    // Skip Better Auth routes — they handle their own authentication
-    if (c.req.path.startsWith("/api/auth")) {
+    // Skip Better Auth routes — they handle their own authentication.
+    // Use exact prefix match to avoid matching unrelated paths like /api/authentication.
+    if (c.req.path === "/api/auth" || c.req.path.startsWith("/api/auth/")) {
       return next();
     }
 
@@ -102,7 +103,7 @@ export function requireAuth(): MiddlewareHandler {
 
     // Fall back to Better Auth session
     try {
-      const session = await auth.api.getSession({
+      const session = await getAuth().api.getSession({
         headers: c.req.raw.headers,
       });
       if (session) {

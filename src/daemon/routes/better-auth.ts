@@ -11,7 +11,7 @@
  */
 
 import { Hono } from "hono";
-import { auth } from "../better-auth.js";
+import { getAuth } from "../better-auth.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 
 export const betterAuthRouter = new Hono();
@@ -25,6 +25,6 @@ betterAuthRouter.use("/sign-in/*", signInLimiter);
 betterAuthRouter.use("/sign-up/*", signUpLimiter);
 betterAuthRouter.use("/forgot-password/*", forgotPasswordLimiter);
 
-betterAuthRouter.on(["POST", "GET"], "/*", (c) => {
-  return auth.handler(c.req.raw);
+betterAuthRouter.all("/*", (c) => {
+  return getAuth().handler(c.req.raw);
 });
