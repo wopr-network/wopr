@@ -23,6 +23,12 @@ import { getAuth } from "../better-auth.js";
 // at the WebSocket message level via first-message ticket exchange
 const SKIP_AUTH_PATHS = new Set(["/health", "/ready", "/ws", "/api/ws", "/healthz", "/healthz/history"]);
 
+/** Map an API key scope to its corresponding auth role. */
+function scopeToRole(scope: string): string {
+  if (scope === "full") return "admin";
+  return "viewer";
+}
+
 // Cache the token so we don't hit disk on every request
 let cachedToken: string | null = null;
 
@@ -31,6 +37,20 @@ function getDaemonToken(): string {
     cachedToken = ensureToken();
   }
   return cachedToken;
+}
+
+/**
+ * Validate a wopr_ API key token and set user/role context on the Hono context.
+ * Returns true if the key was valid and context was set, false otherwise.
+ */
+function authenticateApiKey(c: Parameters<MiddlewareHandler>[0], token: string): boolean {
+  const keyUser = validateApiKey(token);
+  if (!keyUser) return false;
+  c.set("user", { id: keyUser.id });
+  c.set("authMethod", "api_key");
+  c.set("apiKeyScope", keyUser.scope);
+  c.set("role", scopeToRole(keyUser.scope));
+  return true;
 }
 
 function isDaemonBearerValid(authHeader: string): boolean {
@@ -73,14 +93,7 @@ export function bearerAuth(): MiddlewareHandler {
     // Accept wopr_ prefixed API keys (WOP-209)
     const token = authHeader.slice(7);
     if (token.startsWith("wopr_")) {
-      const keyUser = validateApiKey(token);
-      if (keyUser) {
-        c.set("user", { id: keyUser.id });
-        c.set("authMethod", "api_key");
-        c.set("apiKeyScope", keyUser.scope);
-        c.set("role", "admin");
-        return next();
-      }
+      if (authenticateApiKey(c, token)) return next();
       return c.json({ error: "Invalid API key" }, 401);
     }
 
@@ -116,14 +129,7 @@ export function requireAuth(): MiddlewareHandler {
 
       // Check wopr_ API keys (WOP-209)
       if (token.startsWith("wopr_")) {
-        const keyUser = validateApiKey(token);
-        if (keyUser) {
-          c.set("user", { id: keyUser.id });
-          c.set("authMethod", "api_key");
-          c.set("apiKeyScope", keyUser.scope);
-          c.set("role", "admin");
-          return next();
-        }
+        if (authenticateApiKey(c, token)) return next();
         return c.json({ error: "Invalid API key" }, 401);
       }
 

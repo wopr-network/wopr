@@ -15,6 +15,7 @@ import { createRequire } from "node:module";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { WOPR_HOME } from "../paths.js";
+import { logger } from "../logger.js";
 
 const _require = createRequire(import.meta.url);
 const { DatabaseSync } = _require("node:sqlite");
@@ -25,6 +26,7 @@ const KEY_PREFIX = "wopr_";
 const KEY_RANDOM_BYTES = 24; // 24 bytes = 48 hex chars
 const SCRYPT_SALT_BYTES = 16;
 const SCRYPT_KEY_LEN = 32;
+const MAX_KEYS_PER_USER = 25;
 
 export type ApiKeyScope = "full" | "read-only" | `instance:${string}`;
 
@@ -56,6 +58,13 @@ export interface ValidatedKeyUser {
   scope: string;
 }
 
+export class KeyLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KeyLimitError";
+  }
+}
+
 let db: InstanceType<typeof DatabaseSync> | undefined;
 
 function getDb(): InstanceType<typeof DatabaseSync> {
@@ -74,6 +83,8 @@ function getDb(): InstanceType<typeof DatabaseSync> {
         expires_at INTEGER
       )
     `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_api_keys_key_prefix ON api_keys (key_prefix)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys (user_id)`);
   }
   return db;
 }
@@ -112,6 +123,14 @@ export function generateApiKey(
   expiresAt?: number | null,
 ): { rawKey: string; keyInfo: ApiKeyInfo } {
   const d = getDb();
+
+  // Enforce per-user key limit (WOP-209 finding #6)
+  const countStmt = d.prepare(`SELECT COUNT(*) as cnt FROM api_keys WHERE user_id = ?`);
+  const { cnt } = countStmt.get(userId) as { cnt: number };
+  if (cnt >= MAX_KEYS_PER_USER) {
+    throw new KeyLimitError(`User has reached the maximum of ${MAX_KEYS_PER_USER} API keys`);
+  }
+
   const id = randomBytes(16).toString("hex");
   const rawRandom = randomBytes(KEY_RANDOM_BYTES).toString("hex");
   const rawKey = `${KEY_PREFIX}${rawRandom}`;
@@ -124,6 +143,8 @@ export function generateApiKey(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   stmt.run(id, userId, name, keyHash, keyPrefix, scope, now, expiresAt ?? null);
+
+  logger.info(`[api-keys] Key created: id=${id} user=${userId} scope=${scope} name="${name}"`);
 
   return {
     rawKey,
@@ -168,6 +189,9 @@ export function revokeApiKey(keyId: string, userId: string): boolean {
   const d = getDb();
   const stmt = d.prepare(`DELETE FROM api_keys WHERE id = ? AND user_id = ?`);
   const result = stmt.run(keyId, userId);
+  if (result.changes > 0) {
+    logger.info(`[api-keys] Key revoked: id=${keyId} user=${userId}`);
+  }
   return result.changes > 0;
 }
 
@@ -213,6 +237,7 @@ export function validateApiKey(rawKey: string): ValidatedKeyUser | null {
     }
   }
 
+  logger.warn(`[api-keys] Validation failed for key prefix=${prefix}`);
   return null;
 }
 

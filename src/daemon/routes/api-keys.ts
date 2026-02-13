@@ -9,7 +9,7 @@
  */
 
 import { Hono } from "hono";
-import { generateApiKey, listApiKeys, revokeApiKey } from "../api-keys.js";
+import { generateApiKey, listApiKeys, revokeApiKey, KeyLimitError } from "../api-keys.js";
 import type { ApiKeyScope } from "../api-keys.js";
 
 type AuthEnv = {
@@ -42,6 +42,11 @@ apiKeysRouter.post("/", async (c) => {
     return c.json({ error: "User context required — API keys cannot be created with daemon token auth" }, 403);
   }
 
+  // API keys cannot mint new keys — session-based auth required (WOP-209 finding #3)
+  if (c.get("authMethod") === "api_key") {
+    return c.json({ error: "API keys cannot create new API keys — use session auth" }, 403);
+  }
+
   let body: Record<string, unknown>;
   try {
     body = await c.req.json();
@@ -67,7 +72,16 @@ apiKeysRouter.post("/", async (c) => {
     return c.json({ error: "expiresAt must be a future timestamp in milliseconds" }, 400);
   }
 
-  const { rawKey, keyInfo } = generateApiKey(user.id, name.trim(), scope as ApiKeyScope, expiresAt);
+  let rawKey: string;
+  let keyInfo: ReturnType<typeof generateApiKey>["keyInfo"];
+  try {
+    ({ rawKey, keyInfo } = generateApiKey(user.id, name.trim(), scope as ApiKeyScope, expiresAt));
+  } catch (err) {
+    if (err instanceof KeyLimitError) {
+      return c.json({ error: err.message }, 429);
+    }
+    throw err;
+  }
 
   return c.json(
     {
@@ -98,6 +112,11 @@ apiKeysRouter.delete("/:id", (c) => {
   const user = c.get("user");
   if (!user?.id) {
     return c.json({ error: "User context required" }, 403);
+  }
+
+  // API keys cannot revoke keys — session-based auth required (WOP-209 finding #3)
+  if (c.get("authMethod") === "api_key") {
+    return c.json({ error: "API keys cannot revoke keys — use session auth" }, 403);
   }
 
   const keyId = c.req.param("id");
