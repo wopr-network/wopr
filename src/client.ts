@@ -107,10 +107,11 @@ export class WoprClient {
     session: string,
     message: string,
     onStream?: StreamCallback,
-    options?: { from?: string },
+    options?: { from?: string; silent?: boolean },
   ): Promise<InjectResult> {
     const bodyPayload: Record<string, unknown> = { message };
     if (options?.from) bodyPayload.from = options.from;
+    if (options?.silent != null) bodyPayload.silent = options.silent;
 
     if (onStream) {
       // Use SSE for streaming

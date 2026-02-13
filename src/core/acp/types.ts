@@ -4,7 +4,7 @@
  * Defines the wire protocol for IDE integration over NDJSON/stdio.
  * Compatible with Zed, VS Code, and other editors supporting ACP.
  */
-import { z } from "zod/v4";
+import { z } from "zod";
 
 // ============================================================================
 // Protocol Version

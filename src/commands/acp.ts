@@ -43,7 +43,7 @@ export async function acpCommand(args: string[]): Promise<void> {
             cost = data.cost ?? 0;
           }
         },
-        { from: options?.from },
+        { from: options?.from, silent: options?.silent },
       );
 
       response = result.response || chunks.join("");
