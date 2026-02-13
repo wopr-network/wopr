@@ -24,6 +24,7 @@ export function getAuthDb(): DatabaseSync {
   const { DatabaseSync: DB } = require("node:sqlite");
   const dbPath = join(WOPR_HOME, "auth.sqlite");
   _db = new DB(dbPath) as DatabaseSync;
+  _db.exec("PRAGMA foreign_keys = ON");
 
   ensureAuthSchema(_db);
   return _db;

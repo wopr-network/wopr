@@ -73,7 +73,7 @@ describe("User Auth Service", () => {
 
       await expect(
         registerUser({ email, password: "anotherpass1" }),
-      ).rejects.toThrow("Email already registered");
+      ).rejects.toThrow("Registration could not be completed");
     });
 
     it("should reject invalid email format", async () => {
@@ -270,7 +270,7 @@ describe("User Auth Routes", () => {
       expect(res.status).toBe(400);
     });
 
-    it("should return 409 for duplicate email", async () => {
+    it("should return 200 with generic message for duplicate email (prevents enumeration)", async () => {
       const app = createTestApp();
       const res = await app.request("/api/auth/register", {
         method: "POST",
@@ -281,7 +281,9 @@ describe("User Auth Routes", () => {
         }),
       });
 
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.message).toContain("If this email is available");
     });
   });
 

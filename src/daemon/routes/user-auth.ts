@@ -35,7 +35,15 @@ export function createUserAuthRouter(): Hono {
       windowMs: 60_000,
       limit: 10,
       standardHeaders: "draft-6",
-      keyGenerator: (c) => c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? "anonymous",
+      keyGenerator: (c) => {
+        const xff = c.req.header("x-forwarded-for");
+        // Only trust the last entry (closest proxy) to prevent bypass via header rotation
+        if (xff) {
+          const parts = xff.split(",");
+          return parts[parts.length - 1].trim();
+        }
+        return c.req.header("x-real-ip") ?? "anonymous";
+      },
       handler: (c) => {
         c.header("Retry-After", "60");
         return c.json({ error: "Too many requests", retryAfter: 60 }, 429);
@@ -57,7 +65,11 @@ export function createUserAuthRouter(): Hono {
       return c.json({ user: result.user }, 201);
     } catch (err) {
       if (err instanceof AuthError) {
-        return c.json({ error: err.message }, err.statusCode as 400 | 401 | 409);
+        // Return generic 200 for duplicate emails to prevent user enumeration
+        if (err.statusCode === 409) {
+          return c.json({ message: "If this email is available, registration will proceed. Check your inbox." }, 200);
+        }
+        return c.json({ error: err.message }, err.statusCode as 400 | 401);
       }
       throw err;
     }

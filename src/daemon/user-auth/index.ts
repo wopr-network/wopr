@@ -57,10 +57,10 @@ export async function registerUser(params: {
   const db = getAuthDb();
   const email = params.email.toLowerCase().trim();
 
-  // Check email uniqueness
+  // Check email uniqueness — return generic response to prevent user enumeration
   const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email) as UserRow | undefined;
   if (existing) {
-    throw new AuthError("Email already registered", 409);
+    throw new AuthError("Registration could not be completed", 409);
   }
 
   // Validate email format
