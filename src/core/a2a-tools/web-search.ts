@@ -4,6 +4,7 @@
  * Multi-provider web search with fallback chain, rate limiting, and SSRF protection.
  */
 
+import { isIP } from "node:net";
 import { centralConfig, logger, tool, withSecurityCheck, z } from "./_base.js";
 import {
   BraveSearchProvider,
@@ -28,6 +29,8 @@ const PRIVATE_HOSTS = new Set([
 
 const PRIVATE_CIDR_PREFIXES = [
   "10.",
+  "127.",
+  "169.254.",
   "172.16.",
   "172.17.",
   "172.18.",
@@ -113,6 +116,20 @@ function isNumericPrivateIp(hostname: string): boolean {
   return false;
 }
 
+/**
+ * Check if a bare IPv6 address (without brackets) belongs to a private/reserved range.
+ */
+function isPrivateIPv6(bare: string): boolean {
+  const lower = bare.toLowerCase();
+  // ::1 loopback
+  if (lower === "::1") return true;
+  // fc00::/7 — Unique Local Addresses (starts with fc or fd)
+  if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
+  // fe80::/10 — Link-Local
+  if (lower.startsWith("fe80")) return true;
+  return false;
+}
+
 export function isPrivateUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
@@ -125,7 +142,19 @@ export function isPrivateUrl(urlStr: string): boolean {
     const bare = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
 
     if (PRIVATE_HOSTS.has(hostname) || PRIVATE_HOSTS.has(bare)) return true;
-    if (PRIVATE_CIDR_PREFIXES.some((prefix) => hostname.startsWith(prefix))) return true;
+
+    // Determine if hostname is an IP literal vs a DNS name
+    const ipVersion = isIP(bare);
+
+    if (ipVersion === 4) {
+      // IPv4 literal — check CIDR prefixes
+      if (PRIVATE_CIDR_PREFIXES.some((prefix) => bare.startsWith(prefix))) return true;
+    } else if (ipVersion === 6) {
+      // Native IPv6 — check private ranges
+      if (isPrivateIPv6(bare)) return true;
+    }
+    // ipVersion === 0 means it's a hostname — skip prefix matching to avoid
+    // false positives on names like "10.example.com"
 
     // IPv6-mapped IPv4 addresses (e.g. [::ffff:7f00:1] from ::ffff:127.0.0.1)
     const mappedIpv4 = extractMappedIPv4(hostname);
@@ -268,7 +297,7 @@ export function createWebSearchTools(sessionName: string): any[] {
             }
 
             try {
-              logger.debug(`[web_search] Querying ${providerName} for: ${query}`);
+              logger.debug(`[web_search] Querying ${providerName} (query length: ${query.length})`);
               const raw = await providerInstance.search(query, count);
               const results = filterResults(raw);
 

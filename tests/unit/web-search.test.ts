@@ -285,6 +285,29 @@ describe("SSRF protection", () => {
     expect(isPrivateUrl("http://167772161/")).toBe(true);
   });
 
+  it("should block full 127.0.0.0/8 range", () => {
+    expect(isPrivateUrl("http://127.0.0.2/")).toBe(true);
+    expect(isPrivateUrl("http://127.255.255.255/")).toBe(true);
+  });
+
+  it("should block 169.254.0.0/16 link-local range", () => {
+    expect(isPrivateUrl("http://169.254.0.1/")).toBe(true);
+    expect(isPrivateUrl("http://169.254.100.100/")).toBe(true);
+  });
+
+  it("should block IPv6 ULA (fc00::/7) and link-local (fe80::/10)", () => {
+    expect(isPrivateUrl("http://[fc00::1]/")).toBe(true);
+    expect(isPrivateUrl("http://[fd12:3456::1]/")).toBe(true);
+    expect(isPrivateUrl("http://[fe80::1]/")).toBe(true);
+  });
+
+  it("should not false-positive on hostnames starting with private IP prefixes", () => {
+    // "10.example.com" is a valid public hostname, not a private IP
+    expect(isPrivateUrl("http://10.example.com/")).toBe(false);
+    expect(isPrivateUrl("http://192.168.example.com/")).toBe(false);
+    expect(isPrivateUrl("http://127.example.com/")).toBe(false);
+  });
+
   it("should allow safe public URLs", () => {
     expect(isPrivateUrl("https://example.com")).toBe(false);
     expect(isPrivateUrl("https://google.com/search")).toBe(false);
