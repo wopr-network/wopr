@@ -156,4 +156,50 @@ describe("Rate Limiting Middleware", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("RateLimit-Limit")).toBe("60");
   });
+
+  it("should key by IP when keyByIp is true", async () => {
+    const app = new Hono();
+    app.use("*", rateLimit({ windowMs: 60_000, limit: 2, keyByIp: true }));
+    app.post("/api/auth/sign-in", (c) => c.json({ ok: true }));
+
+    // Two different auth headers but same IP should share the limit
+    const res1 = await app.request("/api/auth/sign-in", {
+      method: "POST",
+      headers: { Authorization: "Bearer token-a", "X-Forwarded-For": "1.2.3.4" },
+    });
+    expect(res1.status).toBe(200);
+
+    const res2 = await app.request("/api/auth/sign-in", {
+      method: "POST",
+      headers: { Authorization: "Bearer token-b", "X-Forwarded-For": "1.2.3.4" },
+    });
+    expect(res2.status).toBe(200);
+
+    // Third request from same IP should be rate limited
+    const res3 = await app.request("/api/auth/sign-in", {
+      method: "POST",
+      headers: { Authorization: "Bearer token-c", "X-Forwarded-For": "1.2.3.4" },
+    });
+    expect(res3.status).toBe(429);
+  });
+
+  it("should allow different IPs independently when keyByIp is true", async () => {
+    const app = new Hono();
+    app.use("*", rateLimit({ windowMs: 60_000, limit: 1, keyByIp: true }));
+    app.post("/api/auth/sign-in", (c) => c.json({ ok: true }));
+
+    // First IP uses up its limit
+    const res1 = await app.request("/api/auth/sign-in", {
+      method: "POST",
+      headers: { "X-Forwarded-For": "10.0.0.1" },
+    });
+    expect(res1.status).toBe(200);
+
+    // Second IP should still work
+    const res2 = await app.request("/api/auth/sign-in", {
+      method: "POST",
+      headers: { "X-Forwarded-For": "10.0.0.2" },
+    });
+    expect(res2.status).toBe(200);
+  });
 });

@@ -33,6 +33,7 @@ import { rateLimit } from "./middleware/rate-limit.js";
 import { HealthMonitor } from "./health.js";
 import { checkReadiness, markCronRunning, markStartupComplete } from "./readiness.js";
 import { authRouter } from "./routes/auth.js";
+import { betterAuthRouter } from "./routes/better-auth.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
 import { createHealthzRouter } from "./routes/health.js";
@@ -103,6 +104,9 @@ export function createApp(healthMonitor?: HealthMonitor) {
     const result = checkReadiness();
     return c.json(result, result.ready ? 200 : 503);
   });
+
+  // Mount Better Auth routes (handles its own authentication)
+  app.route("/api/auth", betterAuthRouter);
 
   // Mount routers
   app.route("/auth", authRouter);
