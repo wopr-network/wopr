@@ -2,7 +2,7 @@
  * Config tools: config_get, config_set, config_provider_defaults
  */
 
-import { redactSensitive } from "../../security/redact.js";
+import { redactSensitive } from "../../security/index.js";
 import { centralConfig, tool, withSecurityCheck, z } from "./_base.js";
 
 export function createConfigTools(sessionName: string): any[] {
@@ -54,7 +54,8 @@ export function createConfigTools(sessionName: string): any[] {
           }
           centralConfig.setValue(key, parsedValue);
           await centralConfig.save();
-          return { content: [{ type: "text", text: `Config set: ${key} = ${JSON.stringify(parsedValue)}` }] };
+          const redactedValue = redactSensitive(parsedValue, key);
+          return { content: [{ type: "text", text: `Config set: ${key} = ${JSON.stringify(redactedValue)}` }] };
         });
       },
     ),

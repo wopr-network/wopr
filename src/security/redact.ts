@@ -12,7 +12,6 @@ const SENSITIVE_KEYS = [
   "secret",
   "token",
   "password",
-  "private",
   "privatekey",
   "private_key",
 ];
@@ -30,8 +29,9 @@ export function redactSensitive(obj: any, path: string = ""): any {
     return obj.map((item, i) => redactSensitive(item, `${path}[${i}]`));
   }
 
-  const result: any = {};
+  const result: any = Object.create(null);
   for (const [k, v] of Object.entries(obj)) {
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
     result[k] = redactSensitive(v, path ? `${path}.${k}` : k);
   }
   return result;
