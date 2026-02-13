@@ -17,7 +17,7 @@ import { logger } from "../logger.js";
 
 export interface WOPREvent {
   type: string;
-  payload: any;
+  payload: unknown;
   timestamp: number;
   source?: string; // Plugin name that emitted, or "core"
 }
@@ -25,7 +25,7 @@ export interface WOPREvent {
 // Session lifecycle events
 export interface SessionCreateEvent {
   session: string;
-  config?: any;
+  config?: Record<string, unknown>;
 }
 
 export interface SessionInjectEvent {
@@ -44,7 +44,7 @@ export interface SessionResponseEvent {
 
 export interface SessionDestroyEvent {
   session: string;
-  history: any[];
+  history: unknown[];
   reason?: string;
 }
 
@@ -53,7 +53,7 @@ export interface ChannelMessageEvent {
   channel: { type: string; id: string; name?: string };
   message: string;
   from: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChannelSendEvent {
@@ -76,8 +76,8 @@ export interface PluginErrorEvent {
 // Config events
 export interface ConfigChangeEvent {
   key: string;
-  oldValue: any;
-  newValue: any;
+  oldValue: unknown;
+  newValue: unknown;
   plugin?: string;
 }
 
@@ -93,7 +93,7 @@ export interface MemorySearchEvent {
   maxResults: number;
   minScore: number;
   sessionName: string;
-  results: any[] | null;
+  results: unknown[] | null;
 }
 
 export interface MemoryFileChange {
@@ -153,7 +153,7 @@ export interface WOPREventMap {
 // Event Bus Interface
 // ============================================================================
 
-export type EventHandler<T = any> = (payload: T, event: WOPREvent) => void | Promise<void>;
+export type EventHandler<T = unknown> = (payload: T, event: WOPREvent) => void | Promise<void>;
 
 export interface WOPREventBus {
   /**
@@ -192,7 +192,7 @@ export interface WOPREventBus {
    * @param payload - Event payload
    * @param source - Source plugin
    */
-  emitCustom(event: string, payload: any, source?: string): Promise<void>;
+  emitCustom(event: string, payload: unknown, source?: string): Promise<void>;
 
   /**
    * Get list of all active event listeners
@@ -209,11 +209,15 @@ export interface WOPREventBus {
 // Event Bus Implementation
 // ============================================================================
 
+// General-purpose callable type for handler/wrapper tracking.
+// biome-ignore lint/suspicious/noExplicitAny: WeakMap keys require contravariant parameter types; unknown[] is too narrow for generic EventHandler<T>
+type AnyFunction = (...args: any[]) => any;
+
 class WOPREventBusImpl implements WOPREventBus {
   private emitter = new EventEmitter();
-  private handlerWrappers = new WeakMap<(...args: any[]) => any, Map<string, (...args: any[]) => any>>();
+  private handlerWrappers = new WeakMap<AnyFunction, Map<string, AnyFunction>>();
 
-  private setWrapper(handler: (...args: any[]) => any, event: string, wrapper: (...args: any[]) => any): void {
+  private setWrapper(handler: AnyFunction, event: string, wrapper: AnyFunction): void {
     let eventMap = this.handlerWrappers.get(handler);
     if (!eventMap) {
       eventMap = new Map();
@@ -222,11 +226,11 @@ class WOPREventBusImpl implements WOPREventBus {
     eventMap.set(event, wrapper);
   }
 
-  private getWrapper(handler: (...args: any[]) => any, event: string): ((...args: any[]) => any) | undefined {
+  private getWrapper(handler: AnyFunction, event: string): AnyFunction | undefined {
     return this.handlerWrappers.get(handler)?.get(event);
   }
 
-  private deleteWrapper(handler: (...args: any[]) => any, event: string): void {
+  private deleteWrapper(handler: AnyFunction, event: string): void {
     const eventMap = this.handlerWrappers.get(handler);
     if (eventMap) {
       eventMap.delete(event);
@@ -236,7 +240,7 @@ class WOPREventBusImpl implements WOPREventBus {
 
   on<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): () => void {
     // Wrap handler to provide full event context
-    const wrapper = async (payload: any, meta: { timestamp: number; source?: string }) => {
+    const wrapper = async (payload: WOPREventMap[T], meta: { timestamp: number; source?: string }) => {
       const fullEvent: WOPREvent = {
         type: event as string,
         payload,
@@ -255,11 +259,11 @@ class WOPREventBusImpl implements WOPREventBus {
     };
 
     // Remove existing wrapper for same handler+event to prevent orphaned listeners
-    const existing = this.getWrapper(handler, event as string);
+    const existing = this.getWrapper(handler as AnyFunction, event as string);
     if (existing) {
-      this.emitter.off(event as string, existing as (...args: any[]) => void);
+      this.emitter.off(event as string, existing);
     }
-    this.setWrapper(handler, event as string, wrapper);
+    this.setWrapper(handler as AnyFunction, event as string, wrapper);
     this.emitter.on(event as string, wrapper);
 
     // Return unsubscribe function
@@ -267,7 +271,7 @@ class WOPREventBusImpl implements WOPREventBus {
   }
 
   once<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void {
-    const wrapper = async (payload: any, meta: { timestamp: number; source?: string }) => {
+    const wrapper = async (payload: WOPREventMap[T], meta: { timestamp: number; source?: string }) => {
       // Clean up the wrapper map after firing (emitter auto-removes the listener)
       this.deleteWrapper(handler, event as string);
 
@@ -289,20 +293,20 @@ class WOPREventBusImpl implements WOPREventBus {
     };
 
     // Remove existing wrapper for same handler+event to prevent orphaned listeners
-    const existing = this.getWrapper(handler, event as string);
+    const existing = this.getWrapper(handler as AnyFunction, event as string);
     if (existing) {
-      this.emitter.off(event as string, existing as (...args: any[]) => void);
+      this.emitter.off(event as string, existing);
     }
     // Store wrapper so off() can find and remove it before it fires
-    this.setWrapper(handler, event as string, wrapper);
+    this.setWrapper(handler as AnyFunction, event as string, wrapper);
     this.emitter.once(event as string, wrapper);
   }
 
   off<T extends keyof WOPREventMap>(event: T, handler: EventHandler<WOPREventMap[T]>): void {
-    const wrapper = this.getWrapper(handler, event as string);
+    const wrapper = this.getWrapper(handler as AnyFunction, event as string);
     if (wrapper) {
-      this.emitter.off(event as string, wrapper as (...args: any[]) => void);
-      this.deleteWrapper(handler, event as string);
+      this.emitter.off(event as string, wrapper);
+      this.deleteWrapper(handler as AnyFunction, event as string);
     }
   }
 
@@ -337,8 +341,7 @@ class WOPREventBusImpl implements WOPREventBus {
           logger.debug(`[events] memory:filesChanged handler ${i}/${listeners.length} starting (heap=${heapMB}MB)`);
         }
         try {
-          // biome-ignore lint/complexity/noBannedTypes: EventEmitter listeners are untyped
-          const result = (listeners[i] as Function)(payload, meta);
+          const result = (listeners[i] as AnyFunction)(payload, meta);
           if (result && typeof result.then === "function") {
             await result;
           }
@@ -356,8 +359,7 @@ class WOPREventBusImpl implements WOPREventBus {
       const promises: Promise<void>[] = [];
       for (let i = 0; i < listeners.length; i++) {
         try {
-          // biome-ignore lint/complexity/noBannedTypes: EventEmitter listeners are untyped
-          const result = (listeners[i] as Function)(payload, meta);
+          const result = (listeners[i] as AnyFunction)(payload, meta);
           if (result && typeof result.then === "function") {
             promises.push(
               (result as Promise<void>).catch((err: unknown) => {
@@ -386,8 +388,7 @@ class WOPREventBusImpl implements WOPREventBus {
     const wcPromises: Promise<void>[] = [];
     for (const listener of wildcardListeners) {
       try {
-        // biome-ignore lint/complexity/noBannedTypes: EventEmitter listeners are untyped
-        const result = (listener as Function)(wildcardEvent, meta);
+        const result = (listener as AnyFunction)(wildcardEvent, meta);
         if (result && typeof result.then === "function") {
           wcPromises.push(
             (result as Promise<void>).catch((err: unknown) => {
@@ -410,13 +411,13 @@ class WOPREventBusImpl implements WOPREventBus {
     logger.debug(`[events] Emitted: ${eventName} (source: ${source})`);
   }
 
-  async emitCustom(event: string, payload: any, source: string = "unknown"): Promise<void> {
+  async emitCustom(event: string, payload: unknown, source: string = "unknown"): Promise<void> {
     // Validate custom event name (suggest plugin: prefix)
     if (!event.includes(":")) {
       logger.warn(`[events] Custom event '${event}' should use 'plugin:' prefix (e.g., 'myplugin:customEvent')`);
     }
 
-    await this.emit(event as keyof WOPREventMap, payload, source);
+    await this.emit(event as keyof WOPREventMap, payload as WOPREventMap[keyof WOPREventMap], source);
   }
 
   listenerCount(event: string): number {
@@ -438,7 +439,7 @@ export const eventBus: WOPREventBus = new WOPREventBusImpl();
 // Convenience Exports for Core Usage
 // ============================================================================
 
-export async function emitSessionCreate(session: string, config?: any): Promise<void> {
+export async function emitSessionCreate(session: string, config?: Record<string, unknown>): Promise<void> {
   await eventBus.emit("session:create", { session, config }, "core");
 }
 
@@ -470,7 +471,7 @@ export async function emitSessionResponseChunk(
   await eventBus.emit("session:responseChunk", { session, message, response, from, chunk }, "core");
 }
 
-export async function emitSessionDestroy(session: string, history: any[], reason?: string): Promise<void> {
+export async function emitSessionDestroy(session: string, history: unknown[], reason?: string): Promise<void> {
   await eventBus.emit("session:destroy", { session, history, reason }, "core");
 }
 
@@ -478,7 +479,7 @@ export async function emitChannelMessage(
   channel: { type: string; id: string; name?: string },
   message: string,
   from: string,
-  metadata?: any,
+  metadata?: Record<string, unknown>,
 ): Promise<void> {
   await eventBus.emit("channel:message", { channel, message, from, metadata }, "core");
 }
@@ -499,7 +500,12 @@ export async function emitPluginError(plugin: string, error: Error, context?: st
   await eventBus.emit("plugin:error", { plugin, error, context }, "core");
 }
 
-export async function emitConfigChange(key: string, oldValue: any, newValue: any, plugin?: string): Promise<void> {
+export async function emitConfigChange(
+  key: string,
+  oldValue: unknown,
+  newValue: unknown,
+  plugin?: string,
+): Promise<void> {
   await eventBus.emit("config:change", { key, oldValue, newValue, plugin }, "core");
 }
 
@@ -549,7 +555,7 @@ export async function emitMutableIncoming(
   };
 
   // Emit the event - handlers can mutate mutablePayload
-  await eventBus.emit("session:beforeInject", mutablePayload as any, "core");
+  await eventBus.emit("session:beforeInject", mutablePayload as SessionInjectEvent, "core");
 
   return {
     message: mutablePayload.message,
@@ -579,7 +585,7 @@ export async function emitMutableOutgoing(
   };
 
   // Emit the event - handlers can mutate mutablePayload
-  await eventBus.emit("session:afterInject", mutablePayload as any, "core");
+  await eventBus.emit("session:afterInject", mutablePayload as unknown as SessionResponseEvent, "core");
 
   return {
     response: mutablePayload.response,

@@ -75,14 +75,15 @@ export async function runOnboardWizard(
     }
 
     runtime.exit(0);
-  } catch (err: any) {
-    if (err.name === "WizardCancelledError") {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "WizardCancelledError") {
       p.cancel(pc.red(err.message || "Onboarding cancelled."));
       runtime.exit(0);
     }
 
-    p.log.error(pc.red(`Onboarding failed: ${err.message}`));
-    runtime.error(err.message);
+    const message = err instanceof Error ? err.message : String(err);
+    p.log.error(pc.red(`Onboarding failed: ${message}`));
+    runtime.error(message);
     runtime.exit(1);
   }
 }

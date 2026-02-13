@@ -86,8 +86,8 @@ export async function probeGateway(
       return { ok: true };
     }
     return { ok: false, error: `HTTP ${response.status}` };
-  } catch (err: any) {
-    return { ok: false, error: err.message || "Connection failed" };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : "Connection failed" };
   }
 }
 
@@ -168,8 +168,8 @@ WantedBy=default.target
     });
 
     return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -234,8 +234,8 @@ export async function installLaunchdService(
     });
 
     return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 

@@ -478,7 +478,7 @@ export interface PluginInjectOptions {
  */
 export interface WOPREvent {
   type: string;
-  payload: any;
+  payload: unknown;
   timestamp: number;
   source?: string;
 }
@@ -486,7 +486,7 @@ export interface WOPREvent {
 // Session lifecycle events
 export interface SessionCreateEvent {
   session: string;
-  config?: any;
+  config?: Record<string, unknown>;
 }
 
 export interface SessionInjectEvent {
@@ -509,7 +509,7 @@ export interface SessionResponseChunkEvent extends SessionResponseEvent {
 
 export interface SessionDestroyEvent {
   session: string;
-  history: any[];
+  history: unknown[];
   reason?: string;
 }
 
@@ -518,7 +518,7 @@ export interface ChannelMessageEvent {
   channel: { type: string; id: string; name?: string };
   message: string;
   from: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChannelSendEvent {
@@ -541,8 +541,8 @@ export interface PluginErrorEvent {
 // Config events
 export interface ConfigChangeEvent {
   key: string;
-  oldValue: any;
-  newValue: any;
+  oldValue: unknown;
+  newValue: unknown;
   plugin?: string;
 }
 
@@ -576,7 +576,7 @@ export interface MemorySearchEvent {
   maxResults: number;
   minScore: number;
   sessionName: string;
-  results: any[] | null;
+  results: unknown[] | null;
 }
 
 /**
@@ -603,7 +603,7 @@ export interface WOPREventMap {
 /**
  * Event handler type
  */
-export type EventHandler<T = any> = (payload: T, event: WOPREvent) => void | Promise<void>;
+export type EventHandler<T = unknown> = (payload: T, event: WOPREvent) => void | Promise<void>;
 
 /**
  * Event bus interface - reactive primitive for plugins
@@ -644,7 +644,7 @@ export interface WOPREventBus {
    * @param event - Custom event name (use plugin: prefix)
    * @param payload - Event payload
    */
-  emitCustom(event: string, payload: any): Promise<void>;
+  emitCustom(event: string, payload: unknown): Promise<void>;
 
   /**
    * Get number of listeners for an event
@@ -680,19 +680,35 @@ export interface HookOptions {
  * Hook handler types
  */
 export type MessageIncomingHandler = (
-  event: MutableHookEvent<{ message: string; from: string; channel?: any }>,
+  event: MutableHookEvent<{
+    message: string;
+    from: string;
+    channel?: { type: string; id: string; name?: string };
+  }>,
 ) => void | Promise<void>;
 export type MessageOutgoingHandler = (
-  event: MutableHookEvent<{ response: string; from: string; channel?: any }>,
+  event: MutableHookEvent<{
+    response: string;
+    from: string;
+    channel?: { type: string; id: string; name?: string };
+  }>,
 ) => void | Promise<void>;
-export type SessionCreateHandler = (event: { session: string; config?: any }) => void | Promise<void>;
+export type SessionCreateHandler = (event: {
+  session: string;
+  config?: Record<string, unknown>;
+}) => void | Promise<void>;
 export type SessionDestroyHandler = (event: {
   session: string;
-  history: any[];
+  history: unknown[];
   reason?: string;
 }) => void | Promise<void>;
 export type ChannelMessageHandler = (
-  event: MutableHookEvent<{ channel: any; message: string; from: string; metadata?: any }>,
+  event: MutableHookEvent<{
+    channel: { type: string; id: string; name?: string };
+    message: string;
+    from: string;
+    metadata?: Record<string, unknown>;
+  }>,
 ) => void | Promise<void>;
 
 /**

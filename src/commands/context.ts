@@ -35,7 +35,7 @@ export async function contextCommand(subcommand: string | undefined, args: strin
         logger.info(`Context provider: ${p.name}`);
         logger.info(`  Priority: ${p.priority}`);
         logger.info(`  Enabled: ${p.enabled ? "yes" : "no"}`);
-      } catch (_err: any) {
+      } catch (_err: unknown) {
         logger.error(`Context provider not found: ${args[0]}`);
         process.exit(1);
       }

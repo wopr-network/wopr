@@ -13,8 +13,9 @@ function execFile(cmd: string, args: string[]): { stdout: string; success: boole
   try {
     const stdout = execFileSync(cmd, args, { encoding: "utf-8", timeout: 30000 }).trim();
     return { stdout, success: true };
-  } catch (err: any) {
-    return { stdout: err.stderr || err.message || "", success: false };
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; message?: string };
+    return { stdout: e.stderr || e.message || "", success: false };
   }
 }
 
@@ -35,7 +36,7 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
   }
 
   // Check if external access is configured
-  const external = (ctx.nextConfig as any).external;
+  const external = ctx.nextConfig.external;
   if (!external?.webhookUrl) {
     await note(
       [
@@ -242,5 +243,5 @@ export const githubStep: OnboardStep = async (ctx: OnboardContext) => {
       webhookSecret,
       prReviewSession: prSession,
     },
-  } as any;
+  };
 };

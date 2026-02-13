@@ -50,8 +50,8 @@ export async function cronCommand(subcommand: string | undefined, args: string[]
             logger.error("Scripts file must contain a JSON array");
             process.exit(1);
           }
-        } catch (err: any) {
-          logger.error(`Failed to read scripts file: ${err.message}`);
+        } catch (err: unknown) {
+          logger.error(`Failed to read scripts file: ${err instanceof Error ? err.message : String(err)}`);
           process.exit(1);
         }
       }

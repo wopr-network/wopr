@@ -15,6 +15,34 @@ import { confirm, note, password, pc, select, spinner } from "../prompts.js";
 import type { OnboardContext, OnboardStep } from "../types.js";
 import { AVAILABLE_PROVIDERS } from "../types.js";
 
+/** Shape of auth methods returned by provider plugins at runtime */
+interface ProviderAuthMethod {
+  id: string;
+  name: string;
+  description?: string;
+  available?: boolean;
+  setupInstructions?: string[];
+  docsUrl?: string;
+  requiresInput?: boolean;
+  inputLabel?: string;
+}
+
+/** Dynamic provider impl methods not in the base ModelProvider interface */
+interface DynamicProviderImpl {
+  getAuthMethods?(): ProviderAuthMethod[];
+  getActiveAuthMethod?(): string;
+  hasCredentials?(): boolean;
+  validateCredentials?(credential: string): Promise<boolean>;
+  getCredentialType?(): string;
+  supportedModels?: string[];
+  defaultModel?: string;
+}
+
+/** Internal registry structure for accessing provider registrations */
+interface ProviderRegistryInternal {
+  providers?: Map<string, { provider: DynamicProviderImpl }>;
+}
+
 export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
   const isQuickstart = ctx.opts.flow === "quickstart";
 
@@ -59,8 +87,8 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
   try {
     await installPlugin(providerInfo.npm);
     s.stop(`${providerInfo.name} provider installed!`);
-  } catch (err: any) {
-    s.stop(`Provider install failed: ${err.message}`);
+  } catch (err: unknown) {
+    s.stop(`Provider install failed: ${err instanceof Error ? err.message : String(err)}`);
     const continueAnyway = await confirm({
       message: "Continue without provider? (You can install later)",
       initialValue: false,
@@ -86,7 +114,7 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
   }
 
   // Get provider registration to access extended methods
-  const reg = (providerRegistry as any).providers?.get(providerId);
+  const reg = (providerRegistry as unknown as ProviderRegistryInternal).providers?.get(providerId);
   const providerImpl = reg?.provider;
 
   // Query auth methods from the plugin
@@ -102,7 +130,7 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
     // In quickstart, auto-select the active method if credentials exist
     if (isQuickstart && hasCredentials) {
       selectedAuthMethod = activeAuth;
-      const method = authMethods.find((m: any) => m.id === activeAuth);
+      const method = authMethods.find((m: ProviderAuthMethod) => m.id === activeAuth);
       if (method) {
         await note(
           [pc.green(`✓ Using ${method.name}`), "", ...(method.setupInstructions || [])].join("\n"),
@@ -111,7 +139,7 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
       }
     } else {
       // Show all auth options
-      const authOptions = authMethods.map((m: any) => ({
+      const authOptions = authMethods.map((m: ProviderAuthMethod) => ({
         value: m.id,
         label: `${m.name}${m.available ? pc.green(" ✓") : pc.dim(" (setup required)")}`,
         hint: m.description,
@@ -123,7 +151,7 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
         initialValue: activeAuth !== "none" ? activeAuth : authMethods[0]?.id,
       });
 
-      const chosenMethod = authMethods.find((m: any) => m.id === selectedAuthMethod);
+      const chosenMethod = authMethods.find((m: ProviderAuthMethod) => m.id === selectedAuthMethod);
 
       if (chosenMethod) {
         if (!chosenMethod.available) {

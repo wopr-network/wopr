@@ -7,7 +7,7 @@ export interface OnboardConfig {
   provider?: {
     primary?: string;
     authMethod?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   gateway?: {
     port?: number;

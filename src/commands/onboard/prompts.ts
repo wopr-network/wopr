@@ -79,7 +79,7 @@ export async function select<T>(options: {
 }): Promise<T> {
   const result = await p.select({
     message: options.message,
-    options: options.options as any,
+    options: options.options as any, // @clack/prompts Option<T> requires Primitive; generic T needs cast
     initialValue: options.initialValue,
   });
   return guardCancel(result);
@@ -93,7 +93,7 @@ export async function multiselect<T>(options: {
 }): Promise<T[]> {
   const result = await p.multiselect({
     message: options.message,
-    options: options.options as any,
+    options: options.options as any, // @clack/prompts Option<T> requires Primitive; generic T needs cast
     required: options.required ?? false,
     initialValues: options.initialValues,
   });

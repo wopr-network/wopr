@@ -102,11 +102,12 @@ export async function authCommand(subcommand: string | undefined, args: string[]
           logger.info("\nAuthenticated successfully!");
           logger.info("Your Claude Max/Pro subscription is now linked.");
           process.exit(0);
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
           res.writeHead(500);
-          res.end(`Error: ${err.message}`);
+          res.end(`Error: ${message}`);
           server.close();
-          logger.error("Error:", err.message);
+          logger.error("Error:", message);
           process.exit(1);
         }
       }
