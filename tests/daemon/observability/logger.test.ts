@@ -5,7 +5,7 @@ import {
   getInstanceLogs,
   getLoggedInstanceIds,
   recordLog,
-} from "../../../src/platform/observability/logger.js";
+} from "../../../src/daemon/observability/logger.js";
 
 describe("structured logger", () => {
   afterEach(() => {

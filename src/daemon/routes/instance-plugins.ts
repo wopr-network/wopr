@@ -13,7 +13,6 @@ import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { getSessions, inject } from "../../core/sessions.js";
 import { logger } from "../../logger.js";
-import type { PluginInjectOptions } from "../../types.js";
 import {
   disablePlugin,
   enablePlugin,
@@ -27,7 +26,7 @@ import {
   removePlugin,
   unloadPlugin,
 } from "../../plugins.js";
-import type { ConfigSchema } from "../../types.js";
+import type { ConfigSchema, PluginInjectOptions } from "../../types.js";
 
 // ============================================================================
 // Zod Schemas

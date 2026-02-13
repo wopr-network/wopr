@@ -3,6 +3,8 @@
  *
  * Tracks health state of individual instances with configurable polling.
  * Health states: healthy, degraded, unhealthy, unknown.
+ *
+ * Inlined from src/platform/observability/health.ts as part of WOP-297.
  */
 
 export type HealthState = "healthy" | "degraded" | "unhealthy" | "unknown";

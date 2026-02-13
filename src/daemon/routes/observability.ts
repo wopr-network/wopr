@@ -14,7 +14,7 @@ import {
   healthMonitor,
   type LogLevel,
   MetricsStore,
-} from "../../platform/observability/index.js";
+} from "../observability/index.js";
 
 export const observabilityRouter = new Hono();
 

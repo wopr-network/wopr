@@ -1,8 +1,11 @@
 /**
  * Instance Templates — preconfigured plugin sets for common use cases (WOP-200)
  *
- * Defines the InstanceTemplate interface and built-in templates that ship with WOPR.
- * Custom templates are stored in-memory at runtime and managed via the templates API.
+ * Defines the InstanceTemplate interface, built-in templates, CRUD operations,
+ * and the template application engine.
+ *
+ * Inlined from src/platform/templates.ts and src/platform/template-engine.ts
+ * as part of WOP-297 (extract platform code from core).
  */
 
 export interface InstanceTemplate {
@@ -125,4 +128,46 @@ export function isBuiltinTemplate(name: string): boolean {
 /** Clear all custom templates. Useful for testing. */
 export function clearCustomTemplates(): void {
   customTemplates.clear();
+}
+
+// --- Template Application Engine ---
+
+export interface TemplateApplicationResult {
+  instanceId: string;
+  templateName: string;
+  config: Record<string, unknown>;
+  pluginsToInstall: string[];
+  providersToSetup: string[];
+}
+
+/**
+ * Apply a template to an instance. Generates a config object from the template
+ * and returns the list of plugins and providers that need to be installed/configured.
+ *
+ * @param instanceId - The target instance identifier
+ * @param templateName - The name of the template to apply
+ * @returns The generated configuration and required plugin/provider lists
+ * @throws If the template is not found
+ */
+export function applyTemplate(instanceId: string, templateName: string): TemplateApplicationResult {
+  const template = getTemplate(templateName);
+  if (!template) {
+    throw new Error(`Template "${templateName}" not found`);
+  }
+
+  const config: Record<string, unknown> = {
+    ...template.config,
+    instanceId,
+    templateName: template.name,
+    plugins: Object.fromEntries(template.plugins.map((p) => [p, {}])),
+    providers: Object.fromEntries(template.providers.map((p) => [p, {}])),
+  };
+
+  return {
+    instanceId,
+    templateName: template.name,
+    config,
+    pluginsToInstall: [...template.plugins],
+    providersToSetup: [...template.providers],
+  };
 }

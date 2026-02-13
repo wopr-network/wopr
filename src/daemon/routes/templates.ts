@@ -9,15 +9,15 @@
  */
 
 import { Hono } from "hono";
-import { applyTemplate } from "../../platform/template-engine.js";
-import type { InstanceTemplate } from "../../platform/templates.js";
 import {
+  applyTemplate,
   createCustomTemplate,
   deleteCustomTemplate,
   getTemplate,
+  type InstanceTemplate,
   isBuiltinTemplate,
   listTemplates,
-} from "../../platform/templates.js";
+} from "../templates.js";
 
 export const templatesRouter = new Hono();
 

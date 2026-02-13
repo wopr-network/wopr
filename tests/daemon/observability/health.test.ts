@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { HealthMonitor } from "../../../src/platform/observability/health.js";
+import { HealthMonitor } from "../../../src/daemon/observability/health.js";
 
 describe("HealthMonitor", () => {
   let monitor: HealthMonitor;

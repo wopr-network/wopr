@@ -14,8 +14,8 @@
  */
 
 import { logger } from "../logger.js";
-import type { ChannelCommand, ChannelCommandContext, ChannelProvider } from "../types.js";
 import type { TrustLevel } from "../security/types.js";
+import type { ChannelCommand, ChannelCommandContext, ChannelProvider } from "../types.js";
 import {
   findIdentityBySender,
   generatePairingCode,

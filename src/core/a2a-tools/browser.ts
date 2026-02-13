@@ -361,10 +361,7 @@ export function createBrowserTools(sessionName: string): any[] {
           .enum(["load", "domcontentloaded", "networkidle"])
           .optional()
           .describe("Wait condition (default: 'domcontentloaded')"),
-        timeout: z
-          .number()
-          .optional()
-          .describe(`Navigation timeout in ms (default: ${DEFAULT_TIMEOUT_MS})`),
+        timeout: z.number().optional().describe(`Navigation timeout in ms (default: ${DEFAULT_TIMEOUT_MS})`),
       },
       async (args: any) => {
         return withSecurityCheck("browser_navigate", sessionName, async () => {

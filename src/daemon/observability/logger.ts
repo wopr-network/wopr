@@ -3,6 +3,8 @@
  *
  * Provides per-instance structured JSON logging with configurable levels.
  * Uses winston for transport and formatting.
+ *
+ * Inlined from src/platform/observability/logger.ts as part of WOP-297.
  */
 
 import winston from "winston";

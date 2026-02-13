@@ -6,17 +6,17 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  applyTemplate,
   BUILTIN_TEMPLATES,
   BUILTIN_TEMPLATE_NAMES,
   clearCustomTemplates,
   createCustomTemplate,
   deleteCustomTemplate,
   getTemplate,
+  type InstanceTemplate,
   isBuiltinTemplate,
   listTemplates,
-} from "../../src/platform/templates.js";
-import { applyTemplate } from "../../src/platform/template-engine.js";
-import type { InstanceTemplate } from "../../src/platform/templates.js";
+} from "../../src/daemon/templates.js";
 
 // Clean up custom templates after each test
 afterEach(() => {

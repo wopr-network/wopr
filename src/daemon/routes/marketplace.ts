@@ -13,6 +13,7 @@
 
 import { Hono } from "hono";
 import type { PluginManifest } from "../../plugin-types/manifest.js";
+import { checkRequirements } from "../../plugins/requirements.js";
 import {
   getAllPluginManifests,
   getLoadedPlugin,
@@ -20,7 +21,6 @@ import {
   readPluginManifest,
   searchPlugins,
 } from "../../plugins.js";
-import { checkRequirements } from "../../plugins/requirements.js";
 
 // ============================================================================
 // Router

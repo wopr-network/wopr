@@ -64,8 +64,6 @@ export {
   runPostInjectHooks,
   runPreInjectHooks,
 } from "./hooks.js";
-// Export redaction
-export { redactSensitive } from "./redact.js";
 // Export policy functions
 export {
   canGatewayForward,
@@ -89,6 +87,8 @@ export {
   sessionAllowsUntrusted,
   shouldLogSecurityEvent,
 } from "./policy.js";
+// Export redaction
+export { redactSensitive } from "./redact.js";
 // Export sandbox functions
 export {
   buildSandboxImage,
