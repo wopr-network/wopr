@@ -3,6 +3,7 @@
  * for WOPR instance containers via the Docker Engine API (WOP-198).
  */
 
+import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
@@ -15,11 +16,23 @@ import { CONTAINER_PREFIX, INTERNAL_DAEMON_PORT, WOPR_NETWORK } from "./types.js
 // Helpers
 // ---------------------------------------------------------------------------
 
+const VALID_INSTANCE_ID = /^[a-zA-Z0-9][a-zA-Z0-9\-]*$/;
+
+function validateInstanceId(instanceId: string): void {
+  if (!VALID_INSTANCE_ID.test(instanceId)) {
+    throw new Error(
+      `Invalid instanceId "${instanceId}": must be alphanumeric with hyphens only and not start with a hyphen`,
+    );
+  }
+}
+
 function containerName(instanceId: string): string {
+  validateInstanceId(instanceId);
   return `${CONTAINER_PREFIX}${instanceId}`;
 }
 
 function woprHomeDir(instanceId: string): string {
+  validateInstanceId(instanceId);
   return join(homedir(), "wopr-instances", instanceId);
 }
 
@@ -28,6 +41,8 @@ function woprHomeDir(instanceId: string): string {
 // ---------------------------------------------------------------------------
 
 export class InstanceManager {
+  private healthWatchers = new Map<string, AbortController>();
+
   // ------- create -------
   async create(config: InstanceConfig): Promise<string> {
     const name = containerName(config.id);
@@ -37,6 +52,7 @@ export class InstanceManager {
     await ensureImage(config.image);
 
     const hostDir = woprHomeDir(config.id);
+    mkdirSync(hostDir, { recursive: true });
 
     const portBindings: Record<string, Array<{ HostPort: string }>> = {};
     const exposedPorts: Record<string, Record<string, never>> = {};
@@ -93,9 +109,20 @@ export class InstanceManager {
     logger.info(`[instance] Created container ${name} (${container.id.slice(0, 12)})`);
 
     if (config.autoRestart) {
-      this.watchHealth(config).catch((err: unknown) => {
-        logger.error(`[instance] Health watcher for ${name} failed: ${err}`);
-      });
+      // Cancel any previously running watcher for this instance.
+      this.healthWatchers.get(config.id)?.abort();
+      const ac = new AbortController();
+      this.healthWatchers.set(config.id, ac);
+      this.watchHealth(config, ac.signal)
+        .catch((err: unknown) => {
+          logger.error(`[instance] Health watcher for ${name} failed: ${err}`);
+        })
+        .finally(() => {
+          // Clean up map entry when watcher exits.
+          if (this.healthWatchers.get(config.id) === ac) {
+            this.healthWatchers.delete(config.id);
+          }
+        });
     }
 
     return container.id;
@@ -238,7 +265,7 @@ export class InstanceManager {
         container.logs(logOpts as any),
       )) as unknown as Readable;
 
-      return new Promise<string>((resolve) => {
+      return new Promise<string>((resolve, reject) => {
         let buf = "";
         const timer = setTimeout(() => {
           stream.destroy();
@@ -251,6 +278,10 @@ export class InstanceManager {
           clearTimeout(timer);
           resolve(buf);
         });
+        stream.on("error", (err: Error) => {
+          clearTimeout(timer);
+          reject(err);
+        });
       });
     }
 
@@ -260,13 +291,14 @@ export class InstanceManager {
   }
 
   // ------- health watcher (private) -------
-  private async watchHealth(config: InstanceConfig): Promise<void> {
+  private async watchHealth(config: InstanceConfig, signal: AbortSignal): Promise<void> {
     const cooldown = config.autoRestartCooldownMs ?? 30_000;
     const name = containerName(config.id);
 
-    // Simple poll loop — exits when container is removed.
+    // Simple poll loop — exits when container is removed or watcher is aborted.
     for (;;) {
       await sleep(cooldown);
+      if (signal.aborted) break;
       try {
         const s = await this.status(config.id);
         if (s.state !== "running") break; // container gone or stopped externally

@@ -13,6 +13,10 @@ vi.mock("../../src/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+vi.mock("node:fs", () => ({
+  mkdirSync: vi.fn(),
+}));
+
 // We mock the docker-client module so InstanceManager never touches a real daemon.
 const mockInspect = vi.fn();
 const mockStart = vi.fn();
