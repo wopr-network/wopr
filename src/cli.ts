@@ -7,6 +7,7 @@
  * src/commands/ -- this file only parses the top-level command and dispatches.
  */
 
+import { acpCommand } from "./commands/acp.js";
 import { authCommand } from "./commands/auth.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
@@ -24,7 +25,9 @@ import { skillCommand } from "./commands/skill.js";
 const [, , command, subcommand, ...args] = process.argv;
 
 (async () => {
-  if (command === "providers") {
+  if (command === "acp") {
+    await acpCommand(args);
+  } else if (command === "providers") {
     await providersCommand(subcommand, args);
   } else if (command === "session") {
     await sessionCommand(subcommand, args);
