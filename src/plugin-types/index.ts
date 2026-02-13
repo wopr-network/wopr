@@ -54,6 +54,7 @@ export type {
   MemoryFileChange,
   MemoryFilesChangedEvent,
   MemorySearchEvent,
+  MeterEvent,
   MessageIncomingHandler,
   MessageOutgoingHandler,
   MutableHookEvent,

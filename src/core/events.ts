@@ -114,6 +114,20 @@ export interface MemoryFilesChangedEvent {
   changes: MemoryFileChange[];
 }
 
+// Meter events (for hosted provider usage tracking)
+export interface MeterEvent {
+  /** User or organization ID */
+  tenant: string;
+  /** What capability was used (e.g., "voice-transcription", "embeddings") */
+  capability: string;
+  /** Which adapter handled the call (e.g., "replicate", "modal") */
+  provider: string;
+  /** Upstream cost in USD cents */
+  cost: number;
+  /** When the usage occurred (epoch ms) */
+  timestamp: number;
+}
+
 // ============================================================================
 // Event Map - defines all core events and their payloads
 // ============================================================================
@@ -144,6 +158,9 @@ export interface WOPREventMap {
   // Memory events (for plugin enhancement)
   "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
+
+  // Meter events (for hosted provider usage tracking)
+  "meter:usage": MeterEvent;
 
   // Wildcard - catch all
   "*": WOPREvent;
@@ -511,6 +528,32 @@ export async function emitConfigChange(
 
 export async function emitSystemShutdown(reason: string, code?: number): Promise<void> {
   await eventBus.emit("system:shutdown", { reason, code }, "core");
+}
+
+// ============================================================================
+// Meter Event Helpers (for hosted provider usage tracking)
+// ============================================================================
+
+/**
+ * Emit a meter event when a hosted provider call completes.
+ * The platform subscribes to "meter:usage" to apply margins and bill.
+ *
+ * @param tenant - User or organization ID
+ * @param capability - What was used (e.g., "voice-transcription", "embeddings")
+ * @param provider - Which adapter (e.g., "replicate", "modal")
+ * @param cost - Upstream cost in USD cents
+ */
+export async function emitMeterUsage(
+  tenant: string,
+  capability: string,
+  provider: string,
+  cost: number,
+): Promise<void> {
+  await eventBus.emit(
+    "meter:usage",
+    { tenant, capability, provider, cost, timestamp: Date.now() },
+    "core",
+  );
 }
 
 // ============================================================================

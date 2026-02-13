@@ -7,6 +7,13 @@
  */
 
 /**
+ * Provider source type.
+ * - "byok": User brings their own API key (cost is 0, user pays provider directly)
+ * - "hosted": WOPR-hosted provider that returns cost information for metering
+ */
+export type ProviderSource = "byok" | "hosted";
+
+/**
  * Provider configuration for a session
  * Specifies which provider to use and fallback chain
  */
@@ -22,6 +29,22 @@ export interface ProviderConfig {
 
   /** Provider-specific options (e.g., temperature, top_p) */
   options?: Record<string, unknown>;
+
+  /** Provider source: "byok" (default) or "hosted" */
+  source?: ProviderSource;
+}
+
+/**
+ * Response from a hosted provider call.
+ * Hosted providers return cost alongside the result so the platform
+ * can apply a margin and meter usage. BYOK providers just return
+ * the result directly (cost is 0 — user pays their provider).
+ */
+export interface ProviderResponse<T = unknown> {
+  /** The actual response from the provider */
+  result: T;
+  /** Upstream cost in USD cents — only set by hosted providers */
+  cost?: number;
 }
 
 /**
