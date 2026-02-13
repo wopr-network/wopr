@@ -29,9 +29,10 @@ import { LOG_FILE, PID_FILE } from "../paths.js";
 import { loadAllPlugins, registerPluginExtension, shutdownAllPlugins } from "../plugins.js";
 import { ensureToken } from "./auth-token.js";
 import { HealthMonitor } from "./health.js";
-import { bearerAuth } from "./middleware/auth.js";
+import { bearerAuth, requireAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rate-limit.js";
 import { checkReadiness, markCronRunning, markStartupComplete } from "./readiness.js";
+import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { betterAuthRouter } from "./routes/better-auth.js";
 import { configRouter } from "./routes/config.js";
@@ -107,6 +108,10 @@ export function createApp(healthMonitor?: HealthMonitor) {
 
   // Mount Better Auth routes (handles its own authentication)
   app.route("/api/auth", betterAuthRouter);
+
+  // API key management (WOP-209) — requireAuth() ensures user context
+  app.use("/api/keys/*", requireAuth());
+  app.route("/api/keys", apiKeysRouter);
 
   // Mount routers
   app.route("/auth", authRouter);

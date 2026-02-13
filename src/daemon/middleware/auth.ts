@@ -1,18 +1,21 @@
 /**
- * Authentication Middleware (WOP-261)
+ * Authentication Middleware (WOP-261, WOP-209)
  *
- * Two middleware functions:
+ * Three-layer auth chain:
  *
- * 1. bearerAuth() — validates the daemon bearer token (WOP-20 backward compat).
+ * 1. bearerAuth() — validates the daemon bearer token OR wopr_ API key (WOP-20 backward compat).
  *    Skips /health, /ready, /, and /api/auth/* (Better Auth handles its own auth).
  *
  * 2. requireAuth() — for protected routes that need a platform user session.
- *    Checks daemon bearer token FIRST (backward compat), then Better Auth session.
+ *    Checks daemon bearer token FIRST, then wopr_ API key, then Better Auth session.
+ *
+ * 3. requireAdmin() — enforces admin/owner role after requireAuth().
  */
 
 import { timingSafeEqual } from "node:crypto";
 import type { MiddlewareHandler } from "hono";
 import { logger } from "../../logger.js";
+import { validateApiKey } from "../api-keys.js";
 import { ensureToken } from "../auth-token.js";
 import { getAuth } from "../better-auth.js";
 
@@ -67,6 +70,20 @@ export function bearerAuth(): MiddlewareHandler {
       return c.json({ error: "Missing or invalid Authorization header" }, 401);
     }
 
+    // Accept wopr_ prefixed API keys (WOP-209)
+    const token = authHeader.slice(7);
+    if (token.startsWith("wopr_")) {
+      const keyUser = validateApiKey(token);
+      if (keyUser) {
+        c.set("user", { id: keyUser.id });
+        c.set("authMethod", "api_key");
+        c.set("apiKeyScope", keyUser.scope);
+        c.set("role", "admin");
+        return next();
+      }
+      return c.json({ error: "Invalid API key" }, 401);
+    }
+
     try {
       if (!isDaemonBearerValid(authHeader)) {
         return c.json({ error: "Invalid token" }, 401);
@@ -95,6 +112,22 @@ export function requireAuth(): MiddlewareHandler {
     // Check daemon bearer token first (backward compat)
     // Daemon token holders get admin role (they have the on-disk secret)
     if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.slice(7);
+
+      // Check wopr_ API keys (WOP-209)
+      if (token.startsWith("wopr_")) {
+        const keyUser = validateApiKey(token);
+        if (keyUser) {
+          c.set("user", { id: keyUser.id });
+          c.set("authMethod", "api_key");
+          c.set("apiKeyScope", keyUser.scope);
+          c.set("role", "admin");
+          return next();
+        }
+        return c.json({ error: "Invalid API key" }, 401);
+      }
+
+      // Check daemon bearer token
       if (isDaemonBearerValid(authHeader)) {
         c.set("role", "admin");
         return next();

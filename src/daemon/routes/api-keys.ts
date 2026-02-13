@@ -1,0 +1,114 @@
+/**
+ * API Key Management Routes (WOP-209)
+ *
+ * POST   /api/keys      — Generate a new API key (requires authenticated session)
+ * GET    /api/keys      — List user's keys (masked)
+ * DELETE /api/keys/:id  — Revoke a key
+ *
+ * All routes require authentication via requireAuth() middleware.
+ */
+
+import { Hono } from "hono";
+import { generateApiKey, listApiKeys, revokeApiKey } from "../api-keys.js";
+import type { ApiKeyScope } from "../api-keys.js";
+
+type AuthEnv = {
+  Variables: {
+    user: { id: string } | undefined;
+    role: string;
+    session: unknown;
+    authMethod: string;
+    apiKeyScope: string;
+  };
+};
+
+export const apiKeysRouter = new Hono<AuthEnv>();
+
+const VALID_SCOPES = new Set(["full", "read-only"]);
+const INSTANCE_SCOPE_RE = /^instance:[a-zA-Z0-9._-]+$/;
+
+function isValidScope(scope: string): scope is ApiKeyScope {
+  return VALID_SCOPES.has(scope) || INSTANCE_SCOPE_RE.test(scope);
+}
+
+/**
+ * POST /api/keys — Generate a new API key.
+ * Body: { name: string, scope?: string, expiresAt?: number }
+ * Returns: { key: string (shown once), ...keyInfo }
+ */
+apiKeysRouter.post("/", async (c) => {
+  const user = c.get("user");
+  if (!user?.id) {
+    return c.json({ error: "User context required — API keys cannot be created with daemon token auth" }, 403);
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const name = body.name;
+  if (typeof name !== "string" || name.trim().length === 0) {
+    return c.json({ error: "name is required (non-empty string)" }, 400);
+  }
+  if (name.length > 128) {
+    return c.json({ error: "name must be 128 characters or fewer" }, 400);
+  }
+
+  const scope = (body.scope as string) ?? "full";
+  if (!isValidScope(scope)) {
+    return c.json({ error: `Invalid scope: ${scope}. Must be full, read-only, or instance:{id}` }, 400);
+  }
+
+  const expiresAt = body.expiresAt != null ? Number(body.expiresAt) : null;
+  if (expiresAt !== null && (Number.isNaN(expiresAt) || expiresAt < Date.now())) {
+    return c.json({ error: "expiresAt must be a future timestamp in milliseconds" }, 400);
+  }
+
+  const { rawKey, keyInfo } = generateApiKey(user.id, name.trim(), scope as ApiKeyScope, expiresAt);
+
+  return c.json(
+    {
+      key: rawKey,
+      ...keyInfo,
+    },
+    201,
+  );
+});
+
+/**
+ * GET /api/keys — List the authenticated user's API keys (masked).
+ */
+apiKeysRouter.get("/", (c) => {
+  const user = c.get("user");
+  if (!user?.id) {
+    return c.json({ error: "User context required" }, 403);
+  }
+
+  const keys = listApiKeys(user.id);
+  return c.json({ keys });
+});
+
+/**
+ * DELETE /api/keys/:id — Revoke an API key by ID.
+ */
+apiKeysRouter.delete("/:id", (c) => {
+  const user = c.get("user");
+  if (!user?.id) {
+    return c.json({ error: "User context required" }, 403);
+  }
+
+  const keyId = c.req.param("id");
+  if (!keyId) {
+    return c.json({ error: "Key ID is required" }, 400);
+  }
+
+  const deleted = revokeApiKey(keyId, user.id);
+  if (!deleted) {
+    return c.json({ error: "API key not found" }, 404);
+  }
+
+  return c.json({ deleted: true });
+});
