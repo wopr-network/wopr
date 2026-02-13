@@ -52,16 +52,16 @@ interface ClientState {
   topics: Set<string>;
   /** Whether this client has authenticated (ticket-based auth) */
   authenticated: boolean;
-  /** Bounded outbound message buffer for backpressure */
-  sendBuffer: string[];
+  /** Messages sent since last heartbeat tick (for backpressure detection) */
+  messagesSinceHeartbeat: number;
   /** Whether this client is experiencing backpressure */
   backpressured: boolean;
   /** Last time we received a pong or message from this client */
   lastActivity: number;
 }
 
-/** Maximum buffered messages per client before disconnecting as slow consumer */
-const MAX_BUFFER_SIZE = 512;
+/** Maximum messages per heartbeat interval before disconnecting as slow consumer */
+const MAX_MESSAGES_PER_HEARTBEAT = 512;
 
 /** Heartbeat interval in ms (30 seconds) */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -80,7 +80,7 @@ export function setupWebSocket(ws: WS): void {
     ws,
     topics: new Set(),
     authenticated: false,
-    sendBuffer: [],
+    messagesSinceHeartbeat: 0,
     backpressured: false,
     lastActivity: Date.now(),
   };
@@ -204,14 +204,15 @@ function handleMessage(state: ClientState, msg: Record<string, unknown>): void {
 
 /**
  * Send a message to a client with backpressure protection.
- * When the buffer exceeds MAX_BUFFER_SIZE the slow consumer is disconnected.
+ * When message count since last heartbeat exceeds MAX_MESSAGES_PER_HEARTBEAT
+ * the slow consumer is disconnected.
  * Returns false if the message was dropped or the client was disconnected.
  */
 function safeSend(state: ClientState, payload: Record<string, unknown>): boolean {
   const data = JSON.stringify(payload);
 
-  if (state.sendBuffer.length >= MAX_BUFFER_SIZE) {
-    // Slow consumer: buffer is full. Warn once, then disconnect.
+  if (state.messagesSinceHeartbeat >= MAX_MESSAGES_PER_HEARTBEAT) {
+    // Slow consumer: too many messages since last heartbeat. Warn once, then disconnect.
     if (!state.backpressured) {
       state.backpressured = true;
       try {
@@ -232,6 +233,7 @@ function safeSend(state: ClientState, payload: Record<string, unknown>): boolean
   }
 
   try {
+    state.messagesSinceHeartbeat++;
     state.ws.send(data);
     state.backpressured = false;
     return true;
@@ -403,6 +405,9 @@ export function heartbeatTick(): number {
       disconnected++;
       continue;
     }
+
+    // Reset backpressure counter each heartbeat interval
+    state.messagesSinceHeartbeat = 0;
 
     // Send heartbeat ping
     safeSend(state, { type: "ping", ts: now });

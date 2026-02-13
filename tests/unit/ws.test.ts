@@ -522,18 +522,62 @@ describe("Error handling", () => {
 });
 
 describe("Backpressure handling", () => {
-  it("should handle sync sends without backpressure issues", () => {
+  it("should handle sends under the threshold without backpressure issues", () => {
     const ws = createMockWs();
     setupAndAuth(ws);
     handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["*"] }));
 
-    // Emit many messages - they should all succeed in sync mode
+    // Emit many messages under the 512 threshold - they should all succeed
     for (let i = 0; i < 100; i++) {
       emitInstanceLog("id1", "info", `msg ${i}`);
     }
 
     const logMessages = ws.allMessages().filter((m) => m.type === "instance:log");
     expect(logMessages).toHaveLength(100);
+  });
+
+  it("should disconnect slow consumer when message count exceeds threshold", () => {
+    const ws = createMockWs();
+    setupAndAuth(ws);
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["*"] }));
+
+    // The client already received welcome + authenticated + subscribed = 3 messages toward the counter.
+    // Send enough messages to exceed the 512 threshold.
+    for (let i = 0; i < 600; i++) {
+      emitInstanceLog("id1", "info", `msg ${i}`);
+    }
+
+    // Client should have been disconnected due to backpressure
+    expect(getClientCount()).toBe(0);
+
+    // Should have received a BACKPRESSURE_DISCONNECT warning
+    const allMsgs = ws.allMessages();
+    const backpressureMsg = allMsgs.find(
+      (m) => m.code === "BACKPRESSURE_DISCONNECT",
+    );
+    expect(backpressureMsg).toBeDefined();
+    expect(backpressureMsg?.type).toBe("error");
+  });
+
+  it("should reset message counter on heartbeat tick", () => {
+    const ws = createMockWs();
+    setupAndAuth(ws);
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["*"] }));
+
+    // Send 400 messages (under 512 threshold but significant)
+    for (let i = 0; i < 400; i++) {
+      emitInstanceLog("id1", "info", `msg ${i}`);
+    }
+    expect(getClientCount()).toBe(1);
+
+    // Heartbeat resets the counter
+    heartbeatTick();
+
+    // Should be able to send another 400 without hitting the limit
+    for (let i = 0; i < 400; i++) {
+      emitInstanceLog("id1", "info", `msg2 ${i}`);
+    }
+    expect(getClientCount()).toBe(1);
   });
 
   it("should disconnect slow consumer that throws on send", () => {
