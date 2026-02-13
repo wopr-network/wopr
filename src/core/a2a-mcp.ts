@@ -12,6 +12,8 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { logger } from "../logger.js";
 import {
   cachedMcpServer,
+  closeAllBrowsers,
+  createBrowserTools,
   createConfigTools,
   createCronTools,
   createEventTools,
@@ -36,7 +38,14 @@ import {
 import { config as centralConfig } from "./config.js";
 
 // Re-export public API for consumers (sessions.ts, plugins.ts)
-export { type RegisteredTool, registerA2ATool, setSessionFunctions, type ToolContext, unregisterA2ATool };
+export {
+  closeAllBrowsers,
+  type RegisteredTool,
+  registerA2ATool,
+  setSessionFunctions,
+  type ToolContext,
+  unregisterA2ATool,
+};
 
 /**
  * List all registered tools (core + plugins)
@@ -73,6 +82,11 @@ export function listA2ATools(): string[] {
     "notify",
     "image_generate",
     "web_search",
+    "browser_navigate",
+    "browser_click",
+    "browser_type",
+    "browser_screenshot",
+    "browser_evaluate",
   ];
   return [...coreTools, ...pluginTools.keys()];
 }
@@ -101,6 +115,7 @@ export function getA2AMcpServer(sessionName: string): any {
     ...createNotifyTools(sessionName),
     ...createImageGenerateTools(sessionName),
     ...createWebSearchTools(sessionName),
+    ...createBrowserTools(sessionName),
   ];
 
   // Add plugin tools
