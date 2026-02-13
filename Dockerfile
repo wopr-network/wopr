@@ -31,6 +31,7 @@ RUN mkdir -p /data && chown -R node:node /data
 RUN mkdir -p /home/node/.claude && chown -R node:node /home/node/.claude
 
 ENV WOPR_HOME=/data
+ENV WOPR_DAEMON_HOST=0.0.0.0
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
