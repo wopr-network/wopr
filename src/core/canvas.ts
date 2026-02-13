@@ -7,9 +7,20 @@
  * real-time updates.
  */
 
-import { publishToTopic } from "../daemon/ws.js";
 import { logger } from "../logger.js";
 import { eventBus } from "./events.js";
+
+// ---------------------------------------------------------------------------
+// Publish injection — avoids core -> daemon cross-layer dependency
+// ---------------------------------------------------------------------------
+
+type PublishFn = (topic: string, event: Record<string, unknown>) => void;
+let _publish: PublishFn | undefined;
+
+/** Inject the WebSocket publish function from the daemon layer. */
+export function setCanvasPublish(fn: PublishFn): void {
+  _publish = fn;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,7 +104,14 @@ export async function canvasPush(
     meta: options?.meta,
     pushedAt: Date.now(),
   };
-  items.push(item);
+
+  // Upsert: if a custom id already exists, replace in-place
+  const existingIdx = options?.id ? items.findIndex((i) => i.id === options.id) : -1;
+  if (existingIdx !== -1) {
+    items[existingIdx] = item;
+  } else {
+    items.push(item);
+  }
   logger.debug(`[canvas] push ${item.id} (${type}) to session ${session}`);
 
   const event: CanvasEvent = { session, operation: "push", item };
@@ -132,7 +150,7 @@ export async function canvasReset(session: string): Promise<void> {
  * Take a snapshot of the current canvas state.
  */
 export async function canvasSnapshot(session: string): Promise<CanvasSnapshot> {
-  const items = ensureCanvas(session);
+  const items = canvases.get(session) ?? [];
   const snapshot: CanvasSnapshot = {
     session,
     items: [...items],
@@ -152,13 +170,19 @@ export function canvasGet(session: string): CanvasItem[] {
   return [...(canvases.get(session) ?? [])];
 }
 
+/** Reset all canvas state (for testing). */
+export function _resetCanvasState(): void {
+  canvases.clear();
+  idCounter = 0;
+}
+
 // ---------------------------------------------------------------------------
 // Broadcast helper
 // ---------------------------------------------------------------------------
 
 async function broadcast(session: string, event: CanvasEvent): Promise<void> {
-  // WebSocket topic: canvas:<session>
-  publishToTopic(`canvas:${session}`, {
+  // WebSocket topic: canvas:<session> (injected to avoid cross-layer import)
+  _publish?.(`canvas:${session}`, {
     type: `canvas:${event.operation}`,
     ...event,
     ts: Date.now(),

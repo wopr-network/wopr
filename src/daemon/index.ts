@@ -35,6 +35,7 @@ import { checkReadiness, markCronRunning, markStartupComplete } from "./readines
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { betterAuthRouter } from "./routes/better-auth.js";
+import { setCanvasPublish } from "../core/canvas.js";
 import { canvasRouter } from "./routes/canvas.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
@@ -56,6 +57,7 @@ import {
   handleWebSocketClose,
   handleWebSocketMessage,
   heartbeatTick,
+  publishToTopic,
   setupWebSocket,
 } from "./ws.js";
 
@@ -158,6 +160,9 @@ function heapMB(): string {
 export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const port = config.port ?? DEFAULT_PORT;
   const host = config.host ?? DEFAULT_HOST;
+
+  // Inject WebSocket publish into core canvas to avoid cross-layer import
+  setCanvasPublish(publishToTopic);
 
   daemonLog(`[heap] startup: ${heapMB()}`);
 
