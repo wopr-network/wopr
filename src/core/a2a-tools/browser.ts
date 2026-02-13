@@ -13,6 +13,19 @@ import { logger, tool, withSecurityCheck, z } from "./_base.js";
 import { loadProfile, saveProfile } from "./browser-profile.js";
 
 // ---------------------------------------------------------------------------
+// Configuration constants
+// ---------------------------------------------------------------------------
+
+/** Default navigation/action timeout in milliseconds. */
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** Maximum serialized size (in characters) for evaluate return values. */
+const MAX_EVALUATE_RESULT_LENGTH = 10_000;
+
+/** Maximum page content length before truncation. */
+const MAX_PAGE_CONTENT_LENGTH = 15_000;
+
+// ---------------------------------------------------------------------------
 // SSRF protection: URL validation
 // ---------------------------------------------------------------------------
 
@@ -168,6 +181,35 @@ interface BrowserInstance {
 
 const instances = new Map<string, BrowserInstance>();
 
+// Guard: register process-exit cleanup only once to kill orphaned Chrome processes.
+// Use a symbol on process to survive module re-evaluation (e.g., in tests).
+const CLEANUP_SYMBOL = Symbol.for("wopr-browser-cleanup");
+function ensureProcessCleanup(): void {
+  if ((process as any)[CLEANUP_SYMBOL]) return;
+  (process as any)[CLEANUP_SYMBOL] = true;
+  const cleanup = () => {
+    for (const [, instance] of instances) {
+      try {
+        const proc = instance.browser.process?.();
+        if (proc && !proc.killed) {
+          proc.kill("SIGKILL");
+        }
+      } catch {
+        // Best-effort — ignore errors during exit
+      }
+      try {
+        instance.browser.close();
+      } catch {
+        // Best-effort
+      }
+    }
+    instances.clear();
+  };
+  process.on("exit", cleanup);
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
+}
+
 async function getOrCreateInstance(profileName: string): Promise<BrowserInstance> {
   const existing = instances.get(profileName);
   if (existing) {
@@ -181,6 +223,8 @@ async function getOrCreateInstance(profileName: string): Promise<BrowserInstance
       instances.delete(profileName);
     }
   }
+
+  ensureProcessCleanup();
 
   const playwright = await getPlaywright();
   const profile = loadProfile(profileName);
@@ -275,9 +319,22 @@ export async function closeAllBrowsers(): Promise<void> {
   for (const [name, instance] of instances) {
     try {
       await persistProfile(instance);
+    } catch (err) {
+      logger.warn(`[browser] Error persisting profile "${name}": ${err}`);
+    }
+    try {
       await instance.browser.close();
     } catch (err) {
       logger.warn(`[browser] Error closing browser for profile "${name}": ${err}`);
+      // Force-kill the process if close() failed
+      try {
+        const proc = instance.browser.process?.();
+        if (proc && !proc.killed) {
+          proc.kill("SIGKILL");
+        }
+      } catch {
+        // Best-effort
+      }
     }
   }
   instances.clear();
@@ -304,11 +361,19 @@ export function createBrowserTools(sessionName: string): any[] {
           .enum(["load", "domcontentloaded", "networkidle"])
           .optional()
           .describe("Wait condition (default: 'domcontentloaded')"),
-        timeout: z.number().optional().describe("Navigation timeout in ms (default: 30000)"),
+        timeout: z
+          .number()
+          .optional()
+          .describe(`Navigation timeout in ms (default: ${DEFAULT_TIMEOUT_MS})`),
       },
       async (args: any) => {
         return withSecurityCheck("browser_navigate", sessionName, async () => {
-          const { url, profile: profileName = "default", waitFor = "domcontentloaded", timeout = 30000 } = args;
+          const {
+            url,
+            profile: profileName = "default",
+            waitFor = "domcontentloaded",
+            timeout = DEFAULT_TIMEOUT_MS,
+          } = args;
 
           // SSRF protection: validate URL before navigating
           const urlCheck = isUrlSafe(url);
@@ -322,13 +387,31 @@ export function createBrowserTools(sessionName: string): any[] {
           try {
             const instance = await getOrCreateInstance(profileName);
             await instance.page.goto(url, { waitUntil: waitFor, timeout });
+
+            // Re-validate final URL after redirects to prevent SSRF bypass
+            const pageUrl = instance.page.url();
+            const finalCheck = isUrlSafe(pageUrl);
+            if (!finalCheck.safe) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Navigation blocked after redirect: ${finalCheck.reason} (redirected to ${pageUrl})`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+
             const title = await instance.page.title();
             const html = await instance.page.content();
             const markdown = htmlToMarkdown(html);
-            const pageUrl = instance.page.url();
             await persistProfile(instance);
 
-            const truncated = markdown.length > 15000 ? `${markdown.substring(0, 15000)}\n\n... (truncated)` : markdown;
+            const truncated =
+              markdown.length > MAX_PAGE_CONTENT_LENGTH
+                ? `${markdown.substring(0, MAX_PAGE_CONTENT_LENGTH)}\n\n... (truncated)`
+                : markdown;
 
             return {
               content: [
@@ -484,7 +567,9 @@ export function createBrowserTools(sessionName: string): any[] {
         return withSecurityCheck("browser_evaluate", sessionName, async () => {
           const { expression, profile: profileName = "default" } = args;
 
-          // Block obvious escape attempts
+          // Block obvious escape attempts.
+          // Normalize: strip all whitespace and lowercase to defeat bypass tricks
+          // like "f\netch(...)" or "FETCH(...)".
           const blocked = [
             "require(",
             "process.",
@@ -493,11 +578,13 @@ export function createBrowserTools(sessionName: string): any[] {
             "__filename",
             "import(",
             "eval(",
-            "Function(",
+            "function(",
+            "fetch(",
+            "xmlhttprequest",
           ];
-          const lower = expression.toLowerCase();
+          const normalized = expression.replace(/\s+/g, "").toLowerCase();
           for (const pattern of blocked) {
-            if (lower.includes(pattern.toLowerCase())) {
+            if (normalized.includes(pattern.toLowerCase())) {
               return {
                 content: [
                   {
@@ -515,7 +602,9 @@ export function createBrowserTools(sessionName: string): any[] {
             const result = await instance.page.evaluate(expression);
             const serialized = JSON.stringify(result, null, 2) ?? "undefined";
             const truncated =
-              serialized.length > 10000 ? `${serialized.substring(0, 10000)}\n... (truncated)` : serialized;
+              serialized.length > MAX_EVALUATE_RESULT_LENGTH
+                ? `${serialized.substring(0, MAX_EVALUATE_RESULT_LENGTH)}\n... (truncated, ${serialized.length} chars total)`
+                : serialized;
             return {
               content: [{ type: "text", text: truncated }],
             };
