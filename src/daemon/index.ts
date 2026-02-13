@@ -35,6 +35,8 @@ import { authRouter } from "./routes/auth.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
 import { hooksRouter } from "./routes/hooks.js";
+import { instancePluginsRouter } from "./routes/instance-plugins.js";
+import { marketplaceRouter } from "./routes/marketplace.js";
 import { openaiRouter } from "./routes/openai.js";
 import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
@@ -100,6 +102,11 @@ export function createApp() {
   app.route("/hooks", hooksRouter);
   app.route("/providers", providersRouter);
   app.route("/v1", openaiRouter);
+
+  // Per-instance plugin management (WOP-203)
+  app.route("/api/instances/:id/plugins", instancePluginsRouter);
+  // Marketplace (WOP-203)
+  app.route("/api/marketplace", marketplaceRouter);
   return app;
 }
 
