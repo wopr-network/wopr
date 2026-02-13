@@ -35,6 +35,7 @@ import { checkReadiness, markCronRunning, markStartupComplete } from "./readines
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { betterAuthRouter } from "./routes/better-auth.js";
+import { canvasRouter } from "./routes/canvas.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
 import { createHealthzRouter } from "./routes/health.js";
@@ -115,6 +116,7 @@ export function createApp(healthMonitor?: HealthMonitor) {
 
   // Mount routers
   app.route("/auth", authRouter);
+  app.route("/canvas", canvasRouter);
   app.route("/config", configRouter);
   app.route("/sessions", sessionsRouter);
   app.route("/crons", cronsRouter);

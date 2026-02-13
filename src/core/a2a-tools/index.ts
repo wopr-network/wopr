@@ -15,6 +15,7 @@ export {
   type ToolContext,
   unregisterA2ATool,
 } from "./_base.js";
+export { createCanvasTools } from "./canvas.js";
 export { closeAllBrowsers, createBrowserTools } from "./browser.js";
 export { createConfigTools } from "./config.js";
 export { createCronTools } from "./cron.js";
