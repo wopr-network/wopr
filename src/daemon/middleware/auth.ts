@@ -13,7 +13,7 @@ import { ensureToken } from "../auth-token.js";
 
 // WebSocket upgrade paths skip bearer auth — authentication happens
 // at the WebSocket message level via first-message ticket exchange
-const SKIP_AUTH_PATHS = new Set(["/health", "/ready", "/ws", "/api/ws"]);
+const SKIP_AUTH_PATHS = new Set(["/health", "/ready", "/ws", "/api/ws", "/healthz", "/healthz/history"]);
 
 // Cache the token so we don't hit disk on every request
 let cachedToken: string | null = null;

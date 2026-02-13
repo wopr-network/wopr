@@ -30,10 +30,12 @@ import { loadAllPlugins, registerPluginExtension, shutdownAllPlugins } from "../
 import { ensureToken } from "./auth-token.js";
 import { bearerAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rate-limit.js";
+import { HealthMonitor } from "./health.js";
 import { checkReadiness, markCronRunning, markStartupComplete } from "./readiness.js";
 import { authRouter } from "./routes/auth.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";
+import { createHealthzRouter } from "./routes/health.js";
 import { hooksRouter } from "./routes/hooks.js";
 import { instancePluginsRouter } from "./routes/instance-plugins.js";
 import { instancesRouter } from "./routes/instances.js";
@@ -77,7 +79,7 @@ export interface DaemonConfig {
   host?: string;
 }
 
-export function createApp() {
+export function createApp(healthMonitor?: HealthMonitor) {
   const app = new Hono();
 
   // Middleware
@@ -124,6 +126,11 @@ export function createApp() {
 
   // WebSocket stats endpoint (authenticated via bearerAuth middleware — not in SKIP_AUTH_PATHS)
   app.get("/ws/stats", (c) => c.json(getSubscriptionStats()));
+
+  // Comprehensive health endpoint (unauthenticated)
+  if (healthMonitor) {
+    app.route("/healthz", createHealthzRouter(healthMonitor));
+  }
   return app;
 }
 
@@ -169,8 +176,11 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     startupWarnings.push(msg);
   }
 
+  // Create health monitor
+  const healthMonitor = new HealthMonitor({ version: "1.0.0" });
+
   // Create Hono app
-  const app = createApp();
+  const app = createApp(healthMonitor);
 
   // Setup WebSocket using @hono/node-ws
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
@@ -362,6 +372,14 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // All subsystems initialized — mark startup complete for readiness probe
   markStartupComplete();
 
+  // Start periodic health monitoring
+  healthMonitor.start();
+  healthMonitor.on("statusChange", ({ previous, current }) => {
+    daemonLog(`[health] Status changed: ${previous} -> ${current}`);
+    winstonLogger.info(`[daemon] Health status: ${previous} -> ${current}`);
+  });
+  daemonLog("Health monitor started");
+
   // Start cron scheduler
   const lastRun: Record<string, number> = {};
   const cronTick = async () => {
@@ -483,6 +501,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const shutdown = async () => {
     daemonLog("Daemon stopping...");
     clearInterval(heartbeatInterval);
+    healthMonitor.stop();
     await shutdownAllPlugins();
     if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
     daemonLog("Daemon stopped");
