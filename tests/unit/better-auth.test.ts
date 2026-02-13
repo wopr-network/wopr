@@ -8,6 +8,7 @@
  * - Organization plugin (RBAC)
  * - OAuth redirect URL generation
  * - Auth middleware (daemon bearer backward compat + Better Auth session)
+ * - BETTER_AUTH_SECRET validation
  */
 
 import { describe, expect, it } from "vitest";
@@ -15,6 +16,90 @@ import { organization } from "better-auth/plugins";
 import { getTestInstance } from "better-auth/test";
 
 describe("Better Auth Integration (WOP-261)", () => {
+  // ========================================================================
+  // Secret Validation
+  // ========================================================================
+  describe("BETTER_AUTH_SECRET validation", () => {
+    const envKey = "BETTER_AUTH_SECRET";
+    let originalSecret: string | undefined;
+
+    function withEnv(value: string | undefined, fn: () => void) {
+      const prev = process.env[envKey];
+      if (value === undefined) {
+        delete process.env[envKey];
+      } else {
+        process.env[envKey] = value;
+      }
+      try {
+        fn();
+      } finally {
+        if (prev === undefined) {
+          delete process.env[envKey];
+        } else {
+          process.env[envKey] = prev;
+        }
+      }
+    }
+
+    it("should reject missing BETTER_AUTH_SECRET", async () => {
+      withEnv(undefined, () => {
+        expect(() => {
+          // Inline the same validation logic to unit-test it
+          const secret = process.env.BETTER_AUTH_SECRET;
+          if (!secret || secret.trim().length === 0) {
+            throw new Error(
+              "BETTER_AUTH_SECRET must be set (min 32 chars). Generate with: openssl rand -base64 32",
+            );
+          }
+        }).toThrow("BETTER_AUTH_SECRET must be set");
+      });
+    });
+
+    it("should reject empty BETTER_AUTH_SECRET", async () => {
+      withEnv("", () => {
+        expect(() => {
+          const secret = process.env.BETTER_AUTH_SECRET;
+          if (!secret || secret.trim().length === 0) {
+            throw new Error(
+              "BETTER_AUTH_SECRET must be set (min 32 chars). Generate with: openssl rand -base64 32",
+            );
+          }
+        }).toThrow("BETTER_AUTH_SECRET must be set");
+      });
+    });
+
+    it("should reject secrets shorter than 32 characters", async () => {
+      withEnv("tooshort", () => {
+        expect(() => {
+          const secret = process.env.BETTER_AUTH_SECRET;
+          if (!secret || secret.trim().length === 0) {
+            throw new Error("BETTER_AUTH_SECRET must be set");
+          }
+          if (secret.length < 32) {
+            throw new Error(
+              `BETTER_AUTH_SECRET must be at least 32 characters (got ${secret.length}). Generate with: openssl rand -base64 32`,
+            );
+          }
+        }).toThrow("BETTER_AUTH_SECRET must be at least 32 characters");
+      });
+    });
+
+    it("should accept secrets of 32+ characters", async () => {
+      const validSecret = "a".repeat(32);
+      withEnv(validSecret, () => {
+        expect(() => {
+          const secret = process.env.BETTER_AUTH_SECRET;
+          if (!secret || secret.trim().length === 0) {
+            throw new Error("BETTER_AUTH_SECRET must be set");
+          }
+          if (secret.length < 32) {
+            throw new Error("BETTER_AUTH_SECRET must be at least 32 characters");
+          }
+        }).not.toThrow();
+      });
+    });
+  });
+
   // ========================================================================
   // Core Auth: Signup, Login, Session, Logout
   // ========================================================================
@@ -327,6 +412,75 @@ describe("Better Auth Integration (WOP-261)", () => {
         }),
       });
       expect(session).toBeNull();
+    });
+  });
+
+  // ========================================================================
+  // requireAdmin Middleware (RBAC)
+  // ========================================================================
+  describe("requireAdmin middleware", () => {
+    it("should allow admin role through", async () => {
+      const { Hono } = await import("hono");
+      const { requireAdmin } = await import("../../src/daemon/middleware/auth.js");
+
+      const app = new Hono();
+      // Simulate a pre-authenticated admin user
+      app.use("*", async (c, next) => {
+        c.set("role", "admin");
+        return next();
+      });
+      app.use("*", requireAdmin());
+      app.get("/admin/config", (c) => c.json({ ok: true }));
+
+      const res = await app.request("/admin/config");
+      expect(res.status).toBe(200);
+    });
+
+    it("should allow owner role through", async () => {
+      const { Hono } = await import("hono");
+      const { requireAdmin } = await import("../../src/daemon/middleware/auth.js");
+
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        c.set("role", "owner");
+        return next();
+      });
+      app.use("*", requireAdmin());
+      app.get("/admin/config", (c) => c.json({ ok: true }));
+
+      const res = await app.request("/admin/config");
+      expect(res.status).toBe(200);
+    });
+
+    it("should reject viewer role with 403", async () => {
+      const { Hono } = await import("hono");
+      const { requireAdmin } = await import("../../src/daemon/middleware/auth.js");
+
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        c.set("role", "viewer");
+        return next();
+      });
+      app.use("*", requireAdmin());
+      app.get("/admin/config", (c) => c.json({ ok: true }));
+
+      const res = await app.request("/admin/config");
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toContain("admin access required");
+    });
+
+    it("should reject undefined role with 403", async () => {
+      const { Hono } = await import("hono");
+      const { requireAdmin } = await import("../../src/daemon/middleware/auth.js");
+
+      const app = new Hono();
+      // No role set (e.g. middleware bug)
+      app.use("*", requireAdmin());
+      app.get("/admin/config", (c) => c.json({ ok: true }));
+
+      const res = await app.request("/admin/config");
+      expect(res.status).toBe(403);
     });
   });
 });

@@ -83,15 +83,19 @@ export function bearerAuth(): MiddlewareHandler {
 /**
  * Middleware that requires a platform user (Better Auth session).
  * Checks daemon bearer token FIRST for backward compat, then Better Auth session.
- * Sets c.var.user and c.var.session on success.
+ * Sets c.var.user, c.var.session, and c.var.role on success.
+ *
+ * Daemon bearer token holders are treated as "admin" role for backward compat.
  */
 export function requireAuth(): MiddlewareHandler {
   return async (c, next) => {
     const authHeader = c.req.header("Authorization");
 
     // Check daemon bearer token first (backward compat)
+    // Daemon token holders get admin role (they have the on-disk secret)
     if (authHeader?.startsWith("Bearer ")) {
       if (isDaemonBearerValid(authHeader)) {
+        c.set("role", "admin");
         return next();
       }
     }
@@ -104,6 +108,7 @@ export function requireAuth(): MiddlewareHandler {
       if (session) {
         c.set("user", session.user);
         c.set("session", session.session);
+        c.set("role", (session.user as Record<string, unknown>).role ?? "viewer");
         return next();
       }
     } catch (err) {
@@ -111,5 +116,20 @@ export function requireAuth(): MiddlewareHandler {
     }
 
     return c.json({ error: "Unauthorized" }, 401);
+  };
+}
+
+/**
+ * Middleware that requires admin role.
+ * Must be used AFTER requireAuth() in the middleware chain.
+ * Rejects non-admin users with 403 Forbidden.
+ */
+export function requireAdmin(): MiddlewareHandler {
+  return async (c, next) => {
+    const role = c.get("role");
+    if (role !== "admin" && role !== "owner") {
+      return c.json({ error: "Forbidden: admin access required" }, 403);
+    }
+    return next();
   };
 }

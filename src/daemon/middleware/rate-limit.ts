@@ -17,6 +17,8 @@ export interface RateLimitConfig {
   windowMs?: number;
   /** Max requests per window per client. Default: 60. */
   limit?: number;
+  /** Key by IP address instead of Authorization header. Default: false. */
+  keyByIp?: boolean;
 }
 
 /**
@@ -24,16 +26,23 @@ export interface RateLimitConfig {
  *
  * Identifies clients by Authorization header (since all non-health
  * routes require bearer auth) with IP fallback.
+ * When keyByIp is true, always uses IP for keying (for auth endpoints).
  */
 export function rateLimit(config: RateLimitConfig = {}): MiddlewareHandler {
   const windowMs = config.windowMs ?? 60_000;
   const limit = config.limit ?? 60;
+  const keyByIp = config.keyByIp ?? false;
 
   return rateLimiter({
     windowMs,
     limit,
     standardHeaders: "draft-6",
-    keyGenerator: (c) => c.req.header("authorization") ?? c.req.header("x-forwarded-for") ?? "anonymous",
+    keyGenerator: (c) => {
+      if (keyByIp) {
+        return c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? "anonymous";
+      }
+      return c.req.header("authorization") ?? c.req.header("x-forwarded-for") ?? "anonymous";
+    },
     skip: (c) => SKIP_PATHS.has(c.req.path),
     handler: (c) => {
       const retryAfterSeconds = Math.ceil(windowMs / 1000);

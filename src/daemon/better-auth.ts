@@ -21,10 +21,31 @@ const { DatabaseSync } = _require("node:sqlite");
 
 const AUTH_DB_PATH = join(WOPR_HOME, "auth.sqlite");
 
+const MIN_SECRET_LENGTH = 32;
+
+/**
+ * Validate BETTER_AUTH_SECRET at startup.
+ * Must be set and at least 32 characters to prevent weak/default secrets.
+ */
+function validateAuthSecret(): string {
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (!secret || secret.trim().length === 0) {
+    throw new Error("BETTER_AUTH_SECRET must be set (min 32 chars). Generate with: openssl rand -base64 32");
+  }
+  if (secret.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      `BETTER_AUTH_SECRET must be at least ${MIN_SECRET_LENGTH} characters (got ${secret.length}). Generate with: openssl rand -base64 32`,
+    );
+  }
+  return secret;
+}
+
+const authSecret = validateAuthSecret();
+
 export const auth = betterAuth({
   database: new DatabaseSync(AUTH_DB_PATH),
   basePath: "/api/auth",
-  secret: process.env.BETTER_AUTH_SECRET,
+  secret: authSecret,
   baseURL: process.env.BETTER_AUTH_URL,
   emailAndPassword: {
     enabled: true,
