@@ -10,3 +10,4 @@ export { pluginsRouter } from "./plugins.js";
 export { providersRouter } from "./providers.js";
 export { sessionsRouter } from "./sessions.js";
 export { skillsRouter } from "./skills.js";
+export { templatesRouter } from "./templates.js";
