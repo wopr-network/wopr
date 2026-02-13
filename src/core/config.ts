@@ -72,6 +72,17 @@ export interface WoprConfig {
       apiKey?: string;
     };
   };
+  /** Web search tool configuration */
+  webSearch?: {
+    /** Ordered list of providers to try (default: ["google", "brave", "xai"]) */
+    providerOrder?: Array<"google" | "brave" | "xai">;
+    /** Per-provider credentials (env vars take precedence) */
+    providers?: {
+      google?: { apiKey?: string; cx?: string };
+      brave?: { apiKey?: string };
+      xai?: { apiKey?: string };
+    };
+  };
   /**
    * Sandbox configuration for Docker-based isolation
    */

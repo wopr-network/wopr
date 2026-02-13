@@ -23,6 +23,7 @@ import {
   createSecurityTools,
   createSessionTools,
   createSoulTools,
+  createWebSearchTools,
   mcpServerDirty,
   pluginTools,
   type RegisteredTool,
@@ -71,6 +72,7 @@ export function listA2ATools(): string[] {
     "exec_command",
     "notify",
     "image_generate",
+    "web_search",
   ];
   return [...coreTools, ...pluginTools.keys()];
 }
@@ -98,6 +100,7 @@ export function getA2AMcpServer(sessionName: string): any {
     ...createHttpExecTools(sessionName),
     ...createNotifyTools(sessionName),
     ...createImageGenerateTools(sessionName),
+    ...createWebSearchTools(sessionName),
   ];
 
   // Add plugin tools
