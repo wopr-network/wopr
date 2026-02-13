@@ -82,6 +82,8 @@ export function _resetStore(): void {
   instanceLogs.clear();
 }
 
+const MAX_LOG_ENTRIES = 10_000;
+
 function appendLog(id: string, level: InstanceLogEntry["level"], message: string): void {
   let logs = instanceLogs.get(id);
   if (!logs) {
@@ -89,6 +91,10 @@ function appendLog(id: string, level: InstanceLogEntry["level"], message: string
     instanceLogs.set(id, logs);
   }
   logs.push({ ts: Date.now(), level, message });
+  if (logs.length > MAX_LOG_ENTRIES) {
+    const excess = logs.length - MAX_LOG_ENTRIES;
+    logs.splice(0, excess);
+  }
 }
 
 // ============================================================================
@@ -238,7 +244,7 @@ instancesRouter.delete("/:id", (c) => {
     return c.json({ error: "Instance not found" }, 404);
   }
 
-  if (instance.status === "running" || instance.status === "starting") {
+  if (instance.status === "running" || instance.status === "starting" || instance.status === "stopping") {
     return c.json({ error: "Cannot delete a running instance. Stop it first." }, 409);
   }
 
@@ -263,6 +269,10 @@ instancesRouter.post("/:id/start", (c) => {
   if (instance.status === "starting") {
     return c.json({ error: "Instance is already starting" }, 409);
   }
+
+  instance.status = "starting";
+  instance.updatedAt = Date.now();
+  appendLog(id, "info", "Instance starting");
 
   instance.status = "running";
   instance.startedAt = Date.now();
@@ -304,6 +314,14 @@ instancesRouter.post("/:id/restart", (c) => {
     return c.json({ error: "Instance not found" }, 404);
   }
 
+  if (instance.status !== "running" && instance.status !== "stopped") {
+    return c.json({ error: "Can only restart a running or stopped instance" }, 409);
+  }
+
+  instance.status = "starting";
+  instance.updatedAt = Date.now();
+  appendLog(id, "info", "Instance restarting");
+
   instance.status = "running";
   instance.startedAt = Date.now();
   instance.updatedAt = Date.now();
@@ -334,12 +352,12 @@ instancesRouter.get("/:id/logs", (c) => {
   const { lines, since } = query.data;
   let logs = instanceLogs.get(id) ?? [];
 
+  // Take last N lines first, then filter by timestamp
+  logs = logs.slice(-lines);
+
   if (since) {
     logs = logs.filter((l) => l.ts >= since);
   }
-
-  // Return last N lines
-  logs = logs.slice(-lines);
 
   return c.json({ instanceId: id, logs, count: logs.length });
 });

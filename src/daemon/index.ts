@@ -111,7 +111,7 @@ export function createApp() {
   // Marketplace (WOP-203)
   app.route("/api/marketplace", marketplaceRouter);
   // Instance CRUD (WOP-202)
-  app.route("/api/instances", instancesRouter);
+  app.route("/instances", instancesRouter);
   return app;
 }
 
