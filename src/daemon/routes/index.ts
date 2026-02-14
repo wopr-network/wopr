@@ -3,7 +3,6 @@
  */
 
 export { authRouter } from "./auth.js";
-export { betterAuthRouter } from "./better-auth.js";
 export { canvasRouter } from "./canvas.js";
 export { cronsRouter } from "./crons.js";
 export { createHealthzRouter } from "./health.js";
