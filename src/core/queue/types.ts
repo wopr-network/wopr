@@ -27,7 +27,6 @@ export interface InjectOptions {
 export interface InjectResult {
   response: string;
   sessionId: string;
-  cost: number;
 }
 
 /**

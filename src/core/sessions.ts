@@ -313,7 +313,6 @@ async function executeInjectInternal(
   const channel = options?.channel;
   const collected: string[] = [];
   let sessionId = existingSessionId || "";
-  let cost = 0;
 
   // SECURITY: Create security context from source (defaults to CLI/owner)
   const injectionSource = options?.source ?? createInjectionSource("cli");
@@ -424,7 +423,7 @@ async function executeInjectInternal(
         type: "context",
         channel,
       });
-      return { response: "", sessionId, cost: 0 };
+      return { response: "", sessionId };
     }
 
     const processedMessage = incomingResult.message;
@@ -613,9 +612,8 @@ async function executeInjectInternal(
             break;
           case "result":
             if (msg.subtype === "success") {
-              cost = msg.total_cost_usd;
-              if (!silent) logger.info(`\n[wopr] Complete (${providerUsed}). Cost: $${cost.toFixed(4)}`);
-              const streamMsg: StreamMessage = { type: "complete", content: `Cost: $${cost.toFixed(4)}` };
+              if (!silent) logger.info(`\n[wopr] Complete (${providerUsed}).`);
+              const streamMsg: StreamMessage = { type: "complete", content: "" };
               if (onStream) onStream(streamMsg);
             } else {
               if (!silent) logger.error(`[wopr] Error: ${msg.subtype}`);
@@ -693,8 +691,7 @@ async function executeInjectInternal(
               break;
             case "result":
               if (msg.subtype === "success") {
-                cost = msg.total_cost_usd;
-                if (!silent) logger.info(`[wopr] Complete (retry). Cost: $${cost.toFixed(4)}`);
+                if (!silent) logger.info(`[wopr] Complete (retry).`);
               }
               break;
           }
@@ -721,7 +718,7 @@ async function executeInjectInternal(
         type: "context",
         channel,
       });
-      return { response: "", sessionId, cost };
+      return { response: "", sessionId };
     }
 
     response = outgoingResult.response;
@@ -742,7 +739,7 @@ async function executeInjectInternal(
     const { updateLastTriggerTimestamp } = await import("./context.js");
     updateLastTriggerTimestamp(name);
 
-    return { response, sessionId, cost };
+    return { response, sessionId };
   } finally {
     // SECURITY: Always clear context when request completes
     clearContext(name);

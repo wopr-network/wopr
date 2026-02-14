@@ -111,7 +111,6 @@ export const AcpChatMessageRequestSchema = AcpBaseMessageSchema.extend({
 export const AcpChatResponseSchema = z.object({
   sessionId: z.string(),
   content: z.string(),
-  cost: z.number().optional(),
 });
 
 // ============================================================================

@@ -120,7 +120,6 @@ cronsRouter.post("/now", async (c) => {
   return c.json({
     session,
     response: result.response,
-    cost: result.cost,
   });
 });
 

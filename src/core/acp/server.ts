@@ -39,7 +39,7 @@ export interface AcpSessionBridge {
       from?: string;
       onStream?: (msg: { type: string; content: string }) => void;
     },
-  ): Promise<{ response: string; sessionId: string; cost: number }>;
+  ): Promise<{ response: string; sessionId: string }>;
   cancelInject(session: string): boolean;
 }
 
@@ -261,7 +261,6 @@ export class AcpServer {
       createResponse(id, {
         sessionId,
         content: injectResult.response,
-        cost: injectResult.cost,
       }),
     );
   }

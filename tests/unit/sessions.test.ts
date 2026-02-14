@@ -582,7 +582,7 @@ describe("getQueueStats", () => {
 // ===========================================================================
 describe("inject", () => {
   it("should delegate to queueManager.inject", async () => {
-    const expectedResult = { response: "hi", sessionId: "s1", cost: 0.01 };
+    const expectedResult = { response: "hi", sessionId: "s1" };
     mockQueueManager.inject.mockResolvedValue(expectedResult);
 
     const result = await sessions.inject("test", "hello");
@@ -591,7 +591,7 @@ describe("inject", () => {
   });
 
   it("should pass options through to queueManager", async () => {
-    mockQueueManager.inject.mockResolvedValue({ response: "", sessionId: "", cost: 0 });
+    mockQueueManager.inject.mockResolvedValue({ response: "", sessionId: "" });
 
     const opts = { silent: true, from: "discord" };
     await sessions.inject("test", "msg", opts);
@@ -600,7 +600,7 @@ describe("inject", () => {
   });
 
   it("should handle multimodal messages", async () => {
-    mockQueueManager.inject.mockResolvedValue({ response: "", sessionId: "", cost: 0 });
+    mockQueueManager.inject.mockResolvedValue({ response: "", sessionId: "" });
 
     const multimodalMsg = { text: "describe this", images: ["base64data"] };
     await sessions.inject("test", multimodalMsg);
