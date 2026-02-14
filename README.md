@@ -590,3 +590,9 @@ Contributions welcome! See [docs/PLUGINS.md](docs/PLUGINS.md) for plugin develop
 ## License
 
 MIT
+
+## Official Channels
+
+- Twitter/X: (TBD)
+- Discord: (TBD)
+
