@@ -1,42 +1,70 @@
-# Slim multi-tenant service image for WOPR
-# - No Tailscale, no Docker-in-Docker, no privileged mode
-# - Only /data mounted for persistence
-# - Credentials via env vars, not file mounts
-# - Plugins installed at runtime via 'wopr plugin install'
+# Slim multi-tenant service image for WOPR bots
+# - Multi-stage build: build deps stay out of runtime image
+# - Alpine base for minimal footprint
+# - Production deps only, non-root user
+# - V8 heap capped at 96MB per container
+#
+# Target: < 150MB image, < 100MB idle memory
 #
 # For self-hosted power-user image, see Dockerfile
 
 # --- Build stage ---
 FROM node:24-alpine AS build
 
-# Patch npm's bundled transitive deps (tar, brace-expansion CVEs)
-RUN npm install -g npm@latest
-
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# Copy lockfile + manifest first for layer caching
+COPY package.json pnpm-lock.yaml ./
+
+# Install ALL deps (need devDeps for tsc)
+RUN pnpm install --frozen-lockfile
+
+# Copy source and compile
 COPY tsconfig.json ./
 COPY src/ ./src/
 
-RUN npm run build
+RUN pnpm run build
 
-# --- Production stage ---
-FROM node:24-alpine
-
-# Patch npm's bundled transitive deps (tar, brace-expansion CVEs)
-RUN npm install -g npm@latest
+# --- Production deps stage ---
+FROM node:24-alpine AS deps
 
 WORKDIR /app
 
-# Install only git (needed at runtime for plugin install)
-RUN apk add --no-cache git ca-certificates jq
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
-COPY package*.json ./
-RUN npm ci --omit=dev
+COPY package.json pnpm-lock.yaml ./
 
+# Production deps only -- no devDependencies
+RUN pnpm install --frozen-lockfile --prod
+
+# --- Runtime stage ---
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Minimal runtime packages:
+#   git          - plugin install at runtime
+#   ca-certificates - HTTPS
+#   jq           - bundled plugin registration script
+#   tini         - proper PID 1 / signal handling
+RUN apk add --no-cache git ca-certificates jq tini
+
+# Copy production node_modules from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy compiled JS from build stage
 COPY --from=build /app/dist ./dist
+
+# Copy package.json (needed for module resolution)
+COPY package.json ./
+
+# Copy entrypoint and plugin registration scripts
+COPY scripts/docker-service-entrypoint.sh /docker-service-entrypoint.sh
+COPY scripts/register-bundled-plugins.sh /app/scripts/register-bundled-plugins.sh
+RUN chmod +x /docker-service-entrypoint.sh /app/scripts/register-bundled-plugins.sh
 
 # Create data directory owned by node
 RUN mkdir -p /data && chown -R node:node /data
@@ -50,4 +78,5 @@ USER node
 
 EXPOSE 7437
 
-CMD ["node", "dist/cli.js", "daemon", "run"]
+ENTRYPOINT ["/sbin/tini", "--", "/docker-service-entrypoint.sh"]
+CMD ["node", "--max-old-space-size=96", "dist/cli.js", "daemon", "run"]

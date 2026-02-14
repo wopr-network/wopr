@@ -1,16 +1,57 @@
+# Build artifacts
 node_modules/
 dist/
+
+# VCS
 .git/
-.cache/
-*.log
+.gitignore
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Dev / test / docs
+tests/
+docs/
+examples/
+assets/
+.planning/
+.claude/
+.github/
+skills/
+bots/
+
+# Config files not needed at runtime
+*.md
+biome.json
+vitest.config.ts
+tsconfig.json
+release-please-config.json
+.release-please-manifest.json
+.editorconfig
+.nvmrc
+
+# Secrets / state
+.env
+.env.*
 identity.json
 peers.json
 sessions.json
 crons.json
 sessions/
-skills/
 registry/
 registries.json
-examples/
-docs/
-*.md
+plugins.json
+
+# Docker files (no recursive COPY)
+Dockerfile
+Dockerfile.service
+docker-compose*.yml
+docker-entrypoint.sh
+
+# Logs / caches
+*.log
+.cache/
