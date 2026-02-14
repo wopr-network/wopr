@@ -38,24 +38,27 @@ jobs:
         run: |
           CONTAINER_NAME="smoke-${{ matrix.image }}-$$"
 
-          # Start container in background (loopback only)
+          # Start container in background (no host port mapping needed)
           docker run -d --name "$CONTAINER_NAME" \
-            -p 127.0.0.1:0:7437 \
             ghcr.io/wopr-network/${{ matrix.image }}:latest
 
-          # Resolve the host port assigned to container port 7437
-          # Use awk to grab the last colon-separated field (handles IPv6 format like :::49153)
-          HOST_PORT=$(docker port "$CONTAINER_NAME" 7437 | head -1 | awk -F: '{print $NF}')
-          if [ -z "$HOST_PORT" ]; then
-            echo "ERROR: Could not resolve host port for container $CONTAINER_NAME"
+          # Get container IP on the bridge network.
+          # This avoids DinD networking issues where host port mappings are
+          # unreachable from inside a containerised GitHub Actions runner.
+          CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER_NAME")
+          if [ -z "$CONTAINER_IP" ]; then
+            echo "ERROR: Could not resolve container IP for $CONTAINER_NAME"
+            docker logs "$CONTAINER_NAME" 2>&1 | tail -20
             docker rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
             echo "result=fail" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "Container IP: $CONTAINER_IP"
 
           # Wait up to 60s for the health endpoint to respond
           HEALTHY=false
-          echo "Polling http://localhost:${HOST_PORT}/health ..."
+          HEALTH_URL="http://${CONTAINER_IP}:7437/health"
+          echo "Polling ${HEALTH_URL} ..."
           for i in $(seq 1 30); do
             # Check container is still running
             if ! docker ps --filter "name=$CONTAINER_NAME" --format '{{.Status}}' | grep -q "Up"; then
@@ -63,7 +66,7 @@ jobs:
               docker logs "$CONTAINER_NAME" 2>&1 | tail -40
               break
             fi
-            if curl -sf --max-time 5 --connect-timeout 3 "http://localhost:${HOST_PORT}/health" > /dev/null 2>&1; then
+            if curl -sf --max-time 5 --connect-timeout 3 "$HEALTH_URL" > /dev/null 2>&1; then
               HEALTHY=true
               break
             fi
