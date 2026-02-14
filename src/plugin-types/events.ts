@@ -121,14 +121,16 @@ export interface MemorySearchEvent {
 export interface MeterEvent {
   /** User or organization ID */
   tenant: string;
-  /** What capability was used (e.g., "voice-transcription", "embeddings") */
+  /** What capability was used (e.g., "voice-transcription", "embeddings", "chat") */
   capability: string;
-  /** Which adapter handled the call (e.g., "replicate", "modal") */
+  /** Which adapter handled the call (e.g., "replicate", "modal", "anthropic") */
   provider: string;
   /** Upstream cost in USD cents */
   cost: number;
   /** When the usage occurred (epoch ms) */
   timestamp: number;
+  /** Additional metadata (model name, token counts, session ID, etc.) */
+  metadata?: Record<string, unknown>;
 }
 
 /**

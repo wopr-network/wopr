@@ -118,14 +118,16 @@ export interface MemoryFilesChangedEvent {
 export interface MeterEvent {
   /** User or organization ID */
   tenant: string;
-  /** What capability was used (e.g., "voice-transcription", "embeddings") */
+  /** What capability was used (e.g., "voice-transcription", "embeddings", "chat") */
   capability: string;
-  /** Which adapter handled the call (e.g., "replicate", "modal") */
+  /** Which adapter handled the call (e.g., "replicate", "modal", "anthropic") */
   provider: string;
   /** Upstream cost in USD cents */
   cost: number;
   /** When the usage occurred (epoch ms) */
   timestamp: number;
+  /** Additional metadata (model name, token counts, session ID, etc.) */
+  metadata?: Record<string, unknown>;
 }
 
 // ============================================================================
@@ -539,17 +541,19 @@ export async function emitSystemShutdown(reason: string, code?: number): Promise
  * The platform subscribes to "meter:usage" to apply margins and bill.
  *
  * @param tenant - User or organization ID
- * @param capability - What was used (e.g., "voice-transcription", "embeddings")
- * @param provider - Which adapter (e.g., "replicate", "modal")
+ * @param capability - What was used (e.g., "voice-transcription", "embeddings", "chat")
+ * @param provider - Which adapter (e.g., "replicate", "modal", "anthropic")
  * @param cost - Upstream cost in USD cents
+ * @param metadata - Optional metadata (model name, token counts, session ID, etc.)
  */
 export async function emitMeterUsage(
   tenant: string,
   capability: string,
   provider: string,
   cost: number,
+  metadata?: Record<string, unknown>,
 ): Promise<void> {
-  await eventBus.emit("meter:usage", { tenant, capability, provider, cost, timestamp: Date.now() }, "core");
+  await eventBus.emit("meter:usage", { tenant, capability, provider, cost, timestamp: Date.now(), metadata }, "core");
 }
 
 // ============================================================================
