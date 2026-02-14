@@ -18,7 +18,6 @@ import type { ConversationEntry, StreamMessage } from "../types.js";
 import { getA2AMcpServer, isA2AEnabled, setSessionFunctions } from "./a2a-mcp.js";
 import { assembleContext, initContextSystem, type MessageInfo } from "./context.js";
 import {
-  emitMeterUsage,
   emitMutableIncoming,
   emitMutableOutgoing,
   emitSessionCreate,
@@ -613,35 +612,6 @@ async function executeInjectInternal(
             break;
           case "result":
             if (msg.subtype === "success") {
-              // Emit meter event for successful provider query
-              if (msg.total_cost_usd !== undefined && msg.total_cost_usd > 0) {
-                // For WOPR core, tenant is the session name (instance-level identifier)
-                // Platform subscribers can map session → organization for billing
-                const tenant = name;
-                const capability = "chat";
-                const cost = msg.total_cost_usd;
-
-                // Extract metadata for metering (model, tokens, etc.)
-                const metadata: Record<string, unknown> = {
-                  model: providerConfig?.model || resolvedProvider.provider.defaultModel,
-                  sessionId,
-                };
-
-                // Include usage metadata if available
-                if (msg.usage) {
-                  metadata.usage = msg.usage;
-                }
-
-                // Emit meter event — platform subscribes to this for billing
-                await emitMeterUsage(tenant, capability, providerUsed, cost, metadata);
-
-                if (!silent) {
-                  logger.info(
-                    `[wopr] Metered: ${capability} via ${providerUsed} (tenant: ${tenant}, cost: $${cost.toFixed(4)})`,
-                  );
-                }
-              }
-
               if (!silent) logger.info(`\n[wopr] Complete (${providerUsed}).`);
               const streamMsg: StreamMessage = { type: "complete", content: "" };
               if (onStream) onStream(streamMsg);
@@ -721,31 +691,6 @@ async function executeInjectInternal(
               break;
             case "result":
               if (msg.subtype === "success") {
-                // Emit meter event for successful provider query (retry path)
-                if (msg.total_cost_usd !== undefined && msg.total_cost_usd > 0) {
-                  const tenant = name;
-                  const capability = "chat";
-                  const cost = msg.total_cost_usd;
-
-                  const metadata: Record<string, unknown> = {
-                    model: providerConfig?.model || resolvedProvider.provider.defaultModel,
-                    sessionId,
-                    retry: true,
-                  };
-
-                  if (msg.usage) {
-                    metadata.usage = msg.usage;
-                  }
-
-                  await emitMeterUsage(tenant, capability, providerUsed, cost, metadata);
-
-                  if (!silent) {
-                    logger.info(
-                      `[wopr] Metered: ${capability} via ${providerUsed} (tenant: ${tenant}, cost: $${cost.toFixed(4)}, retry)`,
-                    );
-                  }
-                }
-
                 if (!silent) logger.info(`[wopr] Complete (retry).`);
               }
               break;
