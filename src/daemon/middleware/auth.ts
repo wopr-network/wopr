@@ -1,15 +1,15 @@
 /**
- * Authentication Middleware (WOP-261, WOP-209)
+ * Authentication Middleware (WOP-378, WOP-209)
  *
- * Three-layer auth chain:
+ * Two-layer auth chain:
  *
- * 1. bearerAuth() — validates the daemon bearer token OR wopr_ API key (WOP-20 backward compat).
- *    Skips /health, /ready, /, and /api/auth/* (Better Auth handles its own auth).
+ * 1. bearerAuth() — validates the daemon bearer token OR wopr_ API key.
+ *    Skips /health, /ready, and / endpoints.
  *
- * 2. requireAuth() — for protected routes that need a platform user session.
- *    Checks daemon bearer token FIRST, then wopr_ API key, then Better Auth session.
+ * 2. requireAdmin() — enforces admin/owner role after API key auth.
  *
- * 3. requireAdmin() — enforces admin/owner role after requireAuth().
+ * Auth is a platform concern (WOP-340). The core daemon only validates
+ * API tokens for platform→daemon communication.
  */
 
 import { timingSafeEqual } from "node:crypto";
@@ -17,7 +17,6 @@ import type { MiddlewareHandler } from "hono";
 import { logger } from "../../logger.js";
 import { validateApiKey } from "../api-keys.js";
 import { ensureToken } from "../auth-token.js";
-import { getAuth } from "../better-auth.js";
 
 // WebSocket upgrade paths skip bearer auth — authentication happens
 // at the WebSocket message level via first-message ticket exchange
@@ -69,19 +68,13 @@ function isDaemonBearerValid(authHeader: string): boolean {
 
 /**
  * Hono middleware that validates daemon bearer tokens.
- * Skips /health, /ready, /, and /api/auth/* paths.
+ * Skips /health, /ready, /, and WebSocket paths.
  * Must be applied after CORS but before route handlers.
  */
 export function bearerAuth(): MiddlewareHandler {
   return async (c, next) => {
     // Skip paths that don't need daemon auth
     if (SKIP_AUTH_PATHS.has(c.req.path) || c.req.path === "/") {
-      return next();
-    }
-
-    // Skip Better Auth routes — they handle their own authentication.
-    // Use exact prefix match to avoid matching unrelated paths like /api/authentication.
-    if (c.req.path === "/api/auth" || c.req.path.startsWith("/api/auth/")) {
       return next();
     }
 
@@ -112,47 +105,32 @@ export function bearerAuth(): MiddlewareHandler {
 }
 
 /**
- * Middleware that requires a platform user (Better Auth session).
- * Checks daemon bearer token FIRST for backward compat, then Better Auth session.
- * Sets c.var.user, c.var.session, and c.var.role on success.
+ * Middleware that requires API authentication (daemon bearer token or wopr_ API key).
+ * Sets user context and role based on the auth method.
  *
- * Daemon bearer token holders are treated as "admin" role for backward compat.
+ * Daemon bearer token holders are treated as "admin" role.
+ * API key holders get role based on their scope (full=admin, read/write/cron=viewer).
  */
 export function requireAuth(): MiddlewareHandler {
   return async (c, next) => {
     const authHeader = c.req.header("Authorization");
 
-    // Check daemon bearer token first (backward compat)
-    // Daemon token holders get admin role (they have the on-disk secret)
-    if (authHeader?.startsWith("Bearer ")) {
-      const token = authHeader.slice(7);
-
-      // Check wopr_ API keys (WOP-209)
-      if (token.startsWith("wopr_")) {
-        if (authenticateApiKey(c, token)) return next();
-        return c.json({ error: "Invalid API key" }, 401);
-      }
-
-      // Check daemon bearer token
-      if (isDaemonBearerValid(authHeader)) {
-        c.set("role", "admin");
-        return next();
-      }
+    if (!authHeader?.startsWith("Bearer ")) {
+      return c.json({ error: "Missing or invalid Authorization header" }, 401);
     }
 
-    // Fall back to Better Auth session
-    try {
-      const session = await getAuth().api.getSession({
-        headers: c.req.raw.headers,
-      });
-      if (session) {
-        c.set("user", session.user);
-        c.set("session", session.session);
-        c.set("role", (session.user as Record<string, unknown>).role ?? "viewer");
-        return next();
-      }
-    } catch (err) {
-      logger.error(`[auth] Better Auth session check failed: ${err}`);
+    const token = authHeader.slice(7);
+
+    // Check wopr_ API keys (WOP-209)
+    if (token.startsWith("wopr_")) {
+      if (authenticateApiKey(c, token)) return next();
+      return c.json({ error: "Invalid API key" }, 401);
+    }
+
+    // Check daemon bearer token
+    if (isDaemonBearerValid(authHeader)) {
+      c.set("role", "admin");
+      return next();
     }
 
     return c.json({ error: "Unauthorized" }, 401);
