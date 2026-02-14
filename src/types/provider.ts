@@ -32,6 +32,22 @@ export interface ProviderConfig {
 
   /** Provider source: "byok" (default) or "hosted" */
   source?: ProviderSource;
+
+  /**
+   * Override the SDK's default API endpoint.
+   *
+   * When set, the provider plugin MUST pass this URL to the SDK constructor
+   * so all API calls go through this endpoint instead of the provider's
+   * default (e.g., api.anthropic.com, api.openai.com).
+   *
+   * Used by WOPR Hosted mode: the platform injects the gateway URL
+   * (e.g., "https://api.wopr.bot/v1") so traffic flows through the
+   * platform for metering, billing, and arbitrage.
+   *
+   * When undefined/omitted (BYOK mode), the SDK uses its default endpoint
+   * and the tenant pays the provider directly.
+   */
+  baseUrl?: string;
 }
 
 /**
