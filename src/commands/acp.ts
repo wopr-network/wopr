@@ -25,7 +25,6 @@ export async function acpCommand(args: string[]): Promise<void> {
     async inject(session, message, options) {
       let response = "";
       let sessionId = "";
-      let cost = 0;
       const chunks: string[] = [];
 
       const streamCb = options?.onStream;
@@ -38,9 +37,8 @@ export async function acpCommand(args: string[]): Promise<void> {
             chunks.push(msg.content);
             if (streamCb) streamCb({ type: "text", content: msg.content });
           } else if (msg.type === "complete") {
-            const data = msg as StreamMessage & { sessionId?: string; cost?: number };
+            const data = msg as StreamMessage & { sessionId?: string };
             sessionId = data.sessionId ?? "";
-            cost = data.cost ?? 0;
           }
         },
         { from: options?.from, silent: options?.silent },
@@ -48,9 +46,8 @@ export async function acpCommand(args: string[]): Promise<void> {
 
       response = result.response || chunks.join("");
       sessionId = result.sessionId || sessionId;
-      cost = result.cost || cost;
 
-      return { response, sessionId, cost };
+      return { response, sessionId };
     },
 
     cancelInject(_session: string): boolean {

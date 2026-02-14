@@ -19,7 +19,7 @@ vi.mock("../../src/logger.js", () => ({
 // Import the classes directly
 const { SessionQueue } = await import("../../src/core/queue/SessionQueue.js");
 const { QueueManager } = await import("../../src/core/queue/QueueManager.js");
-type InjectResult = { response: string; sessionId: string; cost: number };
+type InjectResult = { response: string; sessionId: string };
 
 /**
  * Helper: create an executor that resolves after a delay
@@ -43,7 +43,7 @@ function createDelayExecutor(delayMs = 0, response = "ok") {
       }
       if (signal.aborted) throw new Error("Inject cancelled");
       const text = typeof message === "string" ? message : message.text;
-      return { response: `${response}: ${text}`, sessionId: `session-${sessionKey}`, cost: 0.01 };
+      return { response: `${response}: ${text}`, sessionId: `session-${sessionKey}` };
     },
   );
 }
@@ -69,7 +69,7 @@ describe("SessionQueue", () => {
         const text = typeof msg === "string" ? msg : msg.text;
         await new Promise((r) => setTimeout(r, 10));
         order.push(text);
-        return { response: text, sessionId: "s1", cost: 0 };
+        return { response: text, sessionId: "s1" };
       });
 
       const queue = new SessionQueue("test-session", slowExecutor);
@@ -99,7 +99,7 @@ describe("SessionQueue", () => {
           await new Promise<void>((r) => gateResolve.push(r));
         }
         order.push(text);
-        return { response: text, sessionId: "s1", cost: 0 };
+        return { response: text, sessionId: "s1" };
       });
 
       const queue = new SessionQueue("test", gatedExecutor);
@@ -149,7 +149,7 @@ describe("SessionQueue", () => {
         if (text === "blocker") {
           await new Promise<void>((r) => gateResolve.push(r));
         }
-        return { response: text, sessionId: "s1", cost: 0 };
+        return { response: text, sessionId: "s1" };
       });
 
       const queue = new SessionQueue("test", gatedExecutor);

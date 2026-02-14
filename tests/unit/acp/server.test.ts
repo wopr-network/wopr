@@ -103,7 +103,6 @@ describe("AcpServer", () => {
       inject: vi.fn(async (_session, _message, _options) => ({
         response: "Hello from WOPR",
         sessionId: "wopr-session-1",
-        cost: 0.001,
       })),
       cancelInject: vi.fn(() => true),
     };
@@ -439,7 +438,7 @@ describe("AcpServer", () => {
           options.onStream({ type: "text", content: "Hello " });
           options.onStream({ type: "text", content: "world" });
         }
-        return { response: "Hello world", sessionId: "s1", cost: 0.001 };
+        return { response: "Hello world", sessionId: "s1" };
       });
 
       server = new AcpServer({ bridge, defaultSession: "test", input, output });

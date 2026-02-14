@@ -161,7 +161,6 @@ sessionsRouter.post("/:name/inject", async (c) => {
         `data: ${JSON.stringify({
           type: "done",
           sessionId: result.sessionId,
-          cost: result.cost,
         })}\n\n`,
       );
 
@@ -186,7 +185,6 @@ sessionsRouter.post("/:name/inject", async (c) => {
       session: name,
       sessionId: result.sessionId,
       response: result.response,
-      cost: result.cost,
     });
   }
 });

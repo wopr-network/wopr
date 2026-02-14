@@ -11,11 +11,11 @@
  * The raw key is never persisted — only a scrypt hash is stored.
  */
 
-import { createRequire } from "node:module";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createRequire } from "node:module";
 import { join } from "node:path";
-import { WOPR_HOME } from "../paths.js";
 import { logger } from "../logger.js";
+import { WOPR_HOME } from "../paths.js";
 
 const _require = createRequire(import.meta.url);
 const { DatabaseSync } = _require("node:sqlite");

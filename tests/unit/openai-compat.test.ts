@@ -41,7 +41,7 @@ vi.mock("../../src/core/sessions.js", () => ({
       options.onStream({ type: "text", content: " world" });
       options.onStream({ type: "complete", content: "" });
     }
-    return { response: "Hello world", sessionId: "test-session-id", cost: 0.001 };
+    return { response: "Hello world", sessionId: "test-session-id" };
   }),
   deleteSession: vi.fn(async () => {}),
   setSessionContext: vi.fn(),
@@ -101,7 +101,7 @@ describe("OpenAI Compatibility Layer", () => {
         options.onStream({ type: "text", content: " world" });
         options.onStream({ type: "complete", content: "" });
       }
-      return { response: "Hello world", sessionId: "test-session-id", cost: 0.001 };
+      return { response: "Hello world", sessionId: "test-session-id" };
     });
     vi.mocked(deleteSession).mockResolvedValue(undefined);
   });

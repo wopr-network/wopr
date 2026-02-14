@@ -11,6 +11,7 @@ import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { setCanvasPublish } from "../core/canvas.js";
 import { config as centralConfig } from "../core/config.js";
 // Core imports for daemon functionality
 import {
@@ -35,7 +36,6 @@ import { checkReadiness, markCronRunning, markStartupComplete } from "./readines
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { betterAuthRouter } from "./routes/better-auth.js";
-import { setCanvasPublish } from "../core/canvas.js";
 import { canvasRouter } from "./routes/canvas.js";
 import { configRouter } from "./routes/config.js";
 import { cronsRouter } from "./routes/crons.js";

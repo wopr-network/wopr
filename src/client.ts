@@ -25,7 +25,6 @@ export interface Session {
 export interface InjectResult {
   sessionId: string;
   response: string;
-  cost: number;
 }
 
 export class WoprClient {
@@ -135,7 +134,7 @@ export class WoprClient {
 
       const decoder = new TextDecoder();
       let buffer = "";
-      const result: InjectResult = { sessionId: "", response: "", cost: 0 };
+      const result: InjectResult = { sessionId: "", response: "" };
       const chunks: string[] = [];
 
       while (true) {
@@ -149,13 +148,12 @@ export class WoprClient {
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             try {
-              const data = JSON.parse(line.slice(6)) as StreamMessage & { sessionId?: string; cost?: number };
+              const data = JSON.parse(line.slice(6)) as StreamMessage & { sessionId?: string };
               onStream(data);
               if (data.type === "text") {
                 chunks.push(data.content);
               } else if (data.type === "complete") {
                 result.sessionId = data.sessionId || "";
-                result.cost = data.cost || 0;
               }
             } catch {
               // Ignore parse errors
