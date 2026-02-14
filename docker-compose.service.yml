@@ -27,6 +27,10 @@ services:
       - OLLAMA_HOST=http://ollama:11434
     ports:
       - "7437:7437"
+    deploy:
+      resources:
+        limits:
+          memory: 128m
     security_opt:
       - no-new-privileges:true
 
