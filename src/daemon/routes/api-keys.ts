@@ -9,8 +9,8 @@
  */
 
 import { Hono } from "hono";
-import { generateApiKey, listApiKeys, revokeApiKey, KeyLimitError } from "../api-keys.js";
 import type { ApiKeyScope } from "../api-keys.js";
+import { generateApiKey, KeyLimitError, listApiKeys, revokeApiKey } from "../api-keys.js";
 
 type AuthEnv = {
   Variables: {

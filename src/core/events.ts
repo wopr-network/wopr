@@ -549,11 +549,7 @@ export async function emitMeterUsage(
   provider: string,
   cost: number,
 ): Promise<void> {
-  await eventBus.emit(
-    "meter:usage",
-    { tenant, capability, provider, cost, timestamp: Date.now() },
-    "core",
-  );
+  await eventBus.emit("meter:usage", { tenant, capability, provider, cost, timestamp: Date.now() }, "core");
 }
 
 // ============================================================================
