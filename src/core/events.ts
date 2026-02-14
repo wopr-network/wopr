@@ -533,30 +533,6 @@ export async function emitSystemShutdown(reason: string, code?: number): Promise
 }
 
 // ============================================================================
-// Meter Event Helpers (for hosted provider usage tracking)
-// ============================================================================
-
-/**
- * Emit a meter event when a hosted provider call completes.
- * The platform subscribes to "meter:usage" to apply margins and bill.
- *
- * @param tenant - User or organization ID
- * @param capability - What was used (e.g., "voice-transcription", "embeddings", "chat")
- * @param provider - Which adapter (e.g., "replicate", "modal", "anthropic")
- * @param cost - Upstream cost in USD cents
- * @param metadata - Optional metadata (model name, token counts, session ID, etc.)
- */
-export async function emitMeterUsage(
-  tenant: string,
-  capability: string,
-  provider: string,
-  cost: number,
-  metadata?: Record<string, unknown>,
-): Promise<void> {
-  await eventBus.emit("meter:usage", { tenant, capability, provider, cost, timestamp: Date.now(), metadata }, "core");
-}
-
-// ============================================================================
 // Mutable Event Helpers (for hook-based message transformation)
 // ============================================================================
 
