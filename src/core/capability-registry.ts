@@ -37,7 +37,7 @@ export class CapabilityRegistry extends EventEmitter {
     }
 
     entry.providers.set(provider.id, provider);
-    this.emit("capability:providerRegistered", { capability, provider });
+    this.emit("capability:providerRegistered", { capability, providerId: provider.id, providerName: provider.name });
     logger.info(`[capability-registry] Registered ${provider.id} for ${capability}`);
   }
 
