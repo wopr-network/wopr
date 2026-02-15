@@ -11,8 +11,8 @@ import { requireAuth } from "../middleware/auth.js";
 import { restartOnIdleManager } from "../restart-on-idle.js";
 
 const RestartRequestSchema = z.object({
-  idleThresholdSeconds: z.number().optional(),
-  maxWaitSeconds: z.number().optional(),
+  idleThresholdSeconds: z.number().min(1).max(300).optional(),
+  maxWaitSeconds: z.number().min(1).max(3600).optional(),
   drainMode: z.enum(["graceful", "force"]).optional(),
 });
 

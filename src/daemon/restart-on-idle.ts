@@ -53,14 +53,20 @@ export class RestartOnIdleManager {
   async scheduleRestart(config?: Partial<RestartOnIdleConfig>): Promise<RestartStatus> {
     const finalConfig = { ...DEFAULT_CONFIG, ...config };
 
-    // If already pending, increment batch counter and reset max wait
+    // If already pending, increment batch counter and update config
     if (this.state === "PENDING" || this.state === "DRAINING") {
       this.batchedRequests++;
       this.requestedAt = Date.now();
+      this.config = finalConfig;
       logger.info(
         `[restart-on-idle] Batching request ${this.batchedRequests} - will restart once when idle (max wait reset)`,
       );
       return this.getStatus();
+    }
+
+    // If a restart is already in progress, reject
+    if (this.state === "RESTARTING" || this.state === "FORCED") {
+      throw new Error("Restart already in progress");
     }
 
     // Start new restart request
@@ -86,7 +92,7 @@ export class RestartOnIdleManager {
       "core",
     );
 
-    // Start idle check loop
+    // Start idle check loop (ensures only one timer runs)
     this.startIdleCheck();
 
     return this.getStatus();
