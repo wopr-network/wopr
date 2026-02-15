@@ -87,6 +87,13 @@ export interface SystemShutdownEvent {
   code?: number;
 }
 
+export interface SystemRestartScheduledEvent {
+  requestedAt: number;
+  idleThresholdSeconds: number;
+  maxWaitSeconds: number;
+  batchedRequests: number;
+}
+
 // Memory events
 export interface MemorySearchEvent {
   query: string;
@@ -156,6 +163,7 @@ export interface WOPREventMap {
 
   // System events
   "system:shutdown": SystemShutdownEvent;
+  "system:restartScheduled": SystemRestartScheduledEvent;
 
   // Memory events (for plugin enhancement)
   "memory:search": MemorySearchEvent;

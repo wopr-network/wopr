@@ -33,6 +33,7 @@ import { HealthMonitor } from "./health.js";
 import { bearerAuth, requireAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rate-limit.js";
 import { checkReadiness, markCronRunning, markStartupComplete } from "./readiness.js";
+import { restartOnIdleManager } from "./restart-on-idle.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { canvasRouter } from "./routes/canvas.js";
@@ -47,6 +48,7 @@ import { observabilityRouter } from "./routes/observability.js";
 import { openaiRouter } from "./routes/openai.js";
 import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
+import { restartRouter } from "./routes/restart.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { skillsRouter } from "./routes/skills.js";
 import { templatesRouter } from "./routes/templates.js";
@@ -125,6 +127,7 @@ export function createApp(healthMonitor?: HealthMonitor) {
   app.route("/templates", templatesRouter);
   app.route("/observability", observabilityRouter);
   app.route("/v1", openaiRouter);
+  app.route("/api/daemon", restartRouter);
 
   // Per-instance plugin management (WOP-203)
   app.route("/api/instances/:id/plugins", instancePluginsRouter);
@@ -512,19 +515,26 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     }
   }, HEARTBEAT_INTERVAL_MS);
 
-  // Shutdown handler
-  const shutdown = async () => {
+  // Wire up restart-on-idle manager to trigger exit code 75
+  restartOnIdleManager.onRestart(() => {
+    daemonLog("[restart-on-idle] Graceful restart triggered - exit code 75");
+    shutdown(75);
+  });
+
+  // Shutdown handler (supports custom exit codes for restart-on-idle)
+  const shutdown = async (exitCode: number = 0) => {
     daemonLog("Daemon stopping...");
     clearInterval(heartbeatInterval);
     healthMonitor.stop();
+    restartOnIdleManager.shutdown();
     await shutdownAllPlugins();
     if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
     daemonLog("Daemon stopped");
-    process.exit(0);
+    process.exit(exitCode);
   };
 
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", () => shutdown(0));
+  process.on("SIGINT", () => shutdown(0));
 
   // Start server
   daemonLog(`Listening on http://${host}:${port}`);
