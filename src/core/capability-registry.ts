@@ -18,11 +18,6 @@ export class CapabilityRegistry extends EventEmitter {
 
   constructor() {
     super();
-    // Seed with known capabilities (empty provider lists)
-    const seeds: AdapterCapability[] = ["tts", "stt", "text-gen", "image-gen", "embeddings"];
-    for (const cap of seeds) {
-      this.capabilities.set(cap, { capability: cap, providers: new Map() });
-    }
   }
 
   /**
