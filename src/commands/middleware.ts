@@ -54,7 +54,7 @@ export async function middlewareCommand(subcommand: string | undefined, args: st
         logger.info(`  Enabled: ${m.enabled ? "yes" : "no"}`);
         logger.info(`  Incoming hook: ${m.hasIncoming ? "yes" : "no"}`);
         logger.info(`  Outgoing hook: ${m.hasOutgoing ? "yes" : "no"}`);
-      } catch (_err: any) {
+      } catch (_err: unknown) {
         logger.error(`Middleware not found: ${args[0]}`);
         process.exit(1);
       }
