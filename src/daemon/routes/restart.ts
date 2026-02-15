@@ -5,8 +5,16 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { logger } from "../../logger.js";
+import { requireAuth } from "../middleware/auth.js";
 import { restartOnIdleManager } from "../restart-on-idle.js";
+
+const RestartRequestSchema = z.object({
+  idleThresholdSeconds: z.number().optional(),
+  maxWaitSeconds: z.number().optional(),
+  drainMode: z.enum(["graceful", "force"]).optional(),
+});
 
 export const restartRouter = new Hono();
 
@@ -14,18 +22,24 @@ export const restartRouter = new Hono();
  * POST /api/daemon/restart-on-idle
  * Schedule a restart when daemon becomes idle
  */
-restartRouter.post("/restart-on-idle", async (c) => {
+restartRouter.post("/restart-on-idle", requireAuth(), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const { idleThresholdSeconds, maxWaitSeconds, drainMode } = body;
+    const parsed = RestartRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json({ success: false, error: "Invalid request body", details: parsed.error.issues }, 400);
+    }
+
+    const { idleThresholdSeconds, maxWaitSeconds, drainMode } = parsed.data;
 
     const config = {
-      ...(idleThresholdSeconds !== undefined && { idleThresholdSeconds: Number(idleThresholdSeconds) }),
-      ...(maxWaitSeconds !== undefined && { maxWaitSeconds: Number(maxWaitSeconds) }),
-      ...(drainMode !== undefined && { drainMode: String(drainMode) as "graceful" | "force" }),
+      ...(idleThresholdSeconds !== undefined && { idleThresholdSeconds }),
+      ...(maxWaitSeconds !== undefined && { maxWaitSeconds }),
+      ...(drainMode !== undefined && { drainMode }),
     };
 
-    const status = restartOnIdleManager.scheduleRestart(config);
+    const status = await restartOnIdleManager.scheduleRestart(config);
 
     logger.info(`[restart-api] Restart scheduled via API: ${JSON.stringify(status)}`);
 
@@ -46,7 +60,7 @@ restartRouter.post("/restart-on-idle", async (c) => {
  * GET /api/daemon/restart-status
  * Get current restart status
  */
-restartRouter.get("/restart-status", (c) => {
+restartRouter.get("/restart-status", requireAuth(), (c) => {
   const status = restartOnIdleManager.getStatus();
   return c.json({
     pending: status.pending,
@@ -64,7 +78,7 @@ restartRouter.get("/restart-status", (c) => {
  * DELETE /api/daemon/restart-on-idle
  * Cancel pending restart
  */
-restartRouter.delete("/restart-on-idle", (c) => {
+restartRouter.delete("/restart-on-idle", requireAuth(), (c) => {
   restartOnIdleManager.cancel();
   logger.info("[restart-api] Restart cancelled via API");
   return c.json({ success: true, status: "cancelled" });

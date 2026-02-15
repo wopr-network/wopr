@@ -40,6 +40,7 @@ const DEFAULT_CONFIG: RestartOnIdleConfig = {
 export class RestartOnIdleManager {
   private state: RestartState = "IDLE";
   private requestedAt: number | null = null;
+  private lastIdleSince: number | null = null;
   private config: RestartOnIdleConfig | null = null;
   private checkInterval: ReturnType<typeof setInterval> | null = null;
   private batchedRequests = 0;
@@ -49,14 +50,15 @@ export class RestartOnIdleManager {
    * Schedule a restart when idle.
    * Multiple rapid calls are batched.
    */
-  scheduleRestart(config?: Partial<RestartOnIdleConfig>): RestartStatus {
+  async scheduleRestart(config?: Partial<RestartOnIdleConfig>): Promise<RestartStatus> {
     const finalConfig = { ...DEFAULT_CONFIG, ...config };
 
     // If already pending, increment batch counter and reset max wait
     if (this.state === "PENDING" || this.state === "DRAINING") {
       this.batchedRequests++;
+      this.requestedAt = Date.now();
       logger.info(
-        `[restart-on-idle] Batching request ${this.batchedRequests} - will restart once when idle`,
+        `[restart-on-idle] Batching request ${this.batchedRequests} - will restart once when idle (max wait reset)`,
       );
       return this.getStatus();
     }
@@ -64,6 +66,7 @@ export class RestartOnIdleManager {
     // Start new restart request
     this.state = "PENDING";
     this.requestedAt = Date.now();
+    this.lastIdleSince = null;
     this.config = finalConfig;
     this.batchedRequests = 1;
 
@@ -72,7 +75,7 @@ export class RestartOnIdleManager {
     );
 
     // Emit system event
-    eventBus.emit(
+    await eventBus.emit(
       "system:restartScheduled",
       {
         requestedAt: this.requestedAt,
@@ -95,15 +98,15 @@ export class RestartOnIdleManager {
   getStatus(): RestartStatus {
     const activeStats = queueManager.getActiveStats();
     const activeInjects = activeStats.size;
-    const idleSeconds = this.requestedAt ? (Date.now() - this.requestedAt) / 1000 : 0;
+    const idleSeconds = this.lastIdleSince ? (Date.now() - this.lastIdleSince) / 1000 : 0;
 
     let estimatedRestartIn = "unknown";
     if (this.state === "PENDING" || this.state === "DRAINING") {
-      if (activeInjects === 0 && this.config) {
+      if (activeInjects === 0 && this.config && this.lastIdleSince) {
         const remainingIdle = Math.max(0, this.config.idleThresholdSeconds - idleSeconds);
         estimatedRestartIn = remainingIdle < 1 ? "< 1s" : `~${Math.ceil(remainingIdle)}s`;
-      } else if (this.config) {
-        const elapsed = idleSeconds;
+      } else if (this.config && this.requestedAt) {
+        const elapsed = (Date.now() - this.requestedAt) / 1000;
         const maxWait = this.config.maxWaitSeconds;
         const remaining = Math.max(0, maxWait - elapsed);
         estimatedRestartIn = `< ${Math.ceil(remaining)}s (max wait)`;
@@ -132,6 +135,7 @@ export class RestartOnIdleManager {
     }
     this.state = "IDLE";
     this.requestedAt = null;
+    this.lastIdleSince = null;
     this.config = null;
     this.batchedRequests = 0;
     logger.info("[restart-on-idle] Restart cancelled");
@@ -180,8 +184,15 @@ export class RestartOnIdleManager {
 
     // Check for graceful restart when idle
     if (activeInjects === 0) {
-      // No active injects - check if we've been idle long enough
-      if (elapsed >= this.config.idleThresholdSeconds) {
+      // No active injects - set lastIdleSince if not already set
+      if (this.lastIdleSince === null) {
+        this.lastIdleSince = now;
+        logger.debug("[restart-on-idle] System now idle, starting idle timer");
+      }
+
+      // Check if we've been idle long enough
+      const idleDuration = (now - this.lastIdleSince) / 1000;
+      if (idleDuration >= this.config.idleThresholdSeconds) {
         logger.info(
           `[restart-on-idle] Idle threshold met (${this.config.idleThresholdSeconds}s) - restarting`,
         );
@@ -189,7 +200,10 @@ export class RestartOnIdleManager {
         this.triggerRestart();
       }
     } else {
-      // Still processing - update state to draining if in force mode
+      // Still processing - reset idle timer
+      this.lastIdleSince = null;
+
+      // Update state to draining if in force mode
       if (this.config.drainMode === "force" && this.state === "PENDING") {
         this.state = "DRAINING";
         logger.info(
