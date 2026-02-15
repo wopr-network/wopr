@@ -7,6 +7,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { getCapabilityDependencyGraph } from "../core/capability-deps.js";
+import { getCapabilityRegistry } from "../core/capability-registry.js";
 import { logger } from "../logger.js";
 import type {
   InstallMethod as ManifestInstallMethod,
@@ -126,6 +128,26 @@ export async function loadPlugin(
         logger.info(`[plugins] Installed ${installedDeps.length} dependencies for ${installed.name}`);
       }
     }
+
+    // ── Step 2.5: Check capability requirements ──
+    if (manifest?.requires?.capabilities?.length) {
+      const registry = getCapabilityRegistry();
+      const { satisfied, missing, optional } = registry.checkRequirements(manifest.requires.capabilities);
+
+      // Register in dependency graph regardless
+      getCapabilityDependencyGraph().registerPlugin(installed.name, manifest.requires.capabilities);
+
+      if (!satisfied) {
+        throw new Error(
+          `Plugin ${installed.name} requires capabilities not yet available: ${missing.join(", ")}. ` +
+            `Install a provider for each missing capability first.`
+        );
+      }
+
+      if (optional.length > 0) {
+        logger.info(`[plugins] ${installed.name}: optional capabilities not available: ${optional.join(", ")}`);
+      }
+    }
   }
 
   // ── Step 3: Dynamic import ──
@@ -214,6 +236,9 @@ export async function unloadPlugin(name: string): Promise<void> {
   if (loaded.plugin.commands) {
     // Commands are registered per-plugin, no global registry to clean
   }
+
+  // Unregister from capability dependency graph
+  getCapabilityDependencyGraph().unregisterPlugin(name);
 
   loadedPlugins.delete(name);
   pluginManifests.delete(name);

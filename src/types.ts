@@ -901,6 +901,12 @@ export interface WOPRPluginContext {
 
   // Access to plugin directory
   getPluginDir(): string;
+
+  // Capability registry (new)
+  registerCapabilityProvider(capability: string, provider: unknown): void;
+  unregisterCapabilityProvider(capability: string, providerId: string): void;
+  getCapabilityProviders(capability: string): unknown[];
+  hasCapability(capability: string): boolean;
 }
 
 export interface PluginLogger {

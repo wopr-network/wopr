@@ -6,6 +6,7 @@
  */
 
 import { join } from "node:path";
+import { getCapabilityRegistry } from "../core/capability-registry.js";
 import {
   getChannelProvider as getChannelProviderCore,
   getChannelProviders as getChannelProvidersCore,
@@ -22,6 +23,7 @@ import { providerRegistry } from "../core/providers.js";
 import { cancelInject as cancelSessionInject, logMessage as logMessageToSession } from "../core/sessions.js";
 import { resolveIdentity, resolveUserProfile } from "../core/workspace.js";
 import { logger } from "../logger.js";
+import type { AdapterCapability, ProviderOption } from "../plugin-types/manifest.js";
 import type { ModelProvider } from "../types/provider.js";
 import type {
   ChannelAdapter,
@@ -167,6 +169,11 @@ export function createPluginContext(
       providerPlugins.set(provider.id, provider);
       providerRegistry.register(provider);
       logger.info(`[plugins]   Provider ${provider.id} registered in registry`);
+      // Register in capability registry
+      getCapabilityRegistry().registerProvider("text-gen", {
+        id: provider.id,
+        name: provider.name,
+      });
     },
 
     unregisterProvider(id: string) {
@@ -228,6 +235,11 @@ export function createPluginContext(
       // Also register as an extension for discovery via getExtension('stt')
       registerPluginExtension(pluginName, "stt", provider);
       logger.info(`[plugins] STT provider registered: ${provider.metadata.name}`);
+      // Register in capability registry
+      getCapabilityRegistry().registerProvider("stt", {
+        id: provider.metadata.name,
+        name: provider.metadata.description || provider.metadata.name,
+      });
     },
 
     registerTTSProvider(provider: TTSProvider) {
@@ -236,6 +248,11 @@ export function createPluginContext(
       // Also register as an extension for discovery via getExtension('tts')
       registerPluginExtension(pluginName, "tts", provider);
       logger.info(`[plugins] TTS provider registered: ${provider.metadata.name}`);
+      // Register in capability registry
+      getCapabilityRegistry().registerProvider("tts", {
+        id: provider.metadata.name,
+        name: provider.metadata.description || provider.metadata.name,
+      });
     },
 
     getSTT(): STTProvider | null {
@@ -280,6 +297,23 @@ export function createPluginContext(
 
     getPluginDir(): string {
       return plugin.source === "local" ? plugin.path : join(PLUGINS_DIR, plugin.name);
+    },
+
+    // Capability registry (new)
+    registerCapabilityProvider(capability: string, provider: unknown) {
+      getCapabilityRegistry().registerProvider(capability as AdapterCapability, provider as ProviderOption);
+    },
+
+    unregisterCapabilityProvider(capability: string, providerId: string) {
+      getCapabilityRegistry().unregisterProvider(capability as AdapterCapability, providerId);
+    },
+
+    getCapabilityProviders(capability: string): unknown[] {
+      return getCapabilityRegistry().getProviders(capability as AdapterCapability);
+    },
+
+    hasCapability(capability: string): boolean {
+      return getCapabilityRegistry().hasProvider(capability as AdapterCapability);
     },
   };
 }
