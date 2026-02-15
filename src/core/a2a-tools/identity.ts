@@ -14,8 +14,8 @@ import {
   z,
 } from "./_base.js";
 
-export function createIdentityTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createIdentityTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -64,7 +64,14 @@ export function createIdentityTools(sessionName: string): any[] {
         section: z.string().optional().describe("Custom section name"),
         sectionContent: z.string().optional().describe("Content for custom section"),
       },
-      async (args: any) => {
+      async (args: {
+        name?: string;
+        creature?: string;
+        vibe?: string;
+        emoji?: string;
+        section?: string;
+        sectionContent?: string;
+      }) => {
         return withSecurityCheck("identity_update", sessionName, async () => {
           const { name, creature, vibe, emoji, section, sectionContent } = args;
           const sessionDir = join(SESSIONS_DIR, sessionName);

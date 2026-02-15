@@ -97,6 +97,26 @@ function validateConfigAgainstSchema(
 }
 
 // ============================================================================
+// Type Definitions
+// ============================================================================
+
+interface PluginEntry {
+  name: string;
+  version: string;
+  description?: string;
+  source: string;
+  path: string;
+  enabled: boolean;
+  installedAt: number;
+}
+
+interface PluginConfigData {
+  plugins?: {
+    data?: Record<string, unknown>;
+  };
+}
+
+// ============================================================================
 // Router
 // ============================================================================
 
@@ -123,40 +143,30 @@ instancePluginsRouter.get("/", (c) => {
   const plugins = listPlugins();
   const runtimeManifests = getAllPluginManifests();
   return c.json({
-    plugins: plugins.map(
-      (p: {
-        name: string;
-        version: string;
-        description?: string;
-        source: string;
-        path: string;
-        enabled: boolean;
-        installedAt: number;
-      }) => {
-        const manifest = runtimeManifests.get(p.name) || readPluginManifest(p.path);
-        return {
-          name: p.name,
-          version: p.version,
-          description: p.description || null,
-          source: p.source,
-          enabled: p.enabled,
-          installedAt: p.installedAt,
-          loaded: getLoadedPlugin(p.name) !== undefined,
-          manifest: manifest
-            ? {
-                capabilities: manifest.capabilities,
-                category: manifest.category || null,
-                tags: manifest.tags || [],
-                icon: manifest.icon || null,
-                author: manifest.author || null,
-                license: manifest.license || null,
-                homepage: manifest.homepage || null,
-                configSchema: manifest.configSchema || null,
-              }
-            : null,
-        };
-      },
-    ),
+    plugins: plugins.map((p: PluginEntry) => {
+      const manifest = runtimeManifests.get(p.name) || readPluginManifest(p.path);
+      return {
+        name: p.name,
+        version: p.version,
+        description: p.description || null,
+        source: p.source,
+        enabled: p.enabled,
+        installedAt: p.installedAt,
+        loaded: getLoadedPlugin(p.name) !== undefined,
+        manifest: manifest
+          ? {
+              capabilities: manifest.capabilities,
+              category: manifest.category || null,
+              tags: manifest.tags || [],
+              icon: manifest.icon || null,
+              author: manifest.author || null,
+              license: manifest.license || null,
+              homepage: manifest.homepage || null,
+              configSchema: manifest.configSchema || null,
+            }
+          : null,
+      };
+    }),
   });
 });
 
@@ -230,7 +240,7 @@ instancePluginsRouter.post("/:name/enable", async (c) => {
   }
 
   const plugins = listPlugins();
-  const plugin = plugins.find((p: { name: string }) => p.name === name);
+  const plugin = plugins.find((p: PluginEntry) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);
   }
@@ -272,14 +282,14 @@ instancePluginsRouter.get("/:name/config", async (c) => {
   const name = c.req.param("name");
 
   const plugins = listPlugins();
-  const plugin = plugins.find((p: { name: string }) => p.name === name);
+  const plugin = plugins.find((p: PluginEntry) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);
   }
 
   await centralConfig.load();
   const cfg = centralConfig.get();
-  const pluginConfig = (cfg as any).plugins?.data?.[name] || {};
+  const pluginConfig = (cfg as unknown as PluginConfigData).plugins?.data?.[name] || {};
 
   const schemas = getConfigSchemas();
   let schema = schemas.get(name) || null;
@@ -299,7 +309,7 @@ instancePluginsRouter.put("/:name/config", async (c) => {
   const name = c.req.param("name");
 
   const plugins = listPlugins();
-  const plugin = plugins.find((p: { name: string }) => p.name === name);
+  const plugin = plugins.find((p: PluginEntry) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);
   }
@@ -329,11 +339,11 @@ instancePluginsRouter.put("/:name/config", async (c) => {
 
   // Save to central config
   await centralConfig.load();
-  const cfg = centralConfig.get();
-  if (!(cfg as any).plugins) (cfg as any).plugins = {};
-  if (!(cfg as any).plugins.data) (cfg as any).plugins.data = {};
-  (cfg as any).plugins.data[name] = newConfig;
-  centralConfig.setValue("plugins.data", (cfg as any).plugins.data);
+  const cfg = centralConfig.get() as unknown as PluginConfigData;
+  if (!cfg.plugins) cfg.plugins = {};
+  if (!cfg.plugins.data) cfg.plugins.data = {};
+  cfg.plugins.data[name] = newConfig;
+  centralConfig.setValue("plugins.data", cfg.plugins.data);
   await centralConfig.save();
 
   return c.json({ name, config: newConfig, updated: true });

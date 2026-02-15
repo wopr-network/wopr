@@ -323,7 +323,10 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     const { GLOBAL_IDENTITY_DIR, WOPR_HOME, SESSIONS_DIR } = await import("../paths.js");
     const { join } = await import("node:path");
     const { config: centralConfig } = await import("../core/config.js");
-    const memCfg = (centralConfig.get() as any).memory || {};
+    interface ConfigWithMemory {
+      memory?: unknown;
+    }
+    const memCfg = (centralConfig.get() as unknown as ConfigWithMemory).memory || {};
     const heap0 = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
     daemonLog(`Memory sync starting (heap: ${heap0}MB)`);
     const mgr = await MemoryIndexManager.create({

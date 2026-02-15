@@ -141,7 +141,7 @@ export interface SkillValidationWarning {
 
 export interface SkillEntry {
   skill: Skill;
-  frontmatter: Record<string, any>;
+  frontmatter: Record<string, unknown>;
   woprMetadata?: SkillMetadata;
   invocation: {
     disableModelInvocation?: boolean;
@@ -206,7 +206,7 @@ export interface ParsedFrontmatter {
   description?: string;
   license?: string;
   compatibility?: string;
-  metadata?: string | Record<string, any>;
+  metadata?: string | Record<string, unknown>;
   "allowed-tools"?: string[];
   "command-dispatch"?: string;
   "command-tool"?: string;
@@ -235,12 +235,12 @@ export function parseSkillFrontmatter(content: string): {
     if (colonIndex === -1) continue;
 
     const key = line.slice(0, colonIndex).trim();
-    let value: any = line.slice(colonIndex + 1).trim();
+    let value: unknown = line.slice(colonIndex + 1).trim();
 
     // Try to parse JSON metadata
     if (key === "metadata") {
       try {
-        value = JSON.parse(value);
+        value = JSON.parse(value as string);
       } catch {
         // Keep as string if not valid JSON
       }
@@ -249,13 +249,13 @@ export function parseSkillFrontmatter(content: string): {
     // Parse arrays
     if (key === "allowed-tools") {
       try {
-        value = JSON.parse(value);
+        value = JSON.parse(value as string);
       } catch {
-        value = value.split(",").map((s: string) => s.trim());
+        value = (value as string).split(",").map((s: string) => s.trim());
       }
     }
 
-    (frontmatter as any)[key] = value;
+    (frontmatter as Record<string, unknown>)[key] = value;
   }
 
   // Validate frontmatter fields
@@ -272,14 +272,17 @@ export function resolveWoprMetadata(frontmatter: ParsedFrontmatter): SkillMetada
 
   if (typeof frontmatter.metadata === "string") {
     try {
-      const parsed = JSON.parse(frontmatter.metadata);
+      const parsed = JSON.parse(frontmatter.metadata) as { wopr?: SkillMetadata; clawdbot?: SkillMetadata };
       return parsed.wopr || parsed.clawdbot;
     } catch {
       return undefined;
     }
   }
 
-  return frontmatter.metadata.wopr || frontmatter.metadata.clawdbot;
+  return (
+    (frontmatter.metadata as { wopr?: SkillMetadata; clawdbot?: SkillMetadata }).wopr ||
+    (frontmatter.metadata as { clawdbot?: SkillMetadata }).clawdbot
+  );
 }
 
 export function resolveSkillInvocationPolicy(_frontmatter: ParsedFrontmatter): {
@@ -431,7 +434,7 @@ function loadSkillFromFile(
         allowedTools: frontmatter["allowed-tools"],
         commandDispatch: resolveCommandDispatch(frontmatter),
       },
-      frontmatter,
+      frontmatter: frontmatter as Record<string, unknown>,
       woprMetadata: resolveWoprMetadata(frontmatter),
       invocation: resolveSkillInvocationPolicy(frontmatter),
     };
@@ -844,8 +847,9 @@ export function installSkillFromUrl(source: string, name?: string): Skill {
     if (parsed.protocol !== "https:") {
       throw new Error("Only HTTPS URLs are supported for skill installation");
     }
-  } catch (e: any) {
-    if (e.message.includes("HTTPS")) throw e;
+  } catch (e: unknown) {
+    const error = e as Error;
+    if (error.message.includes("HTTPS")) throw error;
     throw new Error("Invalid skill source URL");
   }
 

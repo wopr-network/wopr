@@ -14,8 +14,8 @@ import {
   z,
 } from "./_base.js";
 
-export function createSoulTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createSoulTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -43,7 +43,7 @@ export function createSoulTools(sessionName: string): any[] {
         section: z.string().optional().describe("Section header to add/update"),
         sectionContent: z.string().optional().describe("Content for the section"),
       },
-      async (args: any) => {
+      async (args: { content?: string; section?: string; sectionContent?: string }) => {
         return withSecurityCheck("soul_update", sessionName, async () => {
           const { content, section, sectionContent } = args;
           const sessionDir = join(SESSIONS_DIR, sessionName);

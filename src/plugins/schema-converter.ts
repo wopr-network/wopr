@@ -83,7 +83,7 @@ export function registerA2AServerImpl(config: A2AServerConfig): void {
   for (const tool of config.tools) {
     try {
       // Convert JSON Schema to Zod
-      const zodSchema = jsonSchemaToZod(tool.inputSchema) as z.ZodObject<any>;
+      const zodSchema = jsonSchemaToZod(tool.inputSchema) as z.ZodObject<z.ZodRawShape>;
 
       // Register with a2a-mcp
       registerA2ATool({

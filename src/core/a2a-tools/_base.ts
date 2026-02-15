@@ -26,7 +26,7 @@ import { config as centralConfig } from "../config.js";
 import { addCron, createOnceJob, getCronHistory, getCrons, removeCron } from "../cron.js";
 import { eventBus } from "../events.js";
 
-// Re-export the SDK tool helper (cast to preserve implicit any inference)
+// Re-export the SDK tool helper
 export const tool: typeof sdkTool = sdkTool;
 
 // Re-export everything tool modules need
@@ -74,8 +74,8 @@ export const GLOBAL_MEMORY_DIR = join(GLOBAL_IDENTITY_DIR, "memory");
 export interface RegisteredTool {
   name: string;
   description: string;
-  schema: z.ZodObject<any>;
-  handler: (args: any, context: ToolContext) => Promise<any>;
+  schema: z.ZodObject<z.ZodRawShape>;
+  handler: (args: Record<string, unknown>, context: ToolContext) => Promise<unknown>;
 }
 
 export interface ToolContext {
@@ -88,13 +88,13 @@ export interface ToolContext {
 
 export const pluginTools = new Map<string, RegisteredTool>();
 export let mcpServerDirty = true;
-export let cachedMcpServer: any = null;
+export let cachedMcpServer: unknown = null;
 
 export function markDirty(): void {
   mcpServerDirty = true;
 }
 
-export function setCachedServer(server: any): void {
+export function setCachedServer(server: unknown): void {
   cachedMcpServer = server;
   mcpServerDirty = false;
 }
@@ -103,9 +103,22 @@ export function setCachedServer(server: any): void {
 // Session function forwarding (lazy injection to avoid circular imports)
 // ---------------------------------------------------------------------------
 
-export let injectFn: ((session: string, message: string, opts?: any) => Promise<any>) | null = null;
+export let injectFn:
+  | ((session: string, message: string, opts?: Record<string, unknown>) => Promise<{ response: string }>)
+  | null = null;
 export let getSessions: (() => Record<string, string>) | null = null;
-export let readConversationLog: ((session: string, limit: number) => any[]) | null = null;
+export let readConversationLog:
+  | ((
+      session: string,
+      limit: number,
+    ) => Array<{
+      ts: number;
+      from: string;
+      type: string;
+      content: string;
+      channel?: { id: string; type: string; name?: string };
+    }>)
+  | null = null;
 export let setSessionContext: ((name: string, purpose: string) => void) | null = null;
 
 export function setSessionFunctions(fns: {

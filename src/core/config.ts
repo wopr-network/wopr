@@ -46,7 +46,7 @@ export interface WoprConfig {
     autoLoad: boolean;
     directories: string[];
     // Plugin-specific config stored here: plugins.data[pluginName]
-    data?: Record<string, any>;
+    data?: Record<string, unknown>;
   };
   agents?: {
     a2a?: {
@@ -138,10 +138,11 @@ export class ConfigManager {
     try {
       const data = await readFile(CONFIG_FILE, "utf-8");
       const loaded = JSON.parse(data) as Partial<WoprConfig>;
-      this.config = this.merge(DEFAULT_CONFIG, loaded);
-    } catch (err: any) {
-      if (err.code !== "ENOENT") {
-        logger.error("Failed to load config:", err.message);
+      this.config = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
+    } catch (err: unknown) {
+      const error = err as NodeJS.ErrnoException;
+      if (error.code !== "ENOENT") {
+        logger.error("Failed to load config:", error.message);
       }
       // Use defaults if file doesn't exist
       this.config = { ...DEFAULT_CONFIG };
@@ -187,8 +188,9 @@ export class ConfigManager {
     try {
       await mkdir(WOPR_HOME, { recursive: true });
       await writeFile(CONFIG_FILE, JSON.stringify(this.config, null, 2));
-    } catch (err: any) {
-      throw new Error(`Failed to save config: ${err.message}`);
+    } catch (err: unknown) {
+      const error = err as Error;
+      throw new Error(`Failed to save config: ${error.message}`);
     }
   }
 
@@ -196,12 +198,12 @@ export class ConfigManager {
     return { ...this.config };
   }
 
-  getValue(key: string): any {
+  getValue(key: string): unknown {
     const parts = key.split(".");
-    let value: any = this.config;
+    let value: unknown = this.config;
     for (const part of parts) {
       if (value && typeof value === "object" && part in value) {
-        value = value[part];
+        value = (value as Record<string, unknown>)[part];
       } else {
         return undefined;
       }
@@ -209,16 +211,16 @@ export class ConfigManager {
     return value;
   }
 
-  setValue(key: string, value: any): void {
+  setValue(key: string, value: unknown): void {
     const parts = key.split(".");
-    let target: any = this.config;
+    let target: Record<string, unknown> = this.config as unknown as Record<string, unknown>;
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
       if (!(part in target)) {
         target[part] = {};
       }
-      target = target[part];
+      target = target[part] as Record<string, unknown>;
     }
 
     const lastPart = parts[parts.length - 1];
@@ -241,24 +243,31 @@ export class ConfigManager {
    * Set a provider default setting
    * e.g., setProviderDefault("codex", "model", "gpt-5.2")
    */
-  setProviderDefault(providerId: string, key: keyof ProviderDefaults, value: any): void {
+  setProviderDefault(providerId: string, key: keyof ProviderDefaults, value: unknown): void {
     if (!this.config.providers) {
       this.config.providers = {};
     }
     if (!this.config.providers[providerId]) {
       this.config.providers[providerId] = {};
     }
-    (this.config.providers[providerId] as any)[key] = value;
+    (this.config.providers[providerId] as Record<string, unknown>)[key] = value;
   }
 
-  private merge(defaults: any, overrides: any): any {
-    const result: any = { ...defaults };
-    for (const key of Object.keys(overrides)) {
+  private merge(defaults: unknown, overrides: unknown): unknown {
+    if (typeof defaults !== "object" || defaults === null || typeof overrides !== "object" || overrides === null) {
+      return overrides;
+    }
+
+    const result = { ...defaults } as Record<string, unknown>;
+    const overridesObj = overrides as Record<string, unknown>;
+
+    for (const key of Object.keys(overridesObj)) {
       if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
-      if (overrides[key] !== null && typeof overrides[key] === "object" && !Array.isArray(overrides[key])) {
-        result[key] = this.merge(defaults[key] || {}, overrides[key]);
+      const overrideValue = overridesObj[key];
+      if (overrideValue !== null && typeof overrideValue === "object" && !Array.isArray(overrideValue)) {
+        result[key] = this.merge(result[key] || {}, overrideValue);
       } else {
-        result[key] = overrides[key];
+        result[key] = overrideValue;
       }
     }
     return result;

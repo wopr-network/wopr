@@ -12,7 +12,7 @@ import type { HookOptions, MutableHookEvent, WOPRHookManager } from "../types.js
  * Hook registration entry with metadata
  */
 interface HookEntry {
-  handler: (...args: any[]) => any;
+  handler: (...args: unknown[]) => unknown;
   priority: number;
   name?: string;
   once: boolean;
@@ -41,10 +41,13 @@ export function createPluginHookManager(_pluginName: string): WOPRHookManager {
   };
 
   function getEntries(event: string): HookEntry[] {
-    if (!hookEntries.has(event)) {
-      hookEntries.set(event, []);
+    const existing = hookEntries.get(event);
+    if (!existing) {
+      const newEntries: HookEntry[] = [];
+      hookEntries.set(event, newEntries);
+      return newEntries;
     }
-    return hookEntries.get(event)!;
+    return existing;
   }
 
   function insertSorted(entries: HookEntry[], entry: HookEntry): void {
@@ -64,18 +67,19 @@ export function createPluginHookManager(_pluginName: string): WOPRHookManager {
     const busEvent = eventMapping[event] || event;
     const isMutable = mutableEvents.has(event);
 
-    const unsubscribe = eventBus.on(busEvent as any, async (payload, _evt) => {
+    const unsubscribe = eventBus.on(busEvent as keyof import("../types.js").WOPREventMap, async (payload, _evt) => {
       const entries = getEntries(event);
 
       if (isMutable) {
         let prevented = false;
-        const mutableEvent: MutableHookEvent<any> = {
+        const payloadObj = payload as { session?: string; _prevented?: boolean };
+        const mutableEvent: MutableHookEvent<unknown> = {
           data: payload,
-          session: payload.session || "default",
+          session: payloadObj.session || "default",
           preventDefault() {
             prevented = true;
             if (payload && typeof payload === "object") {
-              (payload as any)._prevented = true;
+              payloadObj._prevented = true;
             }
           },
           isPrevented() {
@@ -115,7 +119,7 @@ export function createPluginHookManager(_pluginName: string): WOPRHookManager {
   }
 
   return {
-    on(event: string, handler: (...args: any[]) => any, options?: HookOptions): () => void {
+    on(event: string, handler: (...args: unknown[]) => unknown, options?: HookOptions): () => void {
       const priority = options?.priority ?? 100;
       const name = options?.name;
       const once = options?.once ?? false;
@@ -147,7 +151,7 @@ export function createPluginHookManager(_pluginName: string): WOPRHookManager {
       };
     },
 
-    off(event: string, handler: (...args: any[]) => any): void {
+    off(event: string, handler: (...args: unknown[]) => unknown): void {
       const entries = getEntries(event);
       const idx = entries.findIndex((e) => e.handler === handler);
       if (idx !== -1) {

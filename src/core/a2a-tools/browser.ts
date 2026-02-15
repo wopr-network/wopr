@@ -83,7 +83,7 @@ function parseIPv4(host: string): number[] | null {
   const parts = host.split(".");
   if (parts.length !== 4) return null;
   const nums = parts.map(Number);
-  if (nums.some((n) => isNaN(n) || n < 0 || n > 255 || !Number.isInteger(n))) return null;
+  if (nums.some((n) => Number.isNaN(n) || n < 0 || n > 255 || !Number.isInteger(n))) return null;
   return nums;
 }
 
@@ -152,10 +152,10 @@ function isPrivateIPv6(normalized: string): boolean {
 // Lazy Playwright loading (optional peer dependency)
 // ---------------------------------------------------------------------------
 
-// We use `any` for the Playwright module since it's an optional peer dep
-// and won't have type declarations available at compile time.
+// biome-ignore lint/suspicious/noExplicitAny: Playwright is an optional peer dependency with no compile-time types
 let pw: any = null;
 
+// biome-ignore lint/suspicious/noExplicitAny: Playwright is an optional peer dependency with no compile-time types
 async function getPlaywright(): Promise<any> {
   if (pw) return pw;
   try {
@@ -173,9 +173,12 @@ async function getPlaywright(): Promise<any> {
 // ---------------------------------------------------------------------------
 
 interface BrowserInstance {
-  browser: any; // playwright Browser
-  context: any; // playwright BrowserContext
-  page: any; // playwright Page
+  // biome-ignore lint/suspicious/noExplicitAny: Playwright types unavailable (optional peer dep)
+  browser: any;
+  // biome-ignore lint/suspicious/noExplicitAny: Playwright types unavailable (optional peer dep)
+  context: any;
+  // biome-ignore lint/suspicious/noExplicitAny: Playwright types unavailable (optional peer dep)
+  page: any;
   profileName: string;
 }
 
@@ -185,8 +188,8 @@ const instances = new Map<string, BrowserInstance>();
 // Use a symbol on process to survive module re-evaluation (e.g., in tests).
 const CLEANUP_SYMBOL = Symbol.for("wopr-browser-cleanup");
 function ensureProcessCleanup(): void {
-  if ((process as any)[CLEANUP_SYMBOL]) return;
-  (process as any)[CLEANUP_SYMBOL] = true;
+  if ((process as unknown as Record<symbol, boolean>)[CLEANUP_SYMBOL]) return;
+  (process as unknown as Record<symbol, boolean>)[CLEANUP_SYMBOL] = true;
   const cleanup = () => {
     for (const [, instance] of instances) {
       try {
@@ -344,8 +347,8 @@ export async function closeAllBrowsers(): Promise<void> {
 // Tool factory
 // ---------------------------------------------------------------------------
 
-export function createBrowserTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createBrowserTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   // -------------------------------------------------------------------------
   // browser_navigate
@@ -363,7 +366,12 @@ export function createBrowserTools(sessionName: string): any[] {
           .describe("Wait condition (default: 'domcontentloaded')"),
         timeout: z.number().optional().describe(`Navigation timeout in ms (default: ${DEFAULT_TIMEOUT_MS})`),
       },
-      async (args: any) => {
+      async (args: {
+        url: string;
+        profile?: string;
+        waitFor?: "load" | "domcontentloaded" | "networkidle";
+        timeout?: number;
+      }) => {
         return withSecurityCheck("browser_navigate", sessionName, async () => {
           const {
             url,
@@ -418,8 +426,9 @@ export function createBrowserTools(sessionName: string): any[] {
                 },
               ],
             };
-          } catch (err: any) {
-            return { content: [{ type: "text", text: `Navigation failed: ${err.message}` }], isError: true };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `Navigation failed: ${message}` }], isError: true };
           }
         });
       },
@@ -438,7 +447,7 @@ export function createBrowserTools(sessionName: string): any[] {
         profile: z.string().optional().describe("Browser profile name (default: 'default')"),
         timeout: z.number().optional().describe("Timeout in ms to wait for element (default: 5000)"),
       },
-      async (args: any) => {
+      async (args: { selector: string; profile?: string; timeout?: number }) => {
         return withSecurityCheck("browser_click", sessionName, async () => {
           const { selector, profile: profileName = "default", timeout = 5000 } = args;
           try {
@@ -449,8 +458,9 @@ export function createBrowserTools(sessionName: string): any[] {
             return {
               content: [{ type: "text", text: `Clicked "${selector}" on ${pageUrl}` }],
             };
-          } catch (err: any) {
-            return { content: [{ type: "text", text: `Click failed: ${err.message}` }], isError: true };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `Click failed: ${message}` }], isError: true };
           }
         });
       },
@@ -472,7 +482,14 @@ export function createBrowserTools(sessionName: string): any[] {
         pressEnter: z.boolean().optional().describe("Press Enter after typing (default: false)"),
         timeout: z.number().optional().describe("Timeout in ms to wait for element (default: 5000)"),
       },
-      async (args: any) => {
+      async (args: {
+        selector: string;
+        text: string;
+        profile?: string;
+        clear?: boolean;
+        pressEnter?: boolean;
+        timeout?: number;
+      }) => {
         return withSecurityCheck("browser_type", sessionName, async () => {
           const {
             selector,
@@ -495,8 +512,9 @@ export function createBrowserTools(sessionName: string): any[] {
             return {
               content: [{ type: "text", text: `Typed into "${selector}"${pressEnter ? " and pressed Enter" : ""}` }],
             };
-          } catch (err: any) {
-            return { content: [{ type: "text", text: `Type failed: ${err.message}` }], isError: true };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `Type failed: ${message}` }], isError: true };
           }
         });
       },
@@ -515,7 +533,7 @@ export function createBrowserTools(sessionName: string): any[] {
         fullPage: z.boolean().optional().describe("Capture full scrollable page (default: false)"),
         selector: z.string().optional().describe("CSS selector to screenshot a specific element"),
       },
-      async (args: any) => {
+      async (args: { profile?: string; fullPage?: boolean; selector?: string }) => {
         return withSecurityCheck("browser_screenshot", sessionName, async () => {
           const { profile: profileName = "default", fullPage = false, selector } = args;
           try {
@@ -541,8 +559,9 @@ export function createBrowserTools(sessionName: string): any[] {
                 { type: "image", data: base64, mimeType: "image/png" },
               ],
             };
-          } catch (err: any) {
-            return { content: [{ type: "text", text: `Screenshot failed: ${err.message}` }], isError: true };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `Screenshot failed: ${message}` }], isError: true };
           }
         });
       },
@@ -560,7 +579,7 @@ export function createBrowserTools(sessionName: string): any[] {
         expression: z.string().describe("JavaScript expression to evaluate in the browser page"),
         profile: z.string().optional().describe("Browser profile name (default: 'default')"),
       },
-      async (args: any) => {
+      async (args: { expression: string; profile?: string }) => {
         return withSecurityCheck("browser_evaluate", sessionName, async () => {
           const { expression, profile: profileName = "default" } = args;
 
@@ -605,8 +624,9 @@ export function createBrowserTools(sessionName: string): any[] {
             return {
               content: [{ type: "text", text: truncated }],
             };
-          } catch (err: any) {
-            return { content: [{ type: "text", text: `Evaluate failed: ${err.message}` }], isError: true };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `Evaluate failed: ${message}` }], isError: true };
           }
         });
       },

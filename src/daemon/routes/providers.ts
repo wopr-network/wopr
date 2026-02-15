@@ -32,8 +32,9 @@ providersRouter.post("/", async (c) => {
   try {
     await providerRegistry.setCredential(providerId, credential);
     return c.json({ success: true, providerId }, 201);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
   }
 });
 
@@ -44,8 +45,9 @@ providersRouter.delete("/:id", async (c) => {
   try {
     await providerRegistry.removeCredential(id);
     return c.json({ success: true, removed: id });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
   }
 });
 

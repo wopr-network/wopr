@@ -206,9 +206,10 @@ async function writeFileIfMissing(filePath: string, content: string): Promise<vo
   try {
     await fs.writeFile(filePath, content, { encoding: "utf-8", flag: "wx" });
     logger.debug(`Created bootstrap file: ${path.basename(filePath)}`);
-  } catch (err: any) {
-    if (err.code !== "EEXIST") {
-      throw err;
+  } catch (err: unknown) {
+    const error = err as NodeJS.ErrnoException;
+    if (error.code !== "EEXIST") {
+      throw error;
     }
   }
 }

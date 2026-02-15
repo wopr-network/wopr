@@ -21,8 +21,8 @@ export function getToken(): string | null {
   try {
     const token = readFileSync(TOKEN_FILE, "utf-8").trim();
     return token.length > 0 ? token : null;
-  } catch (err: any) {
-    if (err?.code === "ENOENT") return null;
+  } catch (err) {
+    if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") return null;
     throw err;
   }
 }

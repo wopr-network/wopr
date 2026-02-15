@@ -259,8 +259,8 @@ function getProviderOrder(): ProviderName[] {
 // Tool factory
 // ---------------------------------------------------------------------------
 
-export function createWebSearchTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createWebSearchTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -274,7 +274,7 @@ export function createWebSearchTools(sessionName: string): any[] {
           .optional()
           .describe("Force a specific provider: google, brave, xai. Omit for auto fallback chain."),
       },
-      async (args: any) => {
+      async (args: { query: string; count?: number; provider?: string }) => {
         return withSecurityCheck("web_search", sessionName, async () => {
           const { query, count: rawCount, provider: forcedProvider } = args;
           const count = Math.max(1, Math.min(rawCount ?? 5, 20));
@@ -318,8 +318,8 @@ export function createWebSearchTools(sessionName: string): any[] {
                   },
                 ],
               };
-            } catch (err: any) {
-              const msg = err?.message ?? String(err);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
               logger.warn(`[web_search] ${providerName} failed: ${msg}`);
               errors.push(`${providerName}: ${msg}`);
             }

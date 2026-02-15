@@ -79,7 +79,10 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
     return {};
   }
 
-  const providerInfo = AVAILABLE_PROVIDERS.find((p) => p.id === providerId)!;
+  const providerInfo = AVAILABLE_PROVIDERS.find((p) => p.id === providerId);
+  if (!providerInfo) {
+    throw new Error(`Provider ${providerId} not found in AVAILABLE_PROVIDERS`);
+  }
 
   // Install provider plugin
   const s = await spinner();
@@ -140,7 +143,7 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
     } else {
       // Show all auth options
       const authOptions = authMethods.map((m: ProviderAuthMethod) => ({
-        value: m.id,
+        value: m.id as string,
         label: `${m.name}${m.available ? pc.green(" ✓") : pc.dim(" (setup required)")}`,
         hint: m.description,
       }));
@@ -230,7 +233,7 @@ export const providersStep: OnboardStep = async (ctx: OnboardContext) => {
   let model: string | undefined;
 
   if (models.length > 0 && !isQuickstart) {
-    const modelOptions = models.map((m: string) => ({
+    const modelOptions = models.map((m) => ({
       value: m,
       label: m,
     }));

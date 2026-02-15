@@ -8,7 +8,7 @@
 
 const SENSITIVE_KEYS = ["apikey", "api_key", "secret", "token", "password", "privatekey", "private_key"];
 
-export function redactSensitive(obj: any, path: string = ""): any {
+export function redactSensitive(obj: unknown, path: string = ""): unknown {
   if (obj === null || obj === undefined) return obj;
 
   if (typeof obj !== "object") {
@@ -21,7 +21,7 @@ export function redactSensitive(obj: any, path: string = ""): any {
     return obj.map((item, i) => redactSensitive(item, `${path}[${i}]`));
   }
 
-  const result: any = Object.create(null);
+  const result: Record<string, unknown> = Object.create(null);
   for (const [k, v] of Object.entries(obj)) {
     if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
     result[k] = redactSensitive(v, path ? `${path}.${k}` : k);

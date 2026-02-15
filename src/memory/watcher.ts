@@ -1,8 +1,7 @@
 // File watcher for auto-sync - uses chokidar for cross-platform watching
-// chokidar types are optional - use any for the watcher
 import { logger } from "../logger.js";
 
-type FSWatcher = { close(): Promise<void>; on(event: string, handler: (...args: any[]) => void): FSWatcher };
+type FSWatcher = { close(): Promise<void>; on(event: string, handler: (...args: unknown[]) => void): FSWatcher };
 
 let watcher: FSWatcher | null = null;
 let watcherPromise: Promise<void> | null = null;
@@ -24,9 +23,17 @@ export async function startWatcher(params: {
 
   try {
     // Dynamic import to avoid loading chokidar unless needed
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    interface ChokidarWatchOptions {
+      ignored?: RegExp | ((path: string) => boolean);
+      persistent?: boolean;
+      ignoreInitial?: boolean;
+      awaitWriteFinish?: {
+        stabilityThreshold: number;
+        pollInterval: number;
+      };
+    }
     const chokidar = await (Function('return import("chokidar")')() as Promise<{
-      watch: (paths: string[], options: any) => FSWatcher;
+      watch: (paths: string[], options: ChokidarWatchOptions) => FSWatcher;
     }>);
 
     watcher = chokidar.watch(params.dirs, {
@@ -58,8 +65,8 @@ export async function startWatcher(params: {
 
     // Wait for watcher to be ready
     watcherPromise = new Promise<void>((resolve, reject) => {
-      watcher?.on("ready", resolve);
-      watcher?.on("error", reject);
+      watcher?.on("ready", () => resolve());
+      watcher?.on("error", (err: unknown) => reject(err));
     });
 
     await watcherPromise;

@@ -176,5 +176,5 @@ export const externalStep: OnboardStep = async (ctx: OnboardContext) => {
       hostname: ts.hostname,
       webhookUrl,
     },
-  } as any;
+  };
 };

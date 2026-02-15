@@ -55,7 +55,7 @@ export async function sessionCommand(subcommand: string | undefined, args: strin
       // Verify session exists
       try {
         await client.getSession(sessionName);
-      } catch (_error) {
+      } catch {
         logger.error(`Session not found: ${sessionName}`);
         process.exit(1);
       }
@@ -183,8 +183,9 @@ export async function sessionCommand(subcommand: string | undefined, args: strin
         }
         logger.info(`\nEdit these files in ~/.wopr/sessions/${sessionName}/`);
         logger.info("They will be automatically loaded into context on each injection.");
-      } catch (err: any) {
-        logger.error(`Failed to init docs: ${err.message}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error(`Failed to init docs: ${message}`);
         process.exit(1);
       }
       break;

@@ -27,7 +27,10 @@ import type {
  * Get sandbox config from WOPR config.
  */
 function getWoprSandboxConfig(): Partial<SandboxConfig> | undefined {
-  return (woprConfig as any).sandbox;
+  interface ConfigWithSandbox {
+    sandbox?: Partial<SandboxConfig>;
+  }
+  return (woprConfig as unknown as ConfigWithSandbox).sandbox;
 }
 
 export function resolveSandboxScope(params: { scope?: SandboxScope; perSession?: boolean }): SandboxScope {

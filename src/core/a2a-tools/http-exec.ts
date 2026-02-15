@@ -18,8 +18,8 @@ import {
   z,
 } from "./_base.js";
 
-export function createHttpExecTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createHttpExecTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -33,7 +33,14 @@ export function createHttpExecTools(sessionName: string): any[] {
         timeout: z.number().optional().describe("Timeout in ms (default: 30000)"),
         includeHeaders: z.boolean().optional().describe("Include response headers in output (default: false)"),
       },
-      async (args: any) => {
+      async (args: {
+        url: string;
+        method?: string;
+        headers?: Record<string, string>;
+        body?: string;
+        timeout?: number;
+        includeHeaders?: boolean;
+      }) => {
         return withSecurityCheck("http_fetch", sessionName, async () => {
           const { url, method = "GET", headers = {}, body, timeout = 30000, includeHeaders = false } = args;
           try {
@@ -71,8 +78,9 @@ export function createHttpExecTools(sessionName: string): any[] {
                 },
               ],
             };
-          } catch (err: any) {
-            return { content: [{ type: "text", text: `HTTP request failed: ${err.message}` }], isError: true };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `HTTP request failed: ${message}` }], isError: true };
           }
         });
       },
@@ -88,7 +96,7 @@ export function createHttpExecTools(sessionName: string): any[] {
         cwd: z.string().optional().describe("Working directory (must be within session directory)"),
         timeout: z.number().optional().describe("Timeout in ms (default: 10000, max: 60000)"),
       },
-      async (args: any) => {
+      async (args: { command: string; cwd?: string; timeout?: number }) => {
         return withSecurityCheck("exec_command", sessionName, async () => {
           const { command, cwd, timeout = 10000 } = args;
           const effectiveTimeout = Math.min(timeout, 60000);
@@ -213,8 +221,9 @@ export function createHttpExecTools(sessionName: string): any[] {
             if (stderr) output += `\n[stderr]\n${stderr}`;
             if (output.length > 10000) output = `${output.substring(0, 10000)}\n... (truncated)`;
             return { content: [{ type: "text", text: output || "(no output)" }] };
-          } catch (err: any) {
-            return { content: [{ type: "text", text: `Command failed: ${err.message}` }], isError: true };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `Command failed: ${message}` }], isError: true };
           }
         });
       },

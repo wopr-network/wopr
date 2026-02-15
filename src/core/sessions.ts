@@ -14,7 +14,7 @@ import {
   storeContext,
 } from "../security/index.js";
 import type { ProviderConfig } from "../types/provider.js";
-import type { ConversationEntry, StreamMessage } from "../types.js";
+import type { ChannelRef, ConversationEntry, StreamMessage } from "../types.js";
 import { getA2AMcpServer, isA2AEnabled, setSessionFunctions } from "./a2a-mcp.js";
 import { assembleContext, initContextSystem, type MessageInfo } from "./context.js";
 import {
@@ -47,7 +47,7 @@ function initSessionFunctions(): void {
   setSessionFunctions({
     inject,
     getSessions,
-    readConversationLog,
+    readConversationLog: (session: string, limit: number) => readConversationLog(session, limit),
     setSessionContext,
   });
 }
@@ -200,7 +200,7 @@ export async function deleteSession(name: string, reason?: string): Promise<void
 }
 
 // Get conversation history for a session
-function getConversationHistory(name: string): any[] {
+function getConversationHistory(name: string): ConversationEntry[] {
   const logPath = getConversationLogPath(name);
   if (!existsSync(logPath)) return [];
 
@@ -211,12 +211,12 @@ function getConversationHistory(name: string): any[] {
       .filter((line) => line.trim())
       .map((line) => {
         try {
-          return JSON.parse(line);
+          return JSON.parse(line) as ConversationEntry;
         } catch {
           return null;
         }
       })
-      .filter(Boolean);
+      .filter((entry): entry is ConversationEntry => entry !== null);
   } catch {
     return [];
   }
@@ -250,7 +250,7 @@ export function appendToConversationLog(name: string, entry: ConversationEntry):
 export function logMessage(
   session: string,
   content: string,
-  options?: { from?: string; senderId?: string; channel?: any },
+  options?: { from?: string; senderId?: string; channel?: ChannelRef },
 ): void {
   appendToConversationLog(session, {
     ts: Date.now(),
@@ -493,7 +493,7 @@ async function executeInjectInternal(
 
     // Helper to create query with optional session resume
     // Uses V2 API when available for active session injection support
-    const createQuery = (resumeSessionId?: string) => {
+    const createQuery = (resumeSessionId?: string): AsyncIterable<unknown> => {
       const queryOpts = {
         prompt: fullMessage,
         systemPrompt: fullContext,
@@ -509,10 +509,10 @@ async function executeInjectInternal(
       logger.info(
         `[wopr] Using V1 query (streaming) for: ${name}${resumeSessionId ? ` (resume: ${resumeSessionId})` : ""}`,
       );
-      return resolvedProvider.client.query(queryOpts);
+      return resolvedProvider.client.query(queryOpts) as AsyncIterable<unknown>;
     };
 
-    let q: any = createQuery(existingSessionId);
+    let q: AsyncIterable<unknown> = createQuery(existingSessionId);
     let sessionResumeRetried = false;
 
     // Idle timeout - if no message received for 10 minutes, abort
@@ -547,41 +547,47 @@ async function executeInjectInternal(
     }
 
     try {
-      for await (const msg of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal) as AsyncGenerator<any>) {
+      for await (const msgUnknown of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal)) {
         // Check for cancellation
         if (abortSignal?.aborted) {
           logger.info(`[wopr] Inject cancelled mid-stream for session: ${name}`);
           throw new Error("Inject cancelled");
         }
 
+        const msg = msgUnknown as Record<string, unknown> & { type?: string; subtype?: string };
         logger.info(
           `[inject] Got msg type: ${msg.type}, subtype: ${msg.subtype || "none"}, keys: ${Object.keys(msg).join(",")}`,
         );
         switch (msg.type) {
           case "system":
             if (msg.subtype === "init") {
-              sessionId = msg.session_id;
+              sessionId = (msg as { session_id?: string }).session_id || "";
               saveSessionId(name, sessionId);
               if (!silent) logger.info(`[wopr] Session ID: ${sessionId}`);
             }
             // Log compact_metadata for debugging
-            if (msg.subtype === "compact_boundary" && msg.compact_metadata) {
-              logger.info(`[inject] compact_metadata: ${JSON.stringify(msg.compact_metadata)}`);
+            if (msg.subtype === "compact_boundary" && (msg as { compact_metadata?: unknown }).compact_metadata) {
+              logger.info(
+                `[inject] compact_metadata: ${JSON.stringify((msg as { compact_metadata?: unknown }).compact_metadata)}`,
+              );
             }
             // Pass all system messages to onStream (including compact_boundary, status, etc.)
             {
+              const metadata =
+                (msg as { compact_metadata?: Record<string, unknown>; metadata?: Record<string, unknown> })
+                  .compact_metadata || (msg as { metadata?: Record<string, unknown> }).metadata;
               const streamMsg: StreamMessage = {
                 type: "system",
                 content: msg.subtype || "",
                 subtype: msg.subtype,
-                metadata: msg.compact_metadata || msg.metadata || undefined,
+                metadata: metadata || undefined,
               };
               if (onStream) onStream(streamMsg);
             }
             break;
           case "stream_event": {
             // Incremental streaming: extract text deltas from partial messages
-            const event = (msg as any).event;
+            const event = (msg as { event?: { type?: string; delta?: { type?: string; text?: string } } }).event;
             if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
               const delta = event.delta.text;
               if (delta) {
@@ -591,17 +597,22 @@ async function executeInjectInternal(
             }
             break;
           }
-          case "assistant":
+          case "assistant": {
             // With includePartialMessages, text was already streamed incrementally via stream_event.
             // Here we just collect the final text for the result and handle tool_use blocks.
-            logger.info(`[inject] Processing assistant msg, content blocks: ${msg.message?.content?.length || 0}`);
-            for (const block of msg.message.content) {
+            const assistantMsg = msg as {
+              message?: { content?: Array<{ type: string; text?: string; name?: string }> };
+            };
+            logger.info(
+              `[inject] Processing assistant msg, content blocks: ${assistantMsg.message?.content?.length || 0}`,
+            );
+            for (const block of assistantMsg.message?.content || []) {
               logger.info(`[inject]   Block type: ${block.type}`);
-              if (block.type === "text") {
+              if (block.type === "text" && block.text) {
                 collected.push(block.text);
                 // Emit the response chunk event (for memory capture etc.) but don't re-stream to Discord
                 await emitSessionResponseChunk(name, messageText, collected.join(""), from, block.text);
-              } else if (block.type === "tool_use") {
+              } else if (block.type === "tool_use" && block.name) {
                 // MCP server handles tool execution automatically
                 // We just log and stream the tool use for visibility
                 if (!silent) logger.info(`[tool] ${block.name}`);
@@ -610,28 +621,31 @@ async function executeInjectInternal(
               }
             }
             break;
-          case "result":
-            if (msg.subtype === "success") {
+          }
+          case "result": {
+            const resultMsg = msg as { subtype?: string; errors?: unknown; permission_denials?: unknown };
+            if (resultMsg.subtype === "success") {
               if (!silent) logger.info(`\n[wopr] Complete (${providerUsed}).`);
               const streamMsg: StreamMessage = { type: "complete", content: "" };
               if (onStream) onStream(streamMsg);
             } else {
-              if (!silent) logger.error(`[wopr] Error: ${msg.subtype}`);
-              if (msg.errors) {
-                logger.error(`[wopr] Error details: ${JSON.stringify(msg.errors)}`);
+              if (!silent) logger.error(`[wopr] Error: ${resultMsg.subtype}`);
+              if (resultMsg.errors) {
+                logger.error(`[wopr] Error details: ${JSON.stringify(resultMsg.errors)}`);
               }
-              if (msg.permission_denials) {
-                logger.error(`[wopr] Permission denials: ${JSON.stringify(msg.permission_denials)}`);
+              if (resultMsg.permission_denials) {
+                logger.error(`[wopr] Permission denials: ${JSON.stringify(resultMsg.permission_denials)}`);
               }
-              const streamMsg: StreamMessage = { type: "error", content: msg.subtype };
+              const streamMsg: StreamMessage = { type: "error", content: resultMsg.subtype || "" };
               if (onStream) onStream(streamMsg);
             }
             break;
+          }
         }
       }
-    } catch (sdkError: any) {
+    } catch (sdkError: unknown) {
       // Check if this is a "No conversation found" error from trying to resume a stale session
-      const errorMsg = sdkError.message || "";
+      const errorMsg = sdkError instanceof Error ? sdkError.message : "";
       if (!sessionResumeRetried && existingSessionId && errorMsg.includes("process exited with code 1")) {
         // The session might be stale - clear it and retry without resume
         logger.warn(`[wopr] Session resume may have failed, clearing session ID and retrying...`);
@@ -642,32 +656,36 @@ async function executeInjectInternal(
         q = createQuery(undefined);
 
         // Re-iterate with new query (also with idle timeout)
-        for await (const msg of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal) as AsyncGenerator<any>) {
+        for await (const msgUnknown of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal)) {
           if (abortSignal?.aborted) {
             throw new Error("Inject cancelled");
           }
 
+          const msg = msgUnknown as Record<string, unknown> & { type?: string; subtype?: string };
           logger.info(`[inject] Retry msg type: ${msg.type}, subtype: ${msg.subtype || "none"}`);
           switch (msg.type) {
             case "system":
               if (msg.subtype === "init") {
-                sessionId = msg.session_id;
+                sessionId = (msg as { session_id?: string }).session_id || "";
                 saveSessionId(name, sessionId);
                 if (!silent) logger.info(`[wopr] New session ID: ${sessionId}`);
               }
               // Pass all system messages to onStream
               {
+                const metadata =
+                  (msg as { compact_metadata?: Record<string, unknown>; metadata?: Record<string, unknown> })
+                    .compact_metadata || (msg as { metadata?: Record<string, unknown> }).metadata;
                 const streamMsg: StreamMessage = {
                   type: "system",
                   content: msg.subtype || "",
                   subtype: msg.subtype,
-                  metadata: msg.compact_metadata || msg.metadata || undefined,
+                  metadata: metadata || undefined,
                 };
                 if (onStream) onStream(streamMsg);
               }
               break;
             case "stream_event": {
-              const event = (msg as any).event;
+              const event = (msg as { event?: { type?: string; delta?: { type?: string; text?: string } } }).event;
               if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
                 const delta = event.delta.text;
                 if (delta) {
@@ -677,18 +695,22 @@ async function executeInjectInternal(
               }
               break;
             }
-            case "assistant":
-              for (const block of msg.message.content) {
-                if (block.type === "text") {
+            case "assistant": {
+              const assistantMsg = msg as {
+                message?: { content?: Array<{ type: string; text?: string; name?: string }> };
+              };
+              for (const block of assistantMsg.message?.content || []) {
+                if (block.type === "text" && block.text) {
                   collected.push(block.text);
                   await emitSessionResponseChunk(name, messageText, collected.join(""), from, block.text);
-                } else if (block.type === "tool_use") {
+                } else if (block.type === "tool_use" && block.name) {
                   if (!silent) logger.info(`[tool] ${block.name}`);
                   const streamMsg: StreamMessage = { type: "tool_use", content: "", toolName: block.name };
                   if (onStream) onStream(streamMsg);
                 }
               }
               break;
+            }
             case "result":
               if (msg.subtype === "success") {
                 if (!silent) logger.info(`[wopr] Complete (retry).`);
@@ -697,11 +719,12 @@ async function executeInjectInternal(
           }
         }
       } else {
-        logger.error(`[wopr] SDK error during query iteration: ${sdkError.message}`);
-        if (sdkError.stack) {
-          logger.error(`[wopr] SDK error stack: ${sdkError.stack}`);
+        const error = sdkError instanceof Error ? sdkError : new Error(String(sdkError));
+        logger.error(`[wopr] SDK error during query iteration: ${error.message}`);
+        if (error.stack) {
+          logger.error(`[wopr] SDK error stack: ${error.stack}`);
         }
-        throw sdkError;
+        throw error;
       }
     }
 

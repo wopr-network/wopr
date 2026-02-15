@@ -75,8 +75,9 @@ export const workspaceStep: OnboardStep = async (ctx: OnboardContext) => {
     }
 
     return { workspace: dir };
-  } catch (err: any) {
+  } catch (err) {
     s.stop("Failed to create workspace");
-    throw new Error(`Workspace setup failed: ${err.message}`);
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Workspace setup failed: ${message}`);
   }
 };

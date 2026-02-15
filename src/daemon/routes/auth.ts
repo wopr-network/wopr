@@ -128,8 +128,9 @@ authRouter.post("/callback", async (c) => {
       success: true,
       expiresIn: tokens.expiresIn,
     });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
   }
 });
 

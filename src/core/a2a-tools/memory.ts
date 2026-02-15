@@ -31,8 +31,8 @@ import {
   z,
 } from "./_base.js";
 
-export function createMemoryTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createMemoryTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   let memoryManager: MemoryIndexManager | null = null;
   const getMemoryManager = async () => {
@@ -59,7 +59,7 @@ export function createMemoryTools(sessionName: string): any[] {
         lines: z.number().optional().describe("Number of lines to read"),
         days: z.number().optional().describe("For daily logs: read last N days (default: 7)"),
       },
-      async (args: any) => {
+      async (args: { file?: string; from?: number; lines?: number; days?: number }) => {
         const { file, days = 7, from, lines: lineCount } = args;
         const sessionDir = join(SESSIONS_DIR, sessionName);
 
@@ -158,7 +158,7 @@ export function createMemoryTools(sessionName: string): any[] {
         content: z.string().describe("Content to write or append"),
         append: z.boolean().optional().describe("If true, append instead of replacing"),
       },
-      async (args: any) => {
+      async (args: { file: string; content: string; append?: boolean }) => {
         return withSecurityCheck("memory_write", sessionName, async () => {
           const { file, content, append } = args;
           const sessionDir = join(SESSIONS_DIR, sessionName);
@@ -192,7 +192,7 @@ export function createMemoryTools(sessionName: string): any[] {
           .optional()
           .describe('Time filter: relative ("24h", "7d") or date range ("2026-01-01", "2026-01-01 to 2026-01-05")'),
       },
-      async (args: any) => {
+      async (args: { query: string; maxResults?: number; minScore?: number; temporal?: string }) => {
         const { query, maxResults = 10, minScore = 0.35, temporal: temporalExpr } = args;
         const parsedTemporal = temporalExpr ? parseTemporalFilter(temporalExpr) : null;
         if (temporalExpr && !parsedTemporal)
@@ -207,7 +207,7 @@ export function createMemoryTools(sessionName: string): any[] {
         const temporal = parsedTemporal ?? undefined;
 
         try {
-          const hookPayload = { query, maxResults, minScore, temporal, sessionName, results: null as any[] | null };
+          const hookPayload = { query, maxResults, minScore, temporal, sessionName, results: null as unknown[] | null };
           await eventBus.emit("memory:search", hookPayload);
           logger.info(
             `[memory_search] After hook: results=${hookPayload.results ? hookPayload.results.length : "null"}, query="${query}"`,
@@ -224,9 +224,10 @@ export function createMemoryTools(sessionName: string): any[] {
           const secConfig = getSecurityConfig();
           const indexablePatterns = getSessionIndexable(secConfig, sessionName, trustLevel);
           results = results
-            .filter((r: any) => {
-              if (r.source !== "sessions") return true;
-              const pathMatch = r.path.match(/^sessions\/(.+?)\.conversation\.jsonl$/);
+            .filter((r: unknown) => {
+              const result = r as Record<string, unknown>;
+              if (result.source !== "sessions") return true;
+              const pathMatch = String(result.path).match(/^sessions\/(.+?)\.conversation\.jsonl$/);
               if (!pathMatch) return true;
               return canIndexSession(sessionName, pathMatch[1], indexablePatterns);
             })
@@ -236,10 +237,10 @@ export function createMemoryTools(sessionName: string): any[] {
             return { content: [{ type: "text", text: `No matches found for "${query}"${temporalNote}` }] };
           }
           const formatted = results
-            .map(
-              (r: any, i: number) =>
-                `[${i + 1}] ${r.source}/${r.path}:${r.startLine}-${r.endLine} (score: ${r.score.toFixed(2)})\n${r.snippet}`,
-            )
+            .map((r: unknown, i: number) => {
+              const result = r as Record<string, unknown>;
+              return `[${i + 1}] ${result.source}/${result.path}:${result.startLine}-${result.endLine} (score: ${Number(result.score).toFixed(2)})\n${result.snippet}`;
+            })
             .join("\n\n---\n\n");
           const temporalNote = temporalExpr ? ` (filtered by: ${temporalExpr})` : "";
           return {
@@ -289,7 +290,13 @@ export function createMemoryTools(sessionName: string): any[] {
             .toLowerCase()
             .split(/\s+/)
             .filter((t: string) => t.length > 2);
-          const searchResults: any[] = [];
+          const searchResults: Array<{
+            relPath: string;
+            lineStart: number;
+            lineEnd: number;
+            snippet: string;
+            score: number;
+          }> = [];
           for (const { path: filePath, source } of filesToSearch) {
             const content = readFileSync(filePath, "utf-8");
             const lines = content.split("\n");
@@ -342,7 +349,7 @@ export function createMemoryTools(sessionName: string): any[] {
         from: z.number().optional().describe("Starting line number (1-indexed)"),
         lines: z.number().optional().describe("Number of lines to read"),
       },
-      async (args: any) => {
+      async (args: { path: string; from?: number; lines?: number }) => {
         const { path: relPath, from, lines: lineCount } = args;
         const sessionDir = join(SESSIONS_DIR, sessionName);
         const memoryDir = join(sessionDir, "memory");
@@ -395,7 +402,7 @@ export function createMemoryTools(sessionName: string): any[] {
         tattoo: z.string().optional().describe("A persistent identity marker"),
         section: z.string().optional().describe("Section header (default: today's date)"),
       },
-      async (args: any) => {
+      async (args: { reflection?: string; tattoo?: string; section?: string }) => {
         return withSecurityCheck("self_reflect", sessionName, async () => {
           const { reflection, tattoo, section } = args;
           if (!reflection && !tattoo)

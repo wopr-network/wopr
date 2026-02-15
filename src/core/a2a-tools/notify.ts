@@ -4,8 +4,8 @@
 
 import { eventBus, logger, tool, z } from "./_base.js";
 
-export function createNotifyTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createNotifyTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -16,7 +16,7 @@ export function createNotifyTools(sessionName: string): any[] {
         level: z.string().optional().describe("Level: info, warn, error"),
         channel: z.string().optional().describe("Specific channel to notify"),
       },
-      async (args: any) => {
+      async (args: { message: string; level?: string; channel?: string }) => {
         const { message, level = "info", channel } = args;
         const logLevel = level === "error" ? "error" : level === "warn" ? "warn" : "info";
         logger[logLevel](`[NOTIFY] ${message}`);

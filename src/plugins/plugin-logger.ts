@@ -9,16 +9,16 @@ import type { PluginLogger } from "../types.js";
 
 export function createPluginLogger(pluginName: string): PluginLogger {
   return {
-    info: (message: string, ...args: any[]) => {
+    info: (message: string, ...args: unknown[]) => {
       logger.info(`[${pluginName}] ${message}`, ...args);
     },
-    warn: (message: string, ...args: any[]) => {
+    warn: (message: string, ...args: unknown[]) => {
       logger.warn(`[${pluginName}] ${message}`, ...args);
     },
-    error: (message: string, ...args: any[]) => {
+    error: (message: string, ...args: unknown[]) => {
       logger.error(`[${pluginName}] ${message}`, ...args);
     },
-    debug: (message: string, ...args: any[]) => {
+    debug: (message: string, ...args: unknown[]) => {
       if (process.env.DEBUG) {
         logger.debug(`[${pluginName}] ${message}`, ...args);
       }

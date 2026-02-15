@@ -98,8 +98,9 @@ async function handleGenerate(ctx: ChannelCommandContext): Promise<void> {
         `Expires in ${expiresIn} minutes.\n` +
         `User should run: !pair verify ${code.code}`,
     );
-  } catch (err: any) {
-    await ctx.reply(`Error: ${err.message}`);
+  } catch (err: unknown) {
+    const error = err as Error;
+    await ctx.reply(`Error: ${error.message}`);
   }
 }
 

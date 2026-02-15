@@ -15,8 +15,8 @@ import {
   z,
 } from "./_base.js";
 
-export function createSessionTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createSessionTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -25,7 +25,7 @@ export function createSessionTools(sessionName: string): any[] {
       {
         limit: z.number().optional().describe("Maximum number of sessions to return (default: 50)"),
       },
-      async (args: any) => {
+      async (args: { limit?: number }) => {
         if (!getSessions) throw new Error("Session functions not initialized");
         const sessions = getSessions();
         let sessionList = Object.keys(sessions).map((key) => ({
@@ -53,7 +53,7 @@ export function createSessionTools(sessionName: string): any[] {
         session: z.string().describe("Target session name (e.g., 'code-reviewer', 'discord-123456')"),
         message: z.string().describe("The message to send to the target session"),
       },
-      async (args: any) => {
+      async (args: { session: string; message: string }) => {
         return withSecurityCheck("sessions_send", sessionName, async () => {
           if (!injectFn) throw new Error("Session functions not initialized");
           const { session, message } = args;
@@ -103,7 +103,7 @@ export function createSessionTools(sessionName: string): any[] {
           .optional()
           .describe("Skip this many messages from the start (for pagination, only with full=true)"),
       },
-      async (args: any) => {
+      async (args: { session: string; limit?: number; full?: boolean; offset?: number }) => {
         return withSecurityCheck("sessions_history", sessionName, async () => {
           if (!readConversationLog) throw new Error("Session functions not initialized");
           const { session, limit = 10, full = false, offset = 0 } = args;
@@ -139,7 +139,7 @@ export function createSessionTools(sessionName: string): any[] {
             const hasMore = endIdx < totalCount;
             const nextOffset = hasMore ? endIdx : null;
 
-            const history = entries.map((e: any) => ({
+            const history = entries.map((e) => ({
               ts: e.ts,
               iso: new Date(e.ts).toISOString(),
               from: e.from,
@@ -173,7 +173,7 @@ export function createSessionTools(sessionName: string): any[] {
             const entries = readConversationLog(session, Math.min(limit, 50));
             const formatted = entries
               .map(
-                (e: any) =>
+                (e) =>
                   `[${new Date(e.ts).toISOString()}] ${e.from}: ${e.content?.substring(0, 200)}${e.content?.length > 200 ? "..." : ""}`,
               )
               .join("\n");
@@ -194,7 +194,7 @@ export function createSessionTools(sessionName: string): any[] {
         name: z.string().describe("Name for the new session (e.g., 'python-reviewer')"),
         purpose: z.string().describe("Describe what this session should do (becomes its system context)"),
       },
-      async (args: any) => {
+      async (args: { name: string; purpose: string }) => {
         return withSecurityCheck("sessions_spawn", sessionName, async () => {
           if (!setSessionContext) throw new Error("Session functions not initialized");
           const { name, purpose } = args;

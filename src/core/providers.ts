@@ -113,7 +113,7 @@ export class ProviderRegistry {
       providerId,
       type: provider.provider.getCredentialType(),
       credential,
-      metadata: metadata as any,
+      metadata: metadata as Record<string, unknown>,
       createdAt: Date.now(),
     });
 

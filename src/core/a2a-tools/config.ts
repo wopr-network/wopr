@@ -5,8 +5,8 @@
 import { redactSensitive } from "../../security/index.js";
 import { centralConfig, tool, withSecurityCheck, z } from "./_base.js";
 
-export function createConfigTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createConfigTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -15,7 +15,7 @@ export function createConfigTools(sessionName: string): any[] {
       {
         key: z.string().optional().describe("Config key to retrieve (dot notation). Omit to get all config."),
       },
-      async (args: any) => {
+      async (args: { key?: string }) => {
         return withSecurityCheck("config_get", sessionName, async () => {
           await centralConfig.load();
           const { key } = args;
@@ -42,11 +42,11 @@ export function createConfigTools(sessionName: string): any[] {
         key: z.string().describe("Config key to set (dot notation)"),
         value: z.string().describe("Value to set (strings, numbers, booleans, or JSON for objects)"),
       },
-      async (args: any) => {
+      async (args: { key: string; value: string }) => {
         return withSecurityCheck("config_set", sessionName, async () => {
           const { key, value } = args;
           await centralConfig.load();
-          let parsedValue: any = value;
+          let parsedValue: unknown = value;
           try {
             parsedValue = JSON.parse(value);
           } catch {
@@ -70,7 +70,7 @@ export function createConfigTools(sessionName: string): any[] {
         model: z.string().optional().describe("Default model for this provider"),
         reasoningEffort: z.string().optional().describe("For Codex: minimal/low/medium/high/xhigh"),
       },
-      async (args: any) => {
+      async (args: { provider: string; model?: string; reasoningEffort?: string }) => {
         const { provider, model, reasoningEffort } = args;
         await centralConfig.load();
         if (!model && !reasoningEffort) {

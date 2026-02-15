@@ -16,8 +16,8 @@ import {
   z,
 } from "./_base.js";
 
-export function createCronTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createCronTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   const cronScriptSchema = z
     .object({
@@ -39,7 +39,13 @@ export function createCronTools(sessionName: string): any[] {
         message: z.string().describe("Message to inject. Use {{script_name}} for script output placeholders."),
         scripts: z.array(cronScriptSchema).optional().describe("Scripts to execute before sending the message"),
       },
-      async (args: any) => {
+      async (args: {
+        name: string;
+        schedule: string;
+        session: string;
+        message: string;
+        scripts?: Array<{ name: string; command: string; timeout?: number; cwd?: string }>;
+      }) => {
         return withSecurityCheck("cron_schedule", sessionName, async () => {
           const { name, schedule, session, message, scripts } = args;
           if (session !== sessionName) {
@@ -80,7 +86,7 @@ export function createCronTools(sessionName: string): any[] {
         session: z.string().describe("Target session"),
         message: z.string().describe("Message to inject"),
       },
-      async (args: any) => {
+      async (args: { time: string; session: string; message: string }) => {
         return withSecurityCheck("cron_once", sessionName, async () => {
           const { time, session, message } = args;
           if (session !== sessionName) {
@@ -104,10 +110,13 @@ export function createCronTools(sessionName: string): any[] {
             const job = createOnceJob(time, session, message);
             addCron(job);
             return {
-              content: [{ type: "text", text: `One-time job scheduled for ${new Date(job.runAt!).toISOString()}` }],
+              content: [
+                { type: "text", text: `One-time job scheduled for ${new Date(job.runAt ?? Date.now()).toISOString()}` },
+              ],
             };
-          } catch (err: any) {
-            return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
           }
         });
       },
@@ -119,7 +128,7 @@ export function createCronTools(sessionName: string): any[] {
       const crons = getCrons();
       if (crons.length === 0) return { content: [{ type: "text", text: "No cron jobs scheduled." }] };
       const formatted = crons
-        .map((c: any) => {
+        .map((c) => {
           const schedule = c.once && c.runAt ? `once at ${new Date(c.runAt).toISOString()}` : c.schedule;
           return `- ${c.name}: ${schedule} -> ${c.session}`;
         })
@@ -133,7 +142,7 @@ export function createCronTools(sessionName: string): any[] {
       "cron_cancel",
       "Cancel a scheduled cron job by name.",
       { name: z.string().describe("Name of the cron job to cancel") },
-      async (args: any) => {
+      async (args: { name: string }) => {
         logger.info(`[a2a-mcp] cron_cancel: ${sessionName} cancelling '${args.name}'`);
         try {
           return await withSecurityCheck("cron_cancel", sessionName, async () => {
@@ -165,7 +174,15 @@ export function createCronTools(sessionName: string): any[] {
         successOnly: z.boolean().optional().describe("Only show successful executions"),
         failedOnly: z.boolean().optional().describe("Only show failed executions"),
       },
-      async (args: any) => {
+      async (args: {
+        name?: string;
+        session?: string;
+        limit?: number;
+        offset?: number;
+        since?: number;
+        successOnly?: boolean;
+        failedOnly?: boolean;
+      }) => {
         const result = getCronHistory({
           name: args.name,
           session: args.session,

@@ -117,9 +117,10 @@ export const channelsStep: OnboardStep = async (ctx: OnboardContext) => {
         await installPlugin(channelInfo.npm);
         installed.push(channelId);
         s.stop(`${channelInfo.name} plugin installed!`);
-      } catch (err: any) {
+      } catch (err) {
         s.stop(`${channelInfo.name} plugin failed`);
-        errors.push(`${channelInfo.name}: ${err.message}`);
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push(`${channelInfo.name}: ${message}`);
       }
     } else {
       // Built-in (like P2P)

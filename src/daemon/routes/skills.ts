@@ -63,8 +63,9 @@ skillsRouter.post("/", async (c) => {
   try {
     const skill = createSkill(name, description);
     return c.json({ created: true, skill }, 201);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
   }
 });
 
@@ -88,8 +89,9 @@ skillsRouter.post("/install", async (c) => {
       skill = installSkillFromUrl(source, name);
     }
     return c.json({ installed: true, skill }, 201);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
   }
 });
 
@@ -105,8 +107,9 @@ skillsRouter.post("/uninstall", async (c) => {
   try {
     removeSkill(name);
     return c.json({ removed: true });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
   }
 });
 
@@ -117,8 +120,9 @@ skillsRouter.delete("/:name", (c) => {
   try {
     removeSkill(name);
     return c.json({ removed: true });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
   }
 });
 
@@ -133,8 +137,9 @@ skillsRouter.post("/:name/enable", (c) => {
     }
 
     return c.json({ enabled: true });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 500);
   }
 });
 
@@ -149,8 +154,9 @@ skillsRouter.post("/:name/disable", (c) => {
     }
 
     return c.json({ disabled: true });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 500);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 500);
   }
 });
 

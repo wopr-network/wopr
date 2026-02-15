@@ -177,8 +177,9 @@ export async function executeForward(
     } finally {
       clearContext(forwardedContext.session);
     }
-  } catch (err: any) {
-    logger.error(`[forward] Forward ${request.requestId} failed: ${err.message}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`[forward] Forward ${request.requestId} failed: ${message}`);
     return {
       success: false,
       error: `Forward execution failed (${request.requestId})`,

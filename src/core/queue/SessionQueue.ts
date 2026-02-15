@@ -111,7 +111,8 @@ export class SessionQueue {
     this.processing = true;
 
     while (this.queue.length > 0) {
-      const item = this.queue.shift()!;
+      const item = this.queue.shift();
+      if (!item) break;
 
       this.emit({
         type: "dequeue",

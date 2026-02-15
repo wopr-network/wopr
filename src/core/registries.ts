@@ -63,11 +63,11 @@ export async function fetchRegistryIndex(url: string, searchQuery?: string): Pro
     const data = await res.json();
 
     if (data.items && Array.isArray(data.items)) {
-      return data.items.map((item: any) => ({
-        name: item.slug || item.name,
-        description: item.summary || item.description || item.displayName || "",
-        source: item.source || item.repository || item.url,
-        version: item.latestVersion?.version || item.version,
+      return data.items.map((item: Record<string, unknown>) => ({
+        name: (item.slug as string) || (item.name as string),
+        description: (item.summary as string) || (item.description as string) || (item.displayName as string) || "",
+        source: (item.source as string) || (item.repository as string) || (item.url as string),
+        version: (item.latestVersion as { version?: string })?.version || (item.version as string),
       }));
     }
 

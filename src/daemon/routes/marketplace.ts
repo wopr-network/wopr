@@ -67,7 +67,10 @@ marketplaceRouter.get("/", async (c) => {
 
     // Apply filters
     if (category && manifest?.category !== category) continue;
-    if (capability && !manifest?.capabilities?.includes(capability as any)) continue;
+    if (capability) {
+      const caps = manifest?.capabilities as string[] | undefined;
+      if (!caps?.includes(capability)) continue;
+    }
     if (query && !p.name.includes(query) && !p.description?.includes(query) && !manifest?.description?.includes(query))
       continue;
 
@@ -131,7 +134,16 @@ marketplaceRouter.get("/:name", async (c) => {
   const name = c.req.param("name");
 
   const installed = listPlugins();
-  const plugin = installed.find((p: { name: string }) => p.name === name);
+  interface PluginEntry {
+    name: string;
+    version: string;
+    description?: string;
+    source: string;
+    path: string;
+    enabled: boolean;
+    installedAt: number;
+  }
+  const plugin = installed.find((p: PluginEntry) => p.name === name);
 
   if (!plugin) {
     return c.json({ error: "Plugin not found. Install it first to view full details." }, 404);
@@ -205,7 +217,16 @@ marketplaceRouter.get("/:name/schema", (c) => {
   const name = c.req.param("name");
 
   const installed = listPlugins();
-  const plugin = installed.find((p: { name: string }) => p.name === name);
+  interface PluginEntry {
+    name: string;
+    version: string;
+    description?: string;
+    source: string;
+    path: string;
+    enabled: boolean;
+    installedAt: number;
+  }
+  const plugin = installed.find((p: PluginEntry) => p.name === name);
 
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);

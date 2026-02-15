@@ -97,6 +97,30 @@ const mutateRateLimit = rateLimiter({
 
 export const pluginsRouter = new Hono();
 
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+interface PluginEntry {
+  name: string;
+  version: string;
+  description?: string;
+  source: string;
+  path: string;
+  enabled: boolean;
+  installedAt: number;
+}
+
+interface PluginConfigData {
+  plugins?: {
+    data?: Record<string, unknown>;
+  };
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
 // Create injectors for hot-loading plugins (same as daemon/index.ts)
 function createInjectors() {
   return {
@@ -112,42 +136,33 @@ function createInjectors() {
 pluginsRouter.get("/", (c) => {
   const plugins = listPlugins();
   const runtimeManifests = getAllPluginManifests();
+
   return c.json({
-    plugins: plugins.map(
-      (p: {
-        name: string;
-        version: string;
-        description?: string;
-        source: string;
-        path: string;
-        enabled: boolean;
-        installedAt: number;
-      }) => {
-        // Prefer runtime manifest (loaded plugins), fall back to reading from disk
-        const manifest = runtimeManifests.get(p.name) || readPluginManifest(p.path);
-        return {
-          name: p.name,
-          version: p.version,
-          description: p.description || null,
-          source: p.source,
-          enabled: p.enabled,
-          installedAt: p.installedAt,
-          loaded: getLoadedPlugin(p.name) !== undefined,
-          manifest: manifest
-            ? {
-                capabilities: manifest.capabilities,
-                category: manifest.category || null,
-                tags: manifest.tags || [],
-                icon: manifest.icon || null,
-                author: manifest.author || null,
-                license: manifest.license || null,
-                homepage: manifest.homepage || null,
-                configSchema: manifest.configSchema || null,
-              }
-            : null,
-        };
-      },
-    ),
+    plugins: plugins.map((p: PluginEntry) => {
+      // Prefer runtime manifest (loaded plugins), fall back to reading from disk
+      const manifest = runtimeManifests.get(p.name) || readPluginManifest(p.path);
+      return {
+        name: p.name,
+        version: p.version,
+        description: p.description || null,
+        source: p.source,
+        enabled: p.enabled,
+        installedAt: p.installedAt,
+        loaded: getLoadedPlugin(p.name) !== undefined,
+        manifest: manifest
+          ? {
+              capabilities: manifest.capabilities,
+              category: manifest.category || null,
+              tags: manifest.tags || [],
+              icon: manifest.icon || null,
+              author: manifest.author || null,
+              license: manifest.license || null,
+              homepage: manifest.homepage || null,
+              configSchema: manifest.configSchema || null,
+            }
+          : null,
+      };
+    }),
   });
 });
 
@@ -304,7 +319,7 @@ pluginsRouter.post("/:name/enable", mutateRateLimit, async (c) => {
 
   try {
     const plugins = listPlugins();
-    const plugin = plugins.find((p: { name: string }) => p.name === name);
+    const plugin = plugins.find((p: PluginEntry) => p.name === name);
     if (!plugin) {
       return c.json({ error: "Plugin not found" }, 404);
     }
@@ -373,7 +388,7 @@ pluginsRouter.post("/:name/reload", mutateRateLimit, async (c) => {
 
   try {
     const plugins = listPlugins();
-    const plugin = plugins.find((p: { name: string }) => p.name === name);
+    const plugin = plugins.find((p: PluginEntry) => p.name === name);
     if (!plugin) {
       return c.json({ error: "Plugin not found" }, 404);
     }
@@ -415,7 +430,7 @@ pluginsRouter.get("/:name/config", async (c) => {
 
   await centralConfig.load();
   const cfg = centralConfig.get();
-  const pluginConfig = (cfg as any).plugins?.data?.[name] || {};
+  const pluginConfig = (cfg as unknown as PluginConfigData).plugins?.data?.[name] || {};
 
   const schemas = getConfigSchemas();
   let schema = schemas.get(name) || null;
@@ -470,11 +485,11 @@ pluginsRouter.put("/:name/config", mutateRateLimit, async (c) => {
 
   // Save to central config
   await centralConfig.load();
-  const cfg = centralConfig.get();
-  if (!(cfg as any).plugins) (cfg as any).plugins = {};
-  if (!(cfg as any).plugins.data) (cfg as any).plugins.data = {};
-  (cfg as any).plugins.data[name] = newConfig;
-  centralConfig.setValue("plugins.data", (cfg as any).plugins.data);
+  const cfg = centralConfig.get() as unknown as PluginConfigData;
+  if (!cfg.plugins) cfg.plugins = {};
+  if (!cfg.plugins.data) cfg.plugins.data = {};
+  cfg.plugins.data[name] = newConfig;
+  centralConfig.setValue("plugins.data", cfg.plugins.data);
   await centralConfig.save();
 
   return c.json({ name, config: newConfig, updated: true });

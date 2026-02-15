@@ -4,8 +4,8 @@
 
 import { eventBus, tool, withSecurityCheck, z } from "./_base.js";
 
-export function createEventTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createEventTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -13,9 +13,9 @@ export function createEventTools(sessionName: string): any[] {
       "Emit a custom event that other sessions/plugins can listen for.",
       {
         event: z.string().describe("Event name (e.g., 'plugin:myagent:task_complete')"),
-        payload: z.record(z.string(), z.any()).optional().describe("Event payload data"),
+        payload: z.record(z.string(), z.unknown()).optional().describe("Event payload data"),
       },
-      async (args: any) => {
+      async (args: { event: string; payload?: Record<string, unknown> }) => {
         return withSecurityCheck("event_emit", sessionName, async () => {
           const { event, payload } = args;
           await eventBus.emitCustom(event, payload || {}, sessionName);

@@ -2,10 +2,11 @@
  * Security introspection tools: security_whoami, security_check
  */
 
+import type { Capability } from "../../security/types.js";
 import { getContext, tool, z } from "./_base.js";
 
-export function createSecurityTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createSecurityTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -72,7 +73,7 @@ export function createSecurityTools(sessionName: string): any[] {
         tool: z.string().optional().describe("Tool name to check (e.g., 'http_fetch', 'exec_command')"),
         capability: z.string().optional().describe("Capability to check (e.g., 'inject.network', 'cross.inject')"),
       },
-      async (args: any) => {
+      async (args: { tool?: string; capability?: string }) => {
         const { tool: toolName, capability } = args;
         const context = getContext(sessionName);
         if (!context) {
@@ -94,7 +95,7 @@ export function createSecurityTools(sessionName: string): any[] {
           return { content: [{ type: "text", text: JSON.stringify({ tool: toolName, ...check }, null, 2) }] };
         }
         if (capability) {
-          const allowed = context.hasCapability(capability as any);
+          const allowed = context.hasCapability(capability as Capability);
           return {
             content: [
               {

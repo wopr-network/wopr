@@ -101,13 +101,14 @@ export function listA2ATools(): string[] {
  * Build or return cached MCP server.
  * The server is rebuilt when tools are registered/unregistered.
  */
-export function getA2AMcpServer(sessionName: string): any {
+export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSdkMcpServer> {
   if (!mcpServerDirty && cachedMcpServer) {
-    return cachedMcpServer;
+    return cachedMcpServer as ReturnType<typeof createSdkMcpServer>;
   }
 
   logger.info(`[a2a-mcp] Building MCP server with ${pluginTools.size} plugin tools`);
 
+  // biome-ignore lint/suspicious/noExplicitAny: SDK tool definitions have complex generic types
   const tools: any[] = [
     ...createSessionTools(sessionName),
     ...createConfigTools(sessionName),

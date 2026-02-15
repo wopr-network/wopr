@@ -12,8 +12,8 @@
 import { canvasGet, canvasPush, canvasRemove, canvasReset, canvasSnapshot } from "../canvas.js";
 import { tool, withSecurityCheck, z } from "./_base.js";
 
-export function createCanvasTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createCanvasTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   // ── canvas_push ──────────────────────────────────────────────────────
   tools.push(
@@ -26,7 +26,7 @@ export function createCanvasTools(sessionName: string): any[] {
         title: z.string().optional().describe("Optional display title for the canvas item"),
         id: z.string().optional().describe("Optional custom id (auto-generated if omitted)"),
       },
-      async (args: any) => {
+      async (args: { type: "html" | "markdown" | "chart" | "form"; content: string; title?: string; id?: string }) => {
         return withSecurityCheck("canvas_push", sessionName, async () => {
           const item = await canvasPush(sessionName, args.type, args.content, {
             title: args.title,
@@ -53,7 +53,7 @@ export function createCanvasTools(sessionName: string): any[] {
       {
         id: z.string().describe("The id of the canvas item to remove"),
       },
-      async (args: any) => {
+      async (args: { id: string }) => {
         return withSecurityCheck("canvas_remove", sessionName, async () => {
           const removed = await canvasRemove(sessionName, args.id);
           return {

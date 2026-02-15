@@ -72,20 +72,20 @@ export async function password(options: {
   return guardCancel(result);
 }
 
-export async function select<T>(options: {
+export async function select<T extends string>(options: {
   message: string;
   options: Array<{ value: T; label: string; hint?: string }>;
   initialValue?: T;
 }): Promise<T> {
   const result = await p.select({
     message: options.message,
-    options: options.options as any, // @clack/prompts Option<T> requires Primitive; generic T needs cast
+    options: options.options as Array<{ value: string | number | boolean | symbol; label: string; hint?: string }>,
     initialValue: options.initialValue,
   });
-  return guardCancel(result);
+  return guardCancel(result) as T;
 }
 
-export async function multiselect<T>(options: {
+export async function multiselect<T extends string>(options: {
   message: string;
   options: Array<{ value: T; label: string; hint?: string }>;
   required?: boolean;
@@ -93,11 +93,11 @@ export async function multiselect<T>(options: {
 }): Promise<T[]> {
   const result = await p.multiselect({
     message: options.message,
-    options: options.options as any, // @clack/prompts Option<T> requires Primitive; generic T needs cast
+    options: options.options as Array<{ value: string | number | boolean | symbol; label: string; hint?: string }>,
     required: options.required ?? false,
     initialValues: options.initialValues,
   });
-  return guardCancel(result);
+  return guardCancel(result) as T[];
 }
 
 export function printHeader(): void {

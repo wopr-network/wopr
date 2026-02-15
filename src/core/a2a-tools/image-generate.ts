@@ -70,8 +70,8 @@ function getProvider(): ImageGenerationProvider {
 // A2A tool factory
 // ---------------------------------------------------------------------------
 
-export function createImageGenerateTools(sessionName: string): any[] {
-  const tools: any[] = [];
+export function createImageGenerateTools(sessionName: string): unknown[] {
+  const tools: unknown[] = [];
 
   tools.push(
     tool(
@@ -86,7 +86,12 @@ export function createImageGenerateTools(sessionName: string): any[] {
         quality: z.enum(["standard", "hd"]).optional().describe("Image quality: standard or hd. Default: standard"),
         style: z.enum(["natural", "vivid"]).optional().describe("Image style: natural or vivid. Default: natural"),
       },
-      async (args: any) => {
+      async (args: {
+        prompt: string;
+        size?: "256" | "512" | "1024";
+        quality?: "standard" | "hd";
+        style?: "natural" | "vivid";
+      }) => {
         return withSecurityCheck("image_generate", sessionName, async () => {
           const { prompt, size, quality, style } = args;
 

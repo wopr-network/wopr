@@ -48,11 +48,11 @@ export async function loadPlugin(
 ): Promise<WOPRPlugin> {
   // Find the entry point and read package.json
   let entryPoint = installed.path;
-  let pkg: any = {};
+  let pkg: Record<string, unknown> = {};
 
   if (existsSync(join(installed.path, "package.json"))) {
-    pkg = JSON.parse(readFileSync(join(installed.path, "package.json"), "utf-8"));
-    entryPoint = join(installed.path, pkg.main || "index.js");
+    pkg = JSON.parse(readFileSync(join(installed.path, "package.json"), "utf-8")) as Record<string, unknown>;
+    entryPoint = join(installed.path, (pkg.main as string) || "index.js");
   } else if (existsSync(join(installed.path, "index.js"))) {
     entryPoint = join(installed.path, "index.js");
   } else if (existsSync(join(installed.path, "index.ts"))) {
@@ -79,7 +79,8 @@ export async function loadPlugin(
   if (!options.skipRequirementsCheck) {
     // Prefer manifest requirements, fall back to legacy pkg.wopr.plugin.requires
     const manifestRequires: PluginRequirements | undefined = manifest?.requires;
-    const legacyMeta = pkg.wopr?.plugin;
+    const legacyMeta = (pkg.wopr as { plugin?: { requires?: VoicePluginRequirements; install?: InstallMethod[] } })
+      ?.plugin;
     const legacyRequires: VoicePluginRequirements | undefined = legacyMeta?.requires;
     const requires = manifestRequires ?? legacyRequires;
 
@@ -132,16 +133,16 @@ export async function loadPlugin(
   const originalCwd = process.cwd();
   process.chdir(installed.path);
 
-  let module: any;
+  let module: { default?: WOPRPlugin } & Record<string, unknown>;
   try {
     // Dynamic import with cache-busting query param for reloads
     // ESM caches by URL, so adding timestamp forces fresh import
     const cacheBuster = `?t=${Date.now()}`;
-    module = await import(entryPoint + cacheBuster);
+    module = (await import(entryPoint + cacheBuster)) as { default?: WOPRPlugin } & Record<string, unknown>;
   } finally {
     process.chdir(originalCwd);
   }
-  const plugin: WOPRPlugin = module.default || module;
+  const plugin: WOPRPlugin = (module.default || module) as WOPRPlugin;
 
   // Create context
   const context = createPluginContext(installed, injectors);
@@ -258,12 +259,13 @@ export async function loadAllPlugins(
       await loadPlugin(plugin, injectors, options);
       loadedCount++;
       logger.info(`[plugins]   Loaded: ${plugin.name}`);
-    } catch (err: any) {
-      logger.error(`[plugins]   Failed to load ${plugin.name}:`, err.message);
-      if (err.stack) {
-        logger.error(`[plugins]     Stack:`, err.stack.substring(0, 200));
+    } catch (err: unknown) {
+      const error = err as Error;
+      logger.error(`[plugins]   Failed to load ${plugin.name}:`, error.message);
+      if (error.stack) {
+        logger.error(`[plugins]     Stack:`, error.stack.substring(0, 200));
       }
-      failed.push({ name: plugin.name, error: err.message });
+      failed.push({ name: plugin.name, error: error.message });
     }
   }
 

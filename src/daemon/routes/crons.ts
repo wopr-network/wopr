@@ -97,12 +97,13 @@ cronsRouter.post("/once", async (c) => {
       {
         created: true,
         cron: job,
-        scheduledFor: new Date(job.runAt!).toISOString(),
+        scheduledFor: job.runAt ? new Date(job.runAt).toISOString() : undefined,
       },
       201,
     );
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 400);
   }
 });
 

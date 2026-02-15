@@ -155,7 +155,7 @@ export function createPluginContext(
       await centralConfig.save();
     },
 
-    getMainConfig(key?: string): any {
+    getMainConfig(key?: string): unknown {
       // Access main WOPR config (read-only)
       const cfg = centralConfig.get();
       if (!key) return cfg;

@@ -107,8 +107,8 @@ export function parseTimeSpec(spec: string): number {
     const match = spec.match(/^\+(\d+)([smhd])$/);
     if (match) {
       const val = parseInt(match[1], 10);
-      const unit = match[2];
-      const mult = { s: 1000, m: 60000, h: 3600000, d: 86400000 }[unit]!;
+      const unit = match[2] as "s" | "m" | "h" | "d";
+      const mult = { s: 1000, m: 60000, h: 3600000, d: 86400000 }[unit];
       return now + val * mult;
     }
   }
@@ -254,15 +254,16 @@ export async function executeCronScript(script: CronScript): Promise<CronScriptR
       stderr: stderr.length > MAX_SCRIPT_OUTPUT ? `${stderr.substring(0, MAX_SCRIPT_OUTPUT)}\n... (truncated)` : stderr,
       durationMs,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     const durationMs = Date.now() - start;
+    const error = err as { code?: number; stdout?: string; stderr?: string; message?: string };
     return {
       name: script.name,
-      exitCode: err.code ?? 1,
-      stdout: err.stdout ?? "",
-      stderr: err.stderr ?? "",
+      exitCode: error.code ?? 1,
+      stdout: error.stdout ?? "",
+      stderr: error.stderr ?? "",
       durationMs,
-      error: err.message,
+      error: error.message,
     };
   }
 }
