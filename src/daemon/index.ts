@@ -10,6 +10,7 @@ import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 import { setCanvasPublish } from "../core/canvas.js";
 import { config as centralConfig } from "../core/config.js";
@@ -140,6 +141,14 @@ export function createApp(healthMonitor?: HealthMonitor) {
   if (healthMonitor) {
     app.route("/healthz", createHealthzRouter(healthMonitor));
   }
+
+  // Global error handler (defense-in-depth: prevents error detail leaks)
+  app.onError((err, c) => {
+    const status = err instanceof HTTPException ? err.status : 500;
+    winstonLogger.error(`[daemon] Unhandled route error: ${err.message}`);
+    return c.json({ error: status === 500 ? "Internal server error" : err.message }, status);
+  });
+
   return app;
 }
 
