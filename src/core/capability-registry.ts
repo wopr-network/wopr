@@ -10,8 +10,8 @@ export interface CapabilityEntry {
 /**
  * Events emitted by the capability registry.
  *
- * "provider:registered"   -> { capability, provider }
- * "provider:unregistered" -> { capability, providerId }
+ * "capability:providerRegistered"   -> { capability, provider }
+ * "capability:providerUnregistered" -> { capability, providerId }
  */
 export class CapabilityRegistry extends EventEmitter {
   private capabilities = new Map<AdapterCapability, CapabilityEntry>();
@@ -37,7 +37,7 @@ export class CapabilityRegistry extends EventEmitter {
     }
 
     entry.providers.set(provider.id, provider);
-    this.emit("provider:registered", { capability, provider });
+    this.emit("capability:providerRegistered", { capability, provider });
     logger.info(`[capability-registry] Registered ${provider.id} for ${capability}`);
   }
 
@@ -49,7 +49,7 @@ export class CapabilityRegistry extends EventEmitter {
     if (!entry) return;
 
     entry.providers.delete(providerId);
-    this.emit("provider:unregistered", { capability, providerId });
+    this.emit("capability:providerUnregistered", { capability, providerId });
     logger.info(`[capability-registry] Unregistered ${providerId} from ${capability}`);
   }
 
@@ -90,9 +90,11 @@ export class CapabilityRegistry extends EventEmitter {
    * Check which capabilities from a requirements list are unsatisfied.
    * Returns the list of missing required capabilities (ignores optional ones).
    */
-  checkRequirements(
-    requirements: Array<{ capability: AdapterCapability; optional?: boolean }>
-  ): { satisfied: boolean; missing: AdapterCapability[]; optional: AdapterCapability[] } {
+  checkRequirements(requirements: Array<{ capability: AdapterCapability; optional?: boolean }>): {
+    satisfied: boolean;
+    missing: AdapterCapability[];
+    optional: AdapterCapability[];
+  } {
     const missing: AdapterCapability[] = [];
     const optionalMissing: AdapterCapability[] = [];
 

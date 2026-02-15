@@ -21,10 +21,7 @@ export class CapabilityDependencyGraph {
   /**
    * Register a plugin's capability dependencies (called during plugin load).
    */
-  registerPlugin(
-    pluginName: string,
-    requirements: Array<{ capability: AdapterCapability; optional?: boolean }>
-  ): void {
+  registerPlugin(pluginName: string, requirements: Array<{ capability: AdapterCapability; optional?: boolean }>): void {
     const deps: CapabilityDependency[] = [];
 
     for (const req of requirements) {

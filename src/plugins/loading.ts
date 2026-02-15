@@ -140,7 +140,7 @@ export async function loadPlugin(
       if (!satisfied) {
         throw new Error(
           `Plugin ${installed.name} requires capabilities not yet available: ${missing.join(", ")}. ` +
-            `Install a provider for each missing capability first.`
+            `Install a provider for each missing capability first.`,
         );
       }
 

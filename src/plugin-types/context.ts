@@ -10,6 +10,7 @@ import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
 import type { ConfigSchema } from "./config.js";
 import type { ContextProvider } from "./context-provider.js";
 import type { WOPREventBus, WOPRHookManager } from "./events.js";
+import type { AdapterCapability, ProviderOption } from "./manifest.js";
 
 /**
  * Multimodal message with optional images.
@@ -240,8 +241,8 @@ export interface WOPRPluginContext {
   getPluginDir(): string;
 
   // Capability registry (new)
-  registerCapabilityProvider(capability: string, provider: unknown): void;
-  unregisterCapabilityProvider(capability: string, providerId: string): void;
-  getCapabilityProviders(capability: string): unknown[];
-  hasCapability(capability: string): boolean;
+  registerCapabilityProvider(capability: AdapterCapability, provider: ProviderOption): void;
+  unregisterCapabilityProvider(capability: AdapterCapability, providerId: string): void;
+  getCapabilityProviders(capability: AdapterCapability): ProviderOption[];
+  hasCapability(capability: AdapterCapability): boolean;
 }

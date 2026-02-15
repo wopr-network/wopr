@@ -179,6 +179,8 @@ export function createPluginContext(
     unregisterProvider(id: string) {
       providerPlugins.delete(id);
       // Note: providerRegistry doesn't have unregister, providers are removed from runtime only
+      // Unregister from capability registry
+      getCapabilityRegistry().unregisterProvider("text-gen", id);
     },
 
     getProvider(id: string): ModelProvider | undefined {
@@ -300,20 +302,20 @@ export function createPluginContext(
     },
 
     // Capability registry (new)
-    registerCapabilityProvider(capability: string, provider: unknown) {
-      getCapabilityRegistry().registerProvider(capability as AdapterCapability, provider as ProviderOption);
+    registerCapabilityProvider(capability: AdapterCapability, provider: ProviderOption) {
+      getCapabilityRegistry().registerProvider(capability, provider);
     },
 
-    unregisterCapabilityProvider(capability: string, providerId: string) {
-      getCapabilityRegistry().unregisterProvider(capability as AdapterCapability, providerId);
+    unregisterCapabilityProvider(capability: AdapterCapability, providerId: string) {
+      getCapabilityRegistry().unregisterProvider(capability, providerId);
     },
 
-    getCapabilityProviders(capability: string): unknown[] {
-      return getCapabilityRegistry().getProviders(capability as AdapterCapability);
+    getCapabilityProviders(capability: AdapterCapability): ProviderOption[] {
+      return getCapabilityRegistry().getProviders(capability);
     },
 
-    hasCapability(capability: string): boolean {
-      return getCapabilityRegistry().hasProvider(capability as AdapterCapability);
+    hasCapability(capability: AdapterCapability): boolean {
+      return getCapabilityRegistry().hasProvider(capability);
     },
   };
 }
