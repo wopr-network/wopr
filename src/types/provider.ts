@@ -191,6 +191,9 @@ export interface ModelResponse {
 
   /** Raw provider response (for debugging) */
   raw?: unknown;
+
+  /** Upstream cost in USD cents (only set by hosted providers) */
+  cost?: number;
 }
 
 /**

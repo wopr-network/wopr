@@ -125,7 +125,7 @@ export interface MeterEvent {
   capability: string;
   /** Which adapter handled the call (e.g., "replicate", "modal", "anthropic") */
   provider: string;
-  /** Upstream cost in USD cents */
+  /** Charge to tenant in USD cents (upstream cost * multiplier for hosted; 0 for BYOK) */
   cost: number;
   /** When the usage occurred (epoch ms) */
   timestamp: number;
