@@ -101,7 +101,7 @@ export interface Tool {
   description: string;
   input_schema: {
     type: "object";
-    properties?: Record<string, any>;
+    properties?: Record<string, unknown>;
     required?: string[];
   };
 }
@@ -112,7 +112,7 @@ export interface Tool {
 export interface ToolCall {
   id: string;
   name: string;
-  input: Record<string, any>;
+  input: Record<string, unknown>;
 }
 
 /**
@@ -157,7 +157,7 @@ export interface ModelQueryOptions {
   tools?: Tool[];
 
   /** MCP servers for tool execution (A2A, skills, etc.) */
-  mcpServers?: Record<string, any>;
+  mcpServers?: Record<string, unknown>;
 
   /** Provider-specific options */
   providerOptions?: Record<string, unknown>;
@@ -205,7 +205,7 @@ export interface ModelClient {
    * Execute a query against the model
    * Returns an async generator that yields streaming results
    */
-  query(options: ModelQueryOptions): AsyncGenerator<any>;
+  query(options: ModelQueryOptions): AsyncGenerator<unknown>;
 
   /**
    * List available models from this provider

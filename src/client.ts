@@ -198,13 +198,13 @@ export class WoprClient {
   }
 
   // Peers
-  async getPeers(): Promise<any[]> {
-    const data = await this.request<{ peers: any[] }>("/peers");
+  async getPeers(): Promise<unknown[]> {
+    const data = await this.request<{ peers: unknown[] }>("/peers");
     return data.peers;
   }
 
-  async getAccessGrants(): Promise<any[]> {
-    const data = await this.request<{ grants: any[] }>("/peers/access");
+  async getAccessGrants(): Promise<unknown[]> {
+    const data = await this.request<{ grants: unknown[] }>("/peers/access");
     return data.grants;
   }
 
@@ -246,8 +246,8 @@ export class WoprClient {
   }
 
   // Plugins
-  async getPlugins(): Promise<any[]> {
-    const data = await this.request<{ plugins: any[] }>("/plugins");
+  async getPlugins(): Promise<unknown[]> {
+    const data = await this.request<{ plugins: unknown[] }>("/plugins");
     return data.plugins;
   }
 
@@ -282,8 +282,8 @@ export class WoprClient {
     });
   }
 
-  async searchPlugins(query: string): Promise<any[]> {
-    const data = await this.request<{ results: any[] }>(`/plugins/search?q=${encodeURIComponent(query)}`);
+  async searchPlugins(query: string): Promise<unknown[]> {
+    const data = await this.request<{ results: unknown[] }>(`/plugins/search?q=${encodeURIComponent(query)}`);
     return data.results;
   }
 
@@ -306,8 +306,8 @@ export class WoprClient {
   }
 
   // Skills
-  async getSkills(): Promise<any[]> {
-    const data = await this.request<{ skills: any[] }>("/skills");
+  async getSkills(): Promise<unknown[]> {
+    const data = await this.request<{ skills: unknown[] }>("/skills");
     return data.skills;
   }
 
@@ -331,8 +331,8 @@ export class WoprClient {
     });
   }
 
-  async searchSkills(query: string): Promise<any[]> {
-    const data = await this.request<{ results: any[] }>(`/skills/search?q=${encodeURIComponent(query)}`);
+  async searchSkills(query: string): Promise<unknown[]> {
+    const data = await this.request<{ results: unknown[] }>(`/skills/search?q=${encodeURIComponent(query)}`);
     return data.results;
   }
 
@@ -365,12 +365,12 @@ export class WoprClient {
     return this.request("/config");
   }
 
-  async getConfigValue(key: string): Promise<any> {
-    const data = await this.request<{ key: string; value: any }>(`/config/${encodeURIComponent(key)}`);
+  async getConfigValue(key: string): Promise<unknown> {
+    const data = await this.request<{ key: string; value: unknown }>(`/config/${encodeURIComponent(key)}`);
     return data.value;
   }
 
-  async setConfigValue(key: string, value: any): Promise<void> {
+  async setConfigValue(key: string, value: unknown): Promise<void> {
     await this.request(`/config/${encodeURIComponent(key)}`, {
       method: "PUT",
       body: JSON.stringify({ value }),
@@ -384,7 +384,7 @@ export class WoprClient {
   }
 
   // Identity
-  async getIdentity(): Promise<any | null> {
+  async getIdentity(): Promise<unknown | null> {
     try {
       return this.request("/identity");
     } catch {
@@ -392,14 +392,14 @@ export class WoprClient {
     }
   }
 
-  async initIdentity(force?: boolean): Promise<any> {
+  async initIdentity(force?: boolean): Promise<unknown> {
     return this.request("/identity", {
       method: "POST",
       body: JSON.stringify({ force }),
     });
   }
 
-  async rotateIdentity(broadcast?: boolean): Promise<any> {
+  async rotateIdentity(broadcast?: boolean): Promise<unknown> {
     return this.request("/identity/rotate", {
       method: "POST",
       body: JSON.stringify({ broadcast }),
@@ -440,9 +440,9 @@ export class WoprClient {
     return data.topics;
   }
 
-  async getDiscoveredPeers(topic?: string): Promise<any[]> {
+  async getDiscoveredPeers(topic?: string): Promise<unknown[]> {
     const path = topic ? `/discover/peers?topic=${encodeURIComponent(topic)}` : "/discover/peers";
-    const data = await this.request<{ peers: any[] }>(path);
+    const data = await this.request<{ peers: unknown[] }>(path);
     return data.peers;
   }
 
@@ -453,7 +453,7 @@ export class WoprClient {
     });
   }
 
-  async getProfile(): Promise<any | null> {
+  async getProfile(): Promise<unknown | null> {
     try {
       return this.request("/discover/profile");
     } catch {
@@ -461,7 +461,7 @@ export class WoprClient {
     }
   }
 
-  async setProfile(content: Record<string, any>): Promise<any> {
+  async setProfile(content: Record<string, unknown>): Promise<unknown> {
     return this.request("/discover/profile", {
       method: "PUT",
       body: JSON.stringify(content),
@@ -469,8 +469,8 @@ export class WoprClient {
   }
 
   // Providers
-  async getProviders(): Promise<any[]> {
-    const data = await this.request<{ providers: any[] }>("/providers");
+  async getProviders(): Promise<unknown[]> {
+    const data = await this.request<{ providers: unknown[] }>("/providers");
     return data.providers;
   }
 
@@ -487,7 +487,7 @@ export class WoprClient {
     });
   }
 
-  async checkProvidersHealth(): Promise<any> {
+  async checkProvidersHealth(): Promise<unknown> {
     return this.request("/providers/health", {
       method: "POST",
     });
@@ -704,7 +704,7 @@ export class WoprWsClient {
   }
 
   private async doConnect(): Promise<void> {
-    const wsUrl = this.baseUrl.replace(/^http/, "ws") + "/api/ws";
+    const wsUrl = `${this.baseUrl.replace(/^http/, "ws")}/api/ws`;
     const token = this.tokenOverride ?? getToken();
 
     // Dynamically import ws (Node.js WebSocket client)

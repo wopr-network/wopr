@@ -21,7 +21,7 @@ declare module "hyperswarm" {
 
     on(event: "connection", listener: (socket: Duplex, info: PeerInfo) => void): this;
     on(event: "update", listener: () => void): this;
-    on(event: string, listener: (...args: any[]) => void): this;
+    on(event: string, listener: (...args: unknown[]) => void): this;
 
     connections: Set<Duplex>;
     peers: Map<string, PeerInfo>;

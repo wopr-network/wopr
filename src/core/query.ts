@@ -87,12 +87,18 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     const providerUsed = resolved.provider.id;
     const modelUsed = options.model || resolved.provider.defaultModel;
 
-    for await (const msg of stream) {
+    for await (const raw of stream) {
+      const msg = raw as {
+        type: string;
+        subtype?: string;
+        session_id?: string;
+        message?: { content?: Array<{ type: string; text?: string }> };
+      };
       if (msg.type === "system" && msg.subtype === "init") {
         sessionId = msg.session_id;
       } else if (msg.type === "assistant") {
         for (const block of msg.message?.content || []) {
-          if (block.type === "text") {
+          if (block.type === "text" && block.text) {
             chunks.push(block.text);
           }
         }

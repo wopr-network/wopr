@@ -47,7 +47,13 @@ export async function pluginCommand(subcommand: string | undefined, args: string
   } else {
     switch (subcommand) {
       case "list": {
-        const plugins = await client.getPlugins();
+        const plugins = (await client.getPlugins()) as {
+          name: string;
+          version: string;
+          source: string;
+          enabled: boolean;
+          description?: string;
+        }[];
         if (plugins.length === 0) {
           logger.info("No plugins installed. Install: wopr plugin install <source>");
         } else {
@@ -115,7 +121,10 @@ export async function pluginCommand(subcommand: string | undefined, args: string
           process.exit(1);
         }
         logger.info(`Searching npm for wopr-plugin-${args[0]}...`);
-        const results = await client.searchPlugins(args[0]);
+        const results = (await client.searchPlugins(args[0])) as {
+          name: string;
+          description?: string;
+        }[];
         if (results.length === 0) {
           logger.info("No plugins found.");
         } else {

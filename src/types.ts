@@ -244,7 +244,7 @@ export interface Profile {
   id: string; // Short key
   publicKey: string; // Full pubkey for identity
   encryptPub: string; // X25519 for encryption
-  content: any; // AI-generated, freeform - whatever it wants to say
+  content: unknown; // AI-generated, freeform - whatever it wants to say
   topics: string[]; // Topics currently active in
   updated: number;
   sig: string; // Signed by identity key
@@ -376,7 +376,7 @@ export interface ContextPart {
     source: string;
     priority: number;
     trustLevel?: "trusted" | "untrusted" | "verified";
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -411,17 +411,17 @@ export interface UiComponentExtension {
 export interface PluginUiComponentProps {
   // API client for making requests to WOPR daemon
   api: {
-    getSessions: () => Promise<{ sessions: any[] }>;
-    inject: (session: string, message: string) => Promise<any>;
-    getConfig: () => Promise<any>;
-    setConfigValue: (key: string, value: any) => Promise<void>;
+    getSessions: () => Promise<{ sessions: unknown[] }>;
+    inject: (session: string, message: string) => Promise<unknown>;
+    getConfig: () => Promise<unknown>;
+    setConfigValue: (key: string, value: unknown) => Promise<void>;
   };
   // Current session context (if in chat view)
   currentSession?: string;
   // Plugin's own config
-  pluginConfig: any;
+  pluginConfig: unknown;
   // Save plugin config
-  saveConfig: (config: any) => Promise<void>;
+  saveConfig: (config: unknown) => Promise<void>;
 }
 
 export interface MultimodalMessage {
@@ -436,7 +436,7 @@ export interface ConfigField {
   label: string;
   placeholder?: string;
   required?: boolean;
-  default?: any;
+  default?: string | number | boolean;
   options?: { value: string; label: string }[]; // For select type
   description?: string;
 }
@@ -852,11 +852,11 @@ export interface WOPRPluginContext {
   getUiComponents(): UiComponentExtension[];
 
   // Plugin's own config
-  getConfig<T = any>(): T;
-  saveConfig<T = any>(config: T): Promise<void>;
+  getConfig<T = unknown>(): T;
+  saveConfig<T = unknown>(config: T): Promise<void>;
 
   // Main WOPR config (read-only access)
-  getMainConfig(key?: string): any;
+  getMainConfig(key?: string): unknown;
 
   // Model providers - plugins register AI model providers
   registerProvider(provider: import("./types/provider.js").ModelProvider): void;
@@ -904,10 +904,10 @@ export interface WOPRPluginContext {
 }
 
 export interface PluginLogger {
-  info(message: string, ...args: any[]): void;
-  warn(message: string, ...args: any[]): void;
-  error(message: string, ...args: any[]): void;
-  debug(message: string, ...args: any[]): void;
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(message: string, ...args: unknown[]): void;
+  debug(message: string, ...args: unknown[]): void;
 }
 
 export interface InstalledPlugin {

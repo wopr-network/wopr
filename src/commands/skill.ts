@@ -44,7 +44,7 @@ export async function skillCommand(subcommand: string | undefined, args: string[
   } else {
     switch (subcommand) {
       case "list": {
-        const skills = await client.getSkills();
+        const skills = (await client.getSkills()) as { name: string; description: string }[];
         if (skills.length === 0) {
           logger.info(`No skills. Add to ${SKILLS_DIR}/<name>/SKILL.md`);
         } else {
@@ -58,7 +58,10 @@ export async function skillCommand(subcommand: string | undefined, args: string[
           logger.error("Usage: wopr skill search <query>");
           process.exit(1);
         }
-        const results = await client.searchSkills(args.join(" "));
+        const results = (await client.searchSkills(args.join(" "))) as {
+          skill: { name: string; description?: string; source: string };
+          registry: string;
+        }[];
         if (results.length === 0) {
           logger.info(`No skills found matching "${args.join(" ")}"`);
         } else {

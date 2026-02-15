@@ -13,7 +13,11 @@ export async function providersCommand(subcommand: string | undefined, args: str
 
   switch (subcommand) {
     case "list": {
-      const providers = await client.getProviders();
+      const providers = (await client.getProviders()) as {
+        id: string;
+        name?: string;
+        available?: boolean;
+      }[];
       if (providers.length === 0) {
         logger.info("No providers registered.");
       } else {
@@ -89,9 +93,12 @@ export async function providersCommand(subcommand: string | undefined, args: str
       logger.info("Checking provider health...");
       await client.checkProvidersHealth();
 
-      const providers = await client.getProviders();
-      const healthy = providers.filter((p: any) => p.available);
-      const unhealthy = providers.filter((p: any) => !p.available);
+      const providers = (await client.getProviders()) as {
+        id: string;
+        available?: boolean;
+      }[];
+      const healthy = providers.filter((p) => p.available);
+      const unhealthy = providers.filter((p) => !p.available);
 
       if (healthy.length > 0) {
         logger.info("\nHealthy:");
