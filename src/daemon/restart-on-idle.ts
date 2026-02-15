@@ -199,9 +199,7 @@ export class RestartOnIdleManager {
       // Check if we've been idle long enough
       const idleDuration = (now - this.lastIdleSince) / 1000;
       if (idleDuration >= this.config.idleThresholdSeconds) {
-        logger.info(
-          `[restart-on-idle] Idle threshold met (${this.config.idleThresholdSeconds}s) - restarting`,
-        );
+        logger.info(`[restart-on-idle] Idle threshold met (${this.config.idleThresholdSeconds}s) - restarting`);
         this.state = "RESTARTING";
         this.triggerRestart();
       }
@@ -212,9 +210,7 @@ export class RestartOnIdleManager {
       // Update state to draining if in force mode
       if (this.config.drainMode === "force" && this.state === "PENDING") {
         this.state = "DRAINING";
-        logger.info(
-          `[restart-on-idle] Draining mode: ${activeInjects} active inject(s), waiting for completion`,
-        );
+        logger.info(`[restart-on-idle] Draining mode: ${activeInjects} active inject(s), waiting for completion`);
       }
     }
   }
@@ -228,9 +224,7 @@ export class RestartOnIdleManager {
       this.checkInterval = null;
     }
 
-    logger.info(
-      `[restart-on-idle] Triggering restart (batched ${this.batchedRequests} request(s))`,
-    );
+    logger.info(`[restart-on-idle] Triggering restart (batched ${this.batchedRequests} request(s))`);
 
     if (this.onRestartCallback) {
       this.onRestartCallback();
