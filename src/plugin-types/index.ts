@@ -45,6 +45,8 @@ export type { ContextPart, ContextProvider, MessageInfo } from "./context-provid
 
 // Event and hook types
 export type {
+  CapabilityProviderRegisteredEvent,
+  CapabilityProviderUnregisteredEvent,
   ChannelMessageEvent,
   ChannelMessageHandler,
   ChannelSendEvent,
@@ -75,6 +77,8 @@ export type {
 } from "./events.js";
 // Manifest types
 export type {
+  AdapterCapability,
+  CapabilityRequirement,
   InstallMethod,
   NetworkRequirements,
   PluginCapability,
@@ -82,6 +86,7 @@ export type {
   PluginLifecycle,
   PluginManifest,
   PluginRequirements,
+  ProviderOption,
   SetupStep,
   StorageRequirements,
 } from "./manifest.js";

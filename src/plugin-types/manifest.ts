@@ -71,6 +71,16 @@ export interface PluginRequirements {
   services?: string[];
   /** Storage requirements */
   storage?: StorageRequirements;
+  /**
+   * Abstract capabilities this plugin needs to function.
+   * Required capabilities block activation if no provider is configured.
+   * Optional capabilities are shown as suggestions but don't block.
+   *
+   * Examples:
+   *   capabilities: [{ capability: "tts" }]
+   *   capabilities: [{ capability: "stt" }, { capability: "tts", optional: true }]
+   */
+  capabilities?: CapabilityRequirement[];
 }
 
 /**
@@ -178,6 +188,41 @@ export interface PluginLifecycle {
   shutdownBehavior?: "graceful" | "immediate" | "drain";
   /** Maximum time (ms) the platform waits for shutdown() before force-killing. Default: 10000 */
   shutdownTimeoutMs?: number;
+}
+
+/**
+ * Abstract capabilities that plugins can require or provide.
+ * These are resolved at install/activation time by the capability registry.
+ */
+export type AdapterCapability =
+  | "tts" // Text-to-speech synthesis
+  | "stt" // Speech-to-text transcription
+  | "text-gen" // Text generation / LLM
+  | "image-gen" // Image generation
+  | "embeddings"; // Vector embeddings
+
+/**
+ * A single capability requirement declared by a plugin.
+ */
+export interface CapabilityRequirement {
+  /** The abstract capability needed */
+  capability: AdapterCapability;
+  /** If true, this capability is a suggestion, not a blocker */
+  optional?: boolean;
+}
+
+/**
+ * A provider option for a capability.
+ * This is the minimal metadata the platform needs to present a provider
+ * in any UI surface. Zero commercial metadata -- just identity + config shape.
+ */
+export interface ProviderOption {
+  /** Unique provider identifier (e.g., "piper-local", "elevenlabs", "openai-tts") */
+  id: string;
+  /** Human-readable display name */
+  name: string;
+  /** Config schema for this provider's settings (API key, model, voice, etc.) */
+  configSchema?: ConfigSchema;
 }
 
 /**

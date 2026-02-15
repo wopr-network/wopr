@@ -133,6 +133,18 @@ export interface MeterEvent {
   metadata?: Record<string, unknown>;
 }
 
+// Capability registry events
+export interface CapabilityProviderRegisteredEvent {
+  capability: string;
+  providerId: string;
+  providerName: string;
+}
+
+export interface CapabilityProviderUnregisteredEvent {
+  capability: string;
+  providerId: string;
+}
+
 /**
  * Event map — all core events and their payloads.
  */
@@ -152,6 +164,8 @@ export interface WOPREventMap {
   "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
   "meter:usage": MeterEvent;
+  "capability:providerRegistered": CapabilityProviderRegisteredEvent;
+  "capability:providerUnregistered": CapabilityProviderUnregisteredEvent;
   "*": WOPREvent;
 }
 

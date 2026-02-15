@@ -901,6 +901,20 @@ export interface WOPRPluginContext {
 
   // Access to plugin directory
   getPluginDir(): string;
+
+  // Capability registry (new)
+  registerCapabilityProvider(
+    capability: import("./plugin-types/manifest.js").AdapterCapability,
+    provider: import("./plugin-types/manifest.js").ProviderOption,
+  ): void;
+  unregisterCapabilityProvider(
+    capability: import("./plugin-types/manifest.js").AdapterCapability,
+    providerId: string,
+  ): void;
+  getCapabilityProviders(
+    capability: import("./plugin-types/manifest.js").AdapterCapability,
+  ): import("./plugin-types/manifest.js").ProviderOption[];
+  hasCapability(capability: import("./plugin-types/manifest.js").AdapterCapability): boolean;
 }
 
 export interface PluginLogger {
