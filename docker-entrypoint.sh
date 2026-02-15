@@ -51,6 +51,26 @@ if [ -d "${WOPR_BUNDLED_PLUGINS:-/app/bundled-plugins}" ] && [ -x /app/scripts/r
   /app/scripts/register-bundled-plugins.sh
 fi
 
-# Run the main command as node user
+# Run the main command as node user with restart-on-idle loop
 export NODE_OPTIONS="--max-old-space-size=4096"
-exec su-exec node "$@"
+
+# Check if this is the daemon command - if so, wrap in restart loop
+if [ "$1" = "node" ] && echo "$@" | grep -q "daemon run"; then
+  # Restart loop for daemon: exit code 75 = restart requested by restart-on-idle
+  while true; do
+    su-exec node "$@"
+    EXIT_CODE=$?
+
+    if [ "$EXIT_CODE" -ne 75 ]; then
+      # Not a restart request - exit with the actual code
+      exit "$EXIT_CODE"
+    fi
+
+    # Exit code 75 = restart-on-idle triggered - relaunch after brief pause
+    echo "Restart-on-idle: relaunching daemon (exit code 75)..."
+    sleep 0.5
+  done
+else
+  # Not daemon command - run normally without restart loop
+  exec su-exec node "$@"
+fi
