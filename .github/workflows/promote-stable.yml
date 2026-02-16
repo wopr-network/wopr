@@ -106,7 +106,7 @@ jobs:
 
       - name: Alert on failure
         if: steps.smoke.outputs.result == 'fail'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const image = '${{ matrix.image }}';
