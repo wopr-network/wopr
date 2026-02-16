@@ -211,10 +211,8 @@ export class ProviderRegistry {
       }
 
       try {
-        // Merge baseUrl into options so provider implementations can use it
-        // to override the SDK's default API endpoint (hosted mode).
-        const options = config.baseUrl ? { ...config.options, baseUrl: config.baseUrl } : config.options;
-        const client = await reg.provider.createClient(cred?.credential || "", options);
+        // Create client with provider options
+        const client = await reg.provider.createClient(cred?.credential || "", config.options);
         return {
           name: providerName,
           provider: reg.provider,

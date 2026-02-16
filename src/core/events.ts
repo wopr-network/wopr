@@ -121,22 +121,6 @@ export interface MemoryFilesChangedEvent {
   changes: MemoryFileChange[];
 }
 
-// Meter events (for hosted provider usage tracking)
-export interface MeterEvent {
-  /** User or organization ID */
-  tenant: string;
-  /** What capability was used (e.g., "voice-transcription", "embeddings", "chat") */
-  capability: string;
-  /** Which adapter handled the call (e.g., "replicate", "modal", "anthropic") */
-  provider: string;
-  /** Charge to tenant in USD cents (upstream cost * multiplier for hosted; 0 for BYOK) */
-  cost: number;
-  /** When the usage occurred (epoch ms) */
-  timestamp: number;
-  /** Additional metadata (model name, token counts, session ID, etc.) */
-  metadata?: Record<string, unknown>;
-}
-
 // ============================================================================
 // Event Map - defines all core events and their payloads
 // ============================================================================
@@ -168,9 +152,6 @@ export interface WOPREventMap {
   // Memory events (for plugin enhancement)
   "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
-
-  // Meter events (for hosted provider usage tracking)
-  "meter:usage": MeterEvent;
 
   // Wildcard - catch all
   "*": WOPREvent;
