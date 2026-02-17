@@ -9,12 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCapabilityDependencyGraph } from "../core/capability-deps.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
-import {
-  emitPluginActivated,
-  emitPluginDeactivated,
-  emitPluginDrained,
-  emitPluginDraining,
-} from "../core/events.js";
+import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
 import { logger } from "../logger.js";
 import type {
   InstallMethod as ManifestInstallMethod,
@@ -276,21 +271,29 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
     await emitPluginDraining(name, drainTimeoutMs);
 
     const drainStart = Date.now();
+    const abortController = new AbortController();
     let timedOut = false;
 
     if (loaded.plugin.onDrain) {
+      let timeoutId: NodeJS.Timeout | undefined;
       try {
         await Promise.race([
-          loaded.plugin.onDrain(),
-          new Promise<void>((_, reject) =>
-            setTimeout(() => {
+          loaded.plugin.onDrain().then(() => {
+            // Success: clear timeout to prevent mutation
+            if (timeoutId) clearTimeout(timeoutId);
+          }),
+          new Promise<void>((_, reject) => {
+            timeoutId = setTimeout(() => {
               timedOut = true;
+              abortController.abort();
               reject(new Error(`Drain timeout after ${drainTimeoutMs}ms`));
-            }, drainTimeoutMs),
-          ),
+            }, drainTimeoutMs);
+          }),
         ]);
       } catch (err) {
         logger.warn(`[plugins] ${name}: drain ${timedOut ? "timed out" : "failed"}: ${err}`);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
     }
 
@@ -303,7 +306,12 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
 
   if (loaded.plugin.onDeactivate) {
     try {
-      await loaded.plugin.onDeactivate();
+      await Promise.race([
+        loaded.plugin.onDeactivate(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`onDeactivate timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
+        ),
+      ]);
     } catch (err) {
       logger.error(`[plugins] ${name}: onDeactivate failed: ${err}`);
     }
@@ -311,7 +319,16 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
 
   // ── Step 3: Shutdown (existing behavior) ──
   if (loaded.plugin.shutdown) {
-    await loaded.plugin.shutdown();
+    try {
+      await Promise.race([
+        loaded.plugin.shutdown(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`shutdown timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
+        ),
+      ]);
+    } catch (err) {
+      logger.error(`[plugins] ${name}: shutdown failed: ${err}`);
+    }
   }
 
   // ── Step 4: Cleanup registrations (existing behavior) ──
@@ -352,7 +369,6 @@ export function isPluginDraining(name: string): boolean {
 }
 
 export interface ProviderSwitchOptions {
-  capabilityType: string;
   fromPlugin: string;
   toPlugin: string;
   drainTimeoutMs?: number;
@@ -371,6 +387,9 @@ export async function switchProvider(
 ): Promise<void> {
   const { fromPlugin, toPlugin, drainTimeoutMs } = options;
 
+  // Store reference to old plugin for rollback
+  const oldPluginRef = loadedPlugins.get(fromPlugin);
+
   // 1. Drain and unload old plugin
   await unloadPlugin(fromPlugin, { drainTimeoutMs });
 
@@ -381,7 +400,24 @@ export async function switchProvider(
     throw new Error(`Plugin ${toPlugin} is not installed`);
   }
 
-  await loadPlugin(target, injectors);
+  try {
+    await loadPlugin(target, injectors);
+  } catch (err) {
+    // Rollback: reload the old plugin if new plugin fails
+    logger.error(`[plugins] Failed to load ${toPlugin}, rolling back to ${fromPlugin}: ${err}`);
+    if (oldPluginRef) {
+      const oldInstalled = installed.find((p) => p.name === fromPlugin);
+      if (oldInstalled) {
+        try {
+          await loadPlugin(oldInstalled, injectors);
+          logger.info(`[plugins] Rollback successful: ${fromPlugin} reloaded`);
+        } catch (rollbackErr) {
+          logger.error(`[plugins] Rollback failed for ${fromPlugin}: ${rollbackErr}`);
+        }
+      }
+    }
+    throw err;
+  }
 }
 
 export async function loadAllPlugins(
