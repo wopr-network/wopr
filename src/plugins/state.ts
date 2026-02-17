@@ -44,6 +44,12 @@ export const configSchemas: Map<string, ConfigSchema> = new Map();
 /** Plugin manifests registry (pluginName -> manifest) */
 export const pluginManifests: Map<string, PluginManifest> = new Map();
 
+/** Runtime state of a loaded plugin */
+export type PluginRuntimeState = "active" | "draining" | "deactivating" | "inactive";
+
+/** Plugin runtime states (pluginName -> state) */
+export const pluginStates: Map<string, PluginRuntimeState> = new Map();
+
 /**
  * Plugin extensions registry - plugins can expose APIs to other plugins.
  * Key format: "pluginName.extensionName" -> extension object

@@ -19,6 +19,7 @@ import {
   getConfigSchemas,
   getLoadedPlugin,
   getPluginExtension,
+  getPluginState,
   getUiComponents,
   getWebUiExtensions,
   installPlugin,
@@ -290,8 +291,13 @@ pluginsRouter.delete("/:name", installRateLimit, async (c) => {
   }
 
   try {
+    // Parse optional drain options from body
+    const body = await c.req.json().catch(() => ({}));
+    const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
+    const force = body?.force === true;
+
     // Hot-unload the plugin first
-    await unloadPlugin(name);
+    await unloadPlugin(name, { drainTimeoutMs, force });
 
     await removePlugin(name);
     return c.json({ removed: true, unloaded: true });
@@ -359,8 +365,13 @@ pluginsRouter.post("/:name/disable", mutateRateLimit, async (c) => {
   }
 
   try {
+    // Parse optional drain options from body
+    const body = await c.req.json().catch(() => ({}));
+    const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
+    const force = body?.force === true;
+
     // Hot-unload the plugin first
-    await unloadPlugin(name);
+    await unloadPlugin(name, { drainTimeoutMs, force });
 
     await disablePlugin(name);
     return c.json({ disabled: true, unloaded: true });
@@ -398,8 +409,13 @@ pluginsRouter.post("/:name/reload", mutateRateLimit, async (c) => {
       return c.json({ error: "Plugin is not enabled" }, 400);
     }
 
+    // Parse optional drain options from body
+    const body = await c.req.json().catch(() => ({}));
+    const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
+    const force = body?.force === true;
+
     // Hot-unload first
-    await unloadPlugin(name);
+    await unloadPlugin(name, { drainTimeoutMs, force });
 
     // Hot-load with fresh code
     const injectors = await createInjectors();
@@ -417,6 +433,13 @@ pluginsRouter.post("/:name/reload", mutateRateLimit, async (c) => {
     logger.error({ msg: "[plugins] Reload failed", plugin: name, error: message });
     return c.json({ error: "Plugin reload failed" }, 400);
   }
+});
+
+// Get plugin runtime state
+pluginsRouter.get("/:name/state", async (c) => {
+  const name = c.req.param("name");
+  const state = getPluginState(name);
+  return c.json({ name, state: state ?? "unloaded" });
 });
 
 // Get plugin config

@@ -76,6 +76,28 @@ export interface PluginErrorEvent {
   context?: string;
 }
 
+export interface PluginDrainingEvent {
+  plugin: string;
+  timeoutMs: number;
+}
+
+export interface PluginDrainedEvent {
+  plugin: string;
+  durationMs: number;
+  timedOut: boolean;
+}
+
+export interface PluginActivatedEvent {
+  plugin: string;
+  version: string;
+}
+
+export interface PluginDeactivatedEvent {
+  plugin: string;
+  version: string;
+  drained: boolean;
+}
+
 // Config events
 export interface ConfigChangeEvent {
   key: string;
@@ -143,6 +165,10 @@ export interface WOPREventMap {
   "plugin:beforeInit": PluginInitEvent;
   "plugin:afterInit": PluginInitEvent;
   "plugin:error": PluginErrorEvent;
+  "plugin:draining": PluginDrainingEvent;
+  "plugin:drained": PluginDrainedEvent;
+  "plugin:activated": PluginActivatedEvent;
+  "plugin:deactivated": PluginDeactivatedEvent;
   "config:change": ConfigChangeEvent;
   "system:shutdown": SystemShutdownEvent;
   "memory:search": MemorySearchEvent;

@@ -73,6 +73,28 @@ export interface PluginErrorEvent {
   context?: string;
 }
 
+export interface PluginDrainingEvent {
+  plugin: string;
+  timeoutMs: number;
+}
+
+export interface PluginDrainedEvent {
+  plugin: string;
+  durationMs: number;
+  timedOut: boolean;
+}
+
+export interface PluginActivatedEvent {
+  plugin: string;
+  version: string;
+}
+
+export interface PluginDeactivatedEvent {
+  plugin: string;
+  version: string;
+  drained: boolean;
+}
+
 // Config events
 export interface ConfigChangeEvent {
   key: string;
@@ -141,6 +163,10 @@ export interface WOPREventMap {
   "plugin:beforeInit": PluginInitEvent;
   "plugin:afterInit": PluginInitEvent;
   "plugin:error": PluginErrorEvent;
+  "plugin:draining": PluginDrainingEvent;
+  "plugin:drained": PluginDrainedEvent;
+  "plugin:activated": PluginActivatedEvent;
+  "plugin:deactivated": PluginDeactivatedEvent;
 
   // Config changes
   "config:change": ConfigChangeEvent;
@@ -519,6 +545,22 @@ export async function emitConfigChange(
 
 export async function emitSystemShutdown(reason: string, code?: number): Promise<void> {
   await eventBus.emit("system:shutdown", { reason, code }, "core");
+}
+
+export async function emitPluginDraining(plugin: string, timeoutMs: number): Promise<void> {
+  await eventBus.emit("plugin:draining", { plugin, timeoutMs }, "core");
+}
+
+export async function emitPluginDrained(plugin: string, durationMs: number, timedOut: boolean): Promise<void> {
+  await eventBus.emit("plugin:drained", { plugin, durationMs, timedOut }, "core");
+}
+
+export async function emitPluginActivated(plugin: string, version: string): Promise<void> {
+  await eventBus.emit("plugin:activated", { plugin, version }, "core");
+}
+
+export async function emitPluginDeactivated(plugin: string, version: string, drained: boolean): Promise<void> {
+  await eventBus.emit("plugin:deactivated", { plugin, version, drained }, "core");
 }
 
 // ============================================================================
