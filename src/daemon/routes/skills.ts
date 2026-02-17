@@ -192,6 +192,13 @@ skillsRouter.post("/registries", async (c) => {
     return c.json({ error: "name and url are required" }, 400);
   }
 
+  // Validate URL format
+  try {
+    new URL(url);
+  } catch {
+    return c.json({ error: "Invalid URL format" }, 400);
+  }
+
   await addRegistry(name, url);
   return c.json({ added: true, name, url }, 201);
 });
