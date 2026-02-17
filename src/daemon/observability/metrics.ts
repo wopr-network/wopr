@@ -88,7 +88,7 @@ export class MetricsStore {
     instanceId: string | null = null,
     tags: Record<string, string> = {},
   ): Promise<void> {
-    await this.storage.raw(
+    await this.storage.run(
       "INSERT INTO metrics_rows (id, timestamp, metric_name, metric_value, instance_id, tags) VALUES (?, ?, ?, ?, ?, ?)",
       [randomUUID(), Date.now(), name, value, instanceId, JSON.stringify(tags)],
     );

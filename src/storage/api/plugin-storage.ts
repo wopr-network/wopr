@@ -229,9 +229,14 @@ export interface StorageApi {
   getVersion(namespace: string): Promise<number>;
 
   /**
-   * Execute raw SQL across the database
+   * Execute raw SQL across the database (for SELECT queries)
    */
   raw(sql: string, params?: unknown[]): Promise<unknown[]>;
+
+  /**
+   * Execute a statement that doesn't return rows (INSERT, UPDATE, DELETE)
+   */
+  run(sql: string, params?: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }>;
 
   /**
    * Run cross-table transaction
