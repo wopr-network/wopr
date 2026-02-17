@@ -4,8 +4,11 @@
  * Tests SecurityContext class, factory functions, context isolation,
  * event recording, and context storage.
  */
+import { randomBytes } from "node:crypto";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdirSync, existsSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMockFs } from "../mocks/index.js";
 
 // Mock the logger to suppress output during tests
 vi.mock("../../src/logger.js", () => ({
@@ -17,21 +20,11 @@ vi.mock("../../src/logger.js", () => ({
   },
 }));
 
-// Set up filesystem mock before importing modules
-const mockFs = createMockFs();
-
-vi.mock("node:fs", async (importOriginal) => {
-  const actual = (await importOriginal()) as any;
-  return {
-    ...actual,
-    existsSync: (p: string) => mockFs.existsSync(p),
-    readFileSync: (p: string, enc?: string) => mockFs.readFileSync(p, enc),
-    writeFileSync: (p: string, content: string) => mockFs.writeFileSync(p, content),
-  };
-});
+// Import storage functions
+const { getStorage, resetStorage } = await import("../../src/storage/index.js");
 
 // Import after mocks are set up
-const { initSecurity } = await import("../../src/security/policy.js");
+const { initSecurity, saveSecurityConfig } = await import("../../src/security/policy.js");
 const {
   SecurityContext,
   createSecurityContext,
@@ -59,12 +52,14 @@ import type { SecurityConfig } from "../../src/security/types.js";
 // Helpers
 // ============================================================================
 
-function setSecurityConfig(config: Partial<SecurityConfig>): void {
+let testDir: string;
+
+async function setSecurityConfig(config: Partial<SecurityConfig>): Promise<void> {
   const full = {
     ...DEFAULT_SECURITY_CONFIG,
     ...config,
   };
-  mockFs.set("/mock/wopr/security.json", JSON.stringify(full));
+  await saveSecurityConfig(full);
 }
 
 // ============================================================================
@@ -72,12 +67,18 @@ function setSecurityConfig(config: Partial<SecurityConfig>): void {
 // ============================================================================
 
 describe("Security Context Module", () => {
-  beforeEach(() => {
-    mockFs.clear();
-    initSecurity("/mock/wopr");
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `wopr-test-${randomBytes(8).toString("hex")}`);
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
+    resetStorage();
+    getStorage(join(testDir, "test.sqlite"));
+    await initSecurity(testDir);
   });
 
   afterEach(() => {
+    resetStorage();
     vi.restoreAllMocks();
   });
 
@@ -195,8 +196,8 @@ describe("Security Context Module", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("should deny untrusted below minimum trust level", () => {
-      setSecurityConfig({
+    it("should deny untrusted below minimum trust level", async () => {
+      await setSecurityConfig({
         defaults: {
           ...DEFAULT_SECURITY_CONFIG.defaults,
           minTrustLevel: "trusted",
@@ -219,8 +220,8 @@ describe("Security Context Module", () => {
       expect(events[0].type).toBe("access_granted");
     });
 
-    it("should record denied access events", () => {
-      setSecurityConfig({
+    it("should record denied access events", async () => {
+      await setSecurityConfig({
         defaults: {
           ...DEFAULT_SECURITY_CONFIG.defaults,
           minTrustLevel: "trusted",
@@ -283,8 +284,8 @@ describe("Security Context Module", () => {
       expect(filtered).toEqual(tools);
     });
 
-    it("should filter based on policy in enforce mode", () => {
-      setSecurityConfig({
+    it("should filter based on policy in enforce mode", async () => {
+      await setSecurityConfig({
         enforcement: "enforce",
         trustLevels: {
           untrusted: {
@@ -342,8 +343,8 @@ describe("Security Context Module", () => {
   // Gateway / Forward
   // ==========================================================================
   describe("isGateway / canForward / getForwardRules", () => {
-    it("should detect gateway context", () => {
-      setSecurityConfig({
+    it("should detect gateway context", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["gw-session"],
           forwardRules: {
@@ -362,8 +363,8 @@ describe("Security Context Module", () => {
       expect(ctx.getForwardRules()!.allowForwardTo).toContain("main");
     });
 
-    it("should report canForward when gateway with cross.inject", () => {
-      setSecurityConfig({
+    it("should report canForward when gateway with cross.inject", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["gw-session"],
         },
