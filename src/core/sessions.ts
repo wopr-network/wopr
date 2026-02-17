@@ -5,20 +5,6 @@ import { existsSync, mkdirSync } from "node:fs";
 import { logger } from "../logger.js";
 import { SESSIONS_DIR } from "../paths.js";
 import {
-  initSessionStorage,
-  getSessionsAsync,
-  saveSessionIdAsync,
-  deleteSessionIdAsync,
-  getSessionCreatedAsync,
-  getSessionContextAsync,
-  setSessionContextAsync,
-  getSessionProviderAsync,
-  setSessionProviderAsync,
-  listSessionsAsync,
-  appendMessageAsync,
-  readConversationLogAsync,
-} from "./session-repository.js";
-import {
   checkSessionAccess,
   clearContext,
   createInjectionSource,
@@ -38,6 +24,19 @@ import {
   emitSessionResponseChunk,
 } from "./events.js";
 import { providerRegistry } from "./providers.js";
+import {
+  appendMessageAsync,
+  deleteSessionIdAsync,
+  getSessionContextAsync,
+  getSessionCreatedAsync,
+  getSessionProviderAsync,
+  getSessionsAsync,
+  listSessionsAsync,
+  readConversationLogAsync,
+  saveSessionIdAsync,
+  setSessionContextAsync,
+  setSessionProviderAsync,
+} from "./session-repository.js";
 
 // Re-export A2A tool registration for plugins
 export {

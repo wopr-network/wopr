@@ -1,13 +1,13 @@
-import { createReadStream, existsSync, renameSync, readFileSync, readdirSync } from "node:fs";
-import { createInterface } from "node:readline";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { createReadStream, existsSync, readdirSync, readFileSync, renameSync } from "node:fs";
+import { join } from "node:path";
+import { createInterface } from "node:readline";
 import { logger } from "../logger.js";
 import { SESSIONS_DIR, SESSIONS_FILE } from "../paths.js";
+import type { Repository } from "../storage/api/plugin-storage.js";
 import { getStorage } from "../storage/index.js";
 import { initSessionStorage } from "./session-repository.js";
-import type { SessionRecord, SessionMessageRecord } from "./session-schema.js";
-import type { Repository } from "../storage/api/plugin-storage.js";
+import type { SessionMessageRecord, SessionRecord } from "./session-schema.js";
 
 /** Main migration entry point — idempotent */
 export async function migrateSessionsToSQL(): Promise<void> {
@@ -81,7 +81,7 @@ async function migrateSession(
     try {
       const raw = readFileSync(createdPath, "utf-8").trim();
       createdAt = parseInt(raw, 10);
-      if (isNaN(createdAt)) createdAt = Date.now();
+      if (Number.isNaN(createdAt)) createdAt = Date.now();
     } catch {
       // Fall back to now
     }
@@ -193,7 +193,7 @@ async function streamJsonlToMessages(
 
 function backupFile(filePath: string): void {
   if (existsSync(filePath)) {
-    renameSync(filePath, filePath + ".backup");
+    renameSync(filePath, `${filePath}.backup`);
     logger.debug(`[migration] Backed up ${filePath}`);
   }
 }

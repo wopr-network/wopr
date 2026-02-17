@@ -1,14 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { logger } from "../logger.js";
-import { getStorage } from "../storage/index.js";
 import type { Repository } from "../storage/api/plugin-storage.js";
+import { getStorage } from "../storage/index.js";
 import type { ProviderConfig } from "../types/provider.js";
 import type { ConversationEntry } from "../types.js";
-import {
-  sessionsPluginSchema,
-  type SessionMessageRecord,
-  type SessionRecord,
-} from "./session-schema.js";
+import { type SessionMessageRecord, type SessionRecord, sessionsPluginSchema } from "./session-schema.js";
 
 let initialized = false;
 
@@ -155,12 +151,14 @@ export async function setSessionProviderAsync(name: string, provider: ProviderCo
 }
 
 /** List all sessions with metadata */
-export async function listSessionsAsync(): Promise<Array<{
-  name: string;
-  id: string;
-  context?: string;
-  created: number;
-}>> {
+export async function listSessionsAsync(): Promise<
+  Array<{
+    name: string;
+    id: string;
+    context?: string;
+    created: number;
+  }>
+> {
   await initSessionStorage();
   const rows = await sessionsRepo().findMany({ status: "active" });
   return rows.map((r) => ({
@@ -176,19 +174,15 @@ export async function listSessionsAsync(): Promise<Array<{
 /** Get next sequence number for a session */
 async function getNextSequence(sessionId: string): Promise<number> {
   const repo = messagesRepo();
-  const rows = await repo.raw(
-    `SELECT MAX(sequence) as maxSeq FROM sessions_session_messages WHERE "sessionId" = ?`,
-    [sessionId]
-  );
+  const rows = await repo.raw(`SELECT MAX(sequence) as maxSeq FROM sessions_session_messages WHERE "sessionId" = ?`, [
+    sessionId,
+  ]);
   const row = rows[0] as { maxSeq: number | null } | undefined;
   return (row?.maxSeq ?? -1) + 1;
 }
 
 /** Append a conversation entry (replaces appendToConversationLog) */
-export async function appendMessageAsync(
-  sessionName: string,
-  entry: ConversationEntry,
-): Promise<void> {
+export async function appendMessageAsync(sessionName: string, entry: ConversationEntry): Promise<void> {
   await initSessionStorage();
   // Look up session id from name
   const repo = sessionsRepo();
@@ -233,7 +227,7 @@ async function appendMessageToSession(sessionId: string, entry: ConversationEntr
     sessionId,
     role,
     content: entry.content,
-    source: entry.from,   // Preserve original "from" value as source
+    source: entry.from, // Preserve original "from" value as source
     senderId: entry.senderId,
     sequence: seq,
     channelId: entry.channel?.id,
@@ -245,10 +239,7 @@ async function appendMessageToSession(sessionId: string, entry: ConversationEntr
 }
 
 /** Read conversation log (replaces readConversationLog) */
-export async function readConversationLogAsync(
-  sessionName: string,
-  limit?: number,
-): Promise<ConversationEntry[]> {
+export async function readConversationLogAsync(sessionName: string, limit?: number): Promise<ConversationEntry[]> {
   await initSessionStorage();
   const repo = sessionsRepo();
   const session = await repo.findFirst({ name: sessionName } as any);
@@ -259,17 +250,10 @@ export async function readConversationLogAsync(
 
   if (limit && limit > 0) {
     // Get last N messages by sequence descending, then reverse
-    rows = await msgRepo.query()
-      .where("sessionId", session.id)
-      .orderBy("sequence", "desc")
-      .limit(limit)
-      .execute();
+    rows = await msgRepo.query().where("sessionId", session.id).orderBy("sequence", "desc").limit(limit).execute();
     rows.reverse();
   } else {
-    rows = await msgRepo.query()
-      .where("sessionId", session.id)
-      .orderBy("sequence", "asc")
-      .execute();
+    rows = await msgRepo.query().where("sessionId", session.id).orderBy("sequence", "asc").execute();
   }
 
   // Map back to ConversationEntry format for backwards compat
@@ -279,9 +263,7 @@ export async function readConversationLogAsync(
     senderId: r.senderId,
     content: r.content,
     type: r.entryType as ConversationEntry["type"],
-    channel: r.channelId
-      ? { id: r.channelId, type: r.channelType || "", name: r.channelName }
-      : undefined,
+    channel: r.channelId ? { id: r.channelId, type: r.channelType || "", name: r.channelName } : undefined,
   }));
 }
 

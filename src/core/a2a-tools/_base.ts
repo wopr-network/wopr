@@ -111,13 +111,15 @@ export let readConversationLog:
   | ((
       session: string,
       limit: number,
-    ) => Promise<Array<{
-      ts: number;
-      from: string;
-      type: string;
-      content: string;
-      channel?: { id: string; type: string; name?: string };
-    }>>)
+    ) => Promise<
+      Array<{
+        ts: number;
+        from: string;
+        type: string;
+        content: string;
+        channel?: { id: string; type: string; name?: string };
+      }>
+    >)
   | null = null;
 export let setSessionContext: ((name: string, purpose: string) => Promise<void>) | null = null;
 
