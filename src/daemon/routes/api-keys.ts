@@ -73,9 +73,9 @@ apiKeysRouter.post("/", async (c) => {
   }
 
   let rawKey: string;
-  let keyInfo: ReturnType<typeof generateApiKey>["keyInfo"];
+  let keyInfo: Awaited<ReturnType<typeof generateApiKey>>["keyInfo"];
   try {
-    ({ rawKey, keyInfo } = generateApiKey(user.id, name.trim(), scope as ApiKeyScope, expiresAt));
+    ({ rawKey, keyInfo } = await generateApiKey(user.id, name.trim(), scope as ApiKeyScope, expiresAt));
   } catch (err) {
     if (err instanceof KeyLimitError) {
       return c.json({ error: err.message }, 429);
@@ -95,20 +95,20 @@ apiKeysRouter.post("/", async (c) => {
 /**
  * GET /api/keys — List the authenticated user's API keys (masked).
  */
-apiKeysRouter.get("/", (c) => {
+apiKeysRouter.get("/", async (c) => {
   const user = c.get("user");
   if (!user?.id) {
     return c.json({ error: "User context required" }, 403);
   }
 
-  const keys = listApiKeys(user.id);
+  const keys = await listApiKeys(user.id);
   return c.json({ keys });
 });
 
 /**
  * DELETE /api/keys/:id — Revoke an API key by ID.
  */
-apiKeysRouter.delete("/:id", (c) => {
+apiKeysRouter.delete("/:id", async (c) => {
   const user = c.get("user");
   if (!user?.id) {
     return c.json({ error: "User context required" }, 403);
@@ -124,7 +124,7 @@ apiKeysRouter.delete("/:id", (c) => {
     return c.json({ error: "Key ID is required" }, 400);
   }
 
-  const deleted = revokeApiKey(keyId, user.id);
+  const deleted = await revokeApiKey(keyId, user.id);
   if (!deleted) {
     return c.json({ error: "API key not found" }, 404);
   }

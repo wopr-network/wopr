@@ -122,7 +122,7 @@ authRouter.post("/callback", async (c) => {
     // Delete AFTER successful exchange so retries work on transient failures
     pkceStore.delete(state);
 
-    saveOAuthTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresIn);
+    await saveOAuthTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresIn);
 
     return c.json({
       success: true,
@@ -143,12 +143,12 @@ authRouter.post("/api-key", async (c) => {
     return c.json({ error: "API key is required" }, 400);
   }
 
-  saveApiKey(apiKey);
+  await saveApiKey(apiKey);
   return c.json({ success: true });
 });
 
 // Logout
-authRouter.post("/logout", (c) => {
-  clearAuth();
+authRouter.post("/logout", async (c) => {
+  await clearAuth();
   return c.json({ success: true });
 });

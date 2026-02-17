@@ -11,9 +11,10 @@ import { logger } from "./logger.js";
  */
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { AuthStore } from "./auth/auth-store.js";
 import { providerRegistry } from "./core/providers.js";
 import { AUTH_FILE } from "./paths.js";
 
@@ -41,6 +42,24 @@ const ENCRYPTION_SALT_LEN = 32;
 const ENCRYPTION_KEY_LEN = 32;
 // Marker prefix to distinguish encrypted data from plaintext JSON
 const ENCRYPTED_PREFIX = "wopr:enc:";
+
+// Auth store instance
+let authStore: AuthStore | null = null;
+
+/**
+ * Initialize auth storage
+ */
+export async function initAuthStorage(): Promise<void> {
+  authStore = new AuthStore();
+  await authStore.init();
+}
+
+/**
+ * Get the auth store instance (for daemon use)
+ */
+export function getAuthStore(): AuthStore | null {
+  return authStore;
+}
 
 /**
  * Derive an AES-256 key from a passphrase using scrypt.
@@ -298,9 +317,35 @@ export function loadAuth(): AuthState | null {
   const envAuth = loadAuthFromEnv();
   if (envAuth) return envAuth;
 
-  // 2. Check WOPR's own auth file (supports encrypted storage)
+  // 2. Check WOPR's own auth storage (SQL or fallback to auth.json)
   let woprAuth: AuthState | null = null;
-  if (existsSync(AUTH_FILE)) {
+
+  // Try storage first (if initialized)
+  if (authStore?.configCache.has("wopr-auth-state")) {
+    try {
+      const raw = authStore.configCache.get("wopr-auth-state") ?? "";
+      const credKey = process.env.WOPR_CREDENTIAL_KEY;
+
+      if (isEncryptedData(raw)) {
+        if (!credKey) {
+          logger.error("auth state is encrypted but WOPR_CREDENTIAL_KEY is not set");
+        } else {
+          const decrypted = decryptData(raw, credKey);
+          if (decrypted) {
+            woprAuth = JSON.parse(decrypted);
+          } else {
+            logger.error("Failed to decrypt auth state — wrong WOPR_CREDENTIAL_KEY?");
+          }
+        }
+      } else {
+        woprAuth = JSON.parse(raw);
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+  // Fallback to auth.json if storage not initialized or not migrated
+  else if (existsSync(AUTH_FILE)) {
     try {
       const raw = readFileSync(AUTH_FILE, "utf-8");
       const credKey = process.env.WOPR_CREDENTIAL_KEY;
@@ -375,21 +420,32 @@ export async function loadAuthWithRegistry(): Promise<AuthState | null> {
   return auth;
 }
 
-// Save auth state to disk (encrypts when WOPR_CREDENTIAL_KEY is set)
-export function saveAuth(auth: AuthState): void {
+// Save auth state (encrypts when WOPR_CREDENTIAL_KEY is set)
+export async function saveAuth(auth: AuthState): Promise<void> {
   const json = JSON.stringify(auth, null, 2);
   const credKey = process.env.WOPR_CREDENTIAL_KEY;
-  if (credKey) {
-    writeFileSync(AUTH_FILE, encryptData(json, credKey));
+  const value = credKey ? encryptData(json, credKey) : json;
+  const encryptionMethod = credKey ? "aes-256-gcm" : undefined;
+
+  if (authStore) {
+    await authStore.setCredential("wopr-auth-state", "wopr", value, encryptionMethod);
   } else {
-    writeFileSync(AUTH_FILE, json);
+    // Fallback to file (for backward compat during migration)
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(AUTH_FILE, value);
   }
 }
 
 // Clear auth state
-export function clearAuth(): void {
-  if (existsSync(AUTH_FILE)) {
-    writeFileSync(AUTH_FILE, "{}");
+export async function clearAuth(): Promise<void> {
+  if (authStore) {
+    await authStore.removeCredential("wopr-auth-state");
+  } else {
+    // Fallback to file
+    const { writeFileSync } = await import("node:fs");
+    if (existsSync(AUTH_FILE)) {
+      writeFileSync(AUTH_FILE, "{}");
+    }
   }
 }
 
@@ -452,7 +508,12 @@ export function getBetaHeaders(): string {
 }
 
 // Save OAuth tokens after successful auth flow
-export function saveOAuthTokens(accessToken: string, refreshToken: string, expiresIn: number, email?: string): void {
+export async function saveOAuthTokens(
+  accessToken: string,
+  refreshToken: string,
+  expiresIn: number,
+  email?: string,
+): Promise<void> {
   const auth: AuthState = {
     type: "oauth",
     accessToken,
@@ -461,17 +522,17 @@ export function saveOAuthTokens(accessToken: string, refreshToken: string, expir
     email,
     updatedAt: Date.now(),
   };
-  saveAuth(auth);
+  await saveAuth(auth);
 }
 
 // Save API key
-export function saveApiKey(apiKey: string): void {
+export async function saveApiKey(apiKey: string): Promise<void> {
   const auth: AuthState = {
     type: "api_key",
     apiKey,
     updatedAt: Date.now(),
   };
-  saveAuth(auth);
+  await saveAuth(auth);
 }
 
 /**

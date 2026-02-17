@@ -197,6 +197,32 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     startupWarnings.push(msg);
   }
 
+  // Initialize auth storage and migrate from auth.json/auth.sqlite (WOP-546)
+  daemonLog("Initializing auth storage...");
+  const { initAuthStorage, getAuthStore } = await import("../auth.js");
+  const { migrateAuth } = await import("../auth/auth-migrate.js");
+  const { setAuthStore } = await import("./api-keys.js");
+  try {
+    await initAuthStorage();
+    daemonLog("Auth storage initialized");
+
+    // Get the auth store instance and wire it to api-keys module
+    const authStore = getAuthStore();
+    if (authStore) {
+      setAuthStore(authStore);
+
+      // Run migrations (idempotent)
+      await migrateAuth(authStore);
+      daemonLog("Auth migration complete");
+    } else {
+      throw new Error("Auth store not initialized");
+    }
+  } catch (err) {
+    const msg = `Auth initialization failed: ${err}`;
+    daemonLog(`Warning: ${msg}`);
+    startupWarnings.push(msg);
+  }
+
   // Initialize cron storage and migrate from JSON
   daemonLog("Initializing cron storage...");
   await initCronStorage();

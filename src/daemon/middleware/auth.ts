@@ -42,8 +42,8 @@ function getDaemonToken(): string {
  * Validate a wopr_ API key token and set user/role context on the Hono context.
  * Returns true if the key was valid and context was set, false otherwise.
  */
-function authenticateApiKey(c: Parameters<MiddlewareHandler>[0], token: string): boolean {
-  const keyUser = validateApiKey(token);
+async function authenticateApiKey(c: Parameters<MiddlewareHandler>[0], token: string): Promise<boolean> {
+  const keyUser = await validateApiKey(token);
   if (!keyUser) return false;
   c.set("user", { id: keyUser.id });
   c.set("authMethod", "api_key");
@@ -86,7 +86,7 @@ export function bearerAuth(): MiddlewareHandler {
     // Accept wopr_ prefixed API keys (WOP-209)
     const token = authHeader.slice(7);
     if (token.startsWith("wopr_")) {
-      if (authenticateApiKey(c, token)) return next();
+      if (await authenticateApiKey(c, token)) return next();
       return c.json({ error: "Invalid API key" }, 401);
     }
 
@@ -123,7 +123,7 @@ export function requireAuth(): MiddlewareHandler {
 
     // Check wopr_ API keys (WOP-209)
     if (token.startsWith("wopr_")) {
-      if (authenticateApiKey(c, token)) return next();
+      if (await authenticateApiKey(c, token)) return next();
       return c.json({ error: "Invalid API key" }, 401);
     }
 
