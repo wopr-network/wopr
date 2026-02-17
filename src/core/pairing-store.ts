@@ -3,16 +3,13 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Repository } from "../storage/api/plugin-storage.js";
-import type {
-  PairingCodeRecord,
-  PairingIdentityRecord,
-} from "./pairing-schema.js";
-import { pairingPluginSchema } from "./pairing-schema.js";
-import type { PairingCode, PlatformLink, WoprIdentity } from "./pairing.js";
 import { logger } from "../logger.js";
 import { WOPR_HOME } from "../paths.js";
+import type { Repository } from "../storage/api/plugin-storage.js";
 import { getStorage } from "../storage/index.js";
+import type { PairingCode, PlatformLink, WoprIdentity } from "./pairing.js";
+import type { PairingCodeRecord, PairingIdentityRecord } from "./pairing-schema.js";
+import { pairingPluginSchema } from "./pairing-schema.js";
 
 let identitiesRepo: Repository<PairingIdentityRecord> | null = null;
 let codesRepo: Repository<PairingCodeRecord> | null = null;

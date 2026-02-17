@@ -393,7 +393,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const cronTick = async () => {
     const now = new Date();
     const nowTs = now.getTime();
-    let crons = await getCrons();
+    const crons = await getCrons();
     const toRemove: string[] = [];
 
     for (const cron of crons) {

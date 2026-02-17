@@ -36,11 +36,7 @@ export const pairingPluginSchema: PluginSchema = {
     identities: {
       schema: pairingIdentitySchema,
       primaryKey: "id",
-      indexes: [
-        { fields: ["name"], unique: true },
-        { fields: ["trustLevel"] },
-        { fields: ["createdAt"] },
-      ],
+      indexes: [{ fields: ["name"], unique: true }, { fields: ["trustLevel"] }, { fields: ["createdAt"] }],
     },
     codes: {
       schema: pairingCodeSchema,
