@@ -6,6 +6,7 @@
  */
 
 import { join } from "node:path";
+import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
 import {
   getChannelProvider as getChannelProviderCore,
@@ -317,6 +318,10 @@ export function createPluginContext(
 
     hasCapability(capability: AdapterCapability): boolean {
       return getCapabilityRegistry().hasProvider(capability);
+    },
+
+    registerHealthProbe(capability: string, providerId: string, probe: () => Promise<boolean>): void {
+      getCapabilityHealthProber().registerProbe(capability, providerId, probe);
     },
 
     // Storage API - plugin-extensible database storage
