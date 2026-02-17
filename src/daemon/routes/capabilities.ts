@@ -12,8 +12,8 @@
 import { Hono } from "hono";
 import { rateLimiter } from "hono-rate-limiter";
 import { z } from "zod";
-import { config as centralConfig } from "../../core/config.js";
 import { getCapabilityCatalogEntry, listCapabilityCatalog } from "../../core/capability-catalog.js";
+import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { getSessions, inject } from "../../core/sessions.js";
 import { logger } from "../../logger.js";
@@ -146,10 +146,7 @@ capabilitiesRouter.post("/activate", mutateRateLimit, async (c) => {
   }
 
   // Resolve the bot's platform token for WOPR-hosted config
-  const platformToken =
-    process.env.WOPR_PLATFORM_TOKEN ||
-    (centralConfig.getValue("platform.token") as string) ||
-    "";
+  const platformToken = process.env.WOPR_PLATFORM_TOKEN || (centralConfig.getValue("platform.token") as string) || "";
 
   const activatedPlugins: Array<{ name: string; version: string }> = [];
   const errors: Array<{ plugin: string; error: string }> = [];
@@ -166,7 +163,10 @@ capabilitiesRouter.post("/activate", mutateRateLimit, async (c) => {
 
       // Enable if not enabled
       if (!plugin.enabled) {
-        await enablePlugin(plugin.name);
+        const enabled = await enablePlugin(plugin.name);
+        if (enabled === false) {
+          throw new Error(`Plugin ${plugin.name} could not be enabled — plugin record not found`);
+        }
       }
 
       // Set WOPR-hosted config (auto-configure to api.wopr.bot)
@@ -203,8 +203,12 @@ capabilitiesRouter.post("/activate", mutateRateLimit, async (c) => {
   // Run provider health check after all plugins loaded
   try {
     await providerRegistry.checkHealth();
-  } catch {
+  } catch (err) {
     // Non-fatal — health check failure shouldn't block activation
+    logger.warn({
+      msg: "[capabilities] Provider health check failed after activation",
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   if (errors.length > 0 && activatedPlugins.length === 0) {
@@ -256,10 +260,36 @@ capabilitiesRouter.post("/deactivate", mutateRateLimit, async (c) => {
     }
   }
 
+  // Build updated capabilities list for UI to refresh state (mirrors activate response)
+  const updatedInstalled = await listPlugins();
+  const updatedInstalledNames = new Set(updatedInstalled.map((p: InstalledPlugin) => p.name));
+  const catalog = listCapabilityCatalog();
+  const capabilities = catalog.map((cap) => {
+    const pluginStatuses = cap.plugins.map((ref) => {
+      const p = updatedInstalled.find((ip: InstalledPlugin) => ip.name === ref.name);
+      return {
+        name: ref.name,
+        installed: updatedInstalledNames.has(ref.name),
+        enabled: p?.enabled ?? false,
+        loaded: getLoadedPlugin(ref.name) !== undefined,
+      };
+    });
+    const active = pluginStatuses.every((s) => s.installed && s.enabled && s.loaded);
+    return {
+      id: cap.id,
+      label: cap.label,
+      description: cap.description,
+      icon: cap.icon,
+      active,
+      plugins: pluginStatuses,
+    };
+  });
+
   return c.json({
     deactivated: true,
     capability: entry.id,
     plugins: deactivated,
     errors: errors.length > 0 ? errors : undefined,
+    capabilities,
   });
 });

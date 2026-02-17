@@ -107,15 +107,24 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
 ];
 
 /**
+ * Return a deep-frozen copy of a catalog entry to prevent external mutation
+ * of the catalog's internal state.
+ */
+function frozenCopy(entry: CapabilityCatalogEntry): Readonly<CapabilityCatalogEntry> {
+  return Object.freeze(structuredClone(entry));
+}
+
+/**
  * Look up a capability by ID.
  */
-export function getCapabilityCatalogEntry(id: string): CapabilityCatalogEntry | undefined {
-  return CAPABILITY_CATALOG.find((c) => c.id === id);
+export function getCapabilityCatalogEntry(id: string): Readonly<CapabilityCatalogEntry> | undefined {
+  const entry = CAPABILITY_CATALOG.find((c) => c.id === id);
+  return entry ? frozenCopy(entry) : undefined;
 }
 
 /**
  * List all available capabilities.
  */
-export function listCapabilityCatalog(): CapabilityCatalogEntry[] {
-  return CAPABILITY_CATALOG;
+export function listCapabilityCatalog(): ReadonlyArray<Readonly<CapabilityCatalogEntry>> {
+  return CAPABILITY_CATALOG.map(frozenCopy);
 }
