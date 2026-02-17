@@ -5,33 +5,23 @@ import { logger } from "../logger.js";
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { REGISTRIES_FILE, WOPR_HOME } from "../paths.js";
+import { WOPR_HOME } from "../paths.js";
 import type { Registry, SkillPointer } from "../types.js";
+import { addRegistrySQL, getRegistriesFromSQL, removeRegistrySQL } from "./registries-repository.js";
 import { parseSkillFrontmatter } from "./skills.js";
 
-export function getRegistries(): Registry[] {
-  if (!existsSync(REGISTRIES_FILE)) return [];
-  return JSON.parse(readFileSync(REGISTRIES_FILE, "utf-8"));
+export async function getRegistries(): Promise<Registry[]> {
+  return await getRegistriesFromSQL();
 }
 
-export function saveRegistries(registries: Registry[]): void {
-  writeFileSync(REGISTRIES_FILE, JSON.stringify(registries, null, 2));
+export async function addRegistry(name: string, url: string): Promise<void> {
+  await addRegistrySQL(name, url);
 }
 
-export function addRegistry(name: string, url: string): void {
-  const registries = getRegistries().filter((r) => r.name !== name);
-  registries.push({ name, url });
-  saveRegistries(registries);
-}
-
-export function removeRegistry(name: string): boolean {
-  const registries = getRegistries();
-  const filtered = registries.filter((r) => r.name !== name);
-  if (filtered.length === registries.length) return false;
-  saveRegistries(filtered);
-  return true;
+export async function removeRegistry(name: string): Promise<boolean> {
+  return await removeRegistrySQL(name);
 }
 
 export async function fetchRegistryIndex(url: string, searchQuery?: string): Promise<SkillPointer[]> {
@@ -179,7 +169,7 @@ async function fetchGitHubSkills(
 }
 
 export async function searchAllRegistries(query: string): Promise<{ registry: string; skill: SkillPointer }[]> {
-  const registries = getRegistries();
+  const registries = await getRegistries();
   const results: { registry: string; skill: SkillPointer }[] = [];
 
   for (const reg of registries) {
