@@ -143,6 +143,16 @@ export interface MemoryFilesChangedEvent {
   changes: MemoryFileChange[];
 }
 
+// Capability health events
+export interface CapabilityProviderHealthChangeEvent {
+  capability: string;
+  providerId: string;
+  providerName: string;
+  previousHealthy: boolean;
+  currentHealthy: boolean;
+  error?: string;
+}
+
 // ============================================================================
 // Event Map - defines all core events and their payloads
 // ============================================================================
@@ -178,6 +188,9 @@ export interface WOPREventMap {
   // Memory events (for plugin enhancement)
   "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
+
+  // Capability health events
+  "capability:providerHealthChange": CapabilityProviderHealthChangeEvent;
 
   // Wildcard - catch all
   "*": WOPREvent;

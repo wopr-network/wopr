@@ -16,8 +16,9 @@ import { logger } from "hono/logger";
 import { migrateBrowserProfilesToSql } from "../core/browser-profile-migrate.js";
 import { initBrowserProfileStorage } from "../core/browser-profile-repository.js";
 import { setCanvasPublish } from "../core/canvas.js";
-import { config as centralConfig } from "../core/config.js";
 // Core imports for daemon functionality
+import { getCapabilityHealthProber } from "../core/capability-health.js";
+import { config as centralConfig } from "../core/config.js";
 import { initPairing } from "../core/pairing.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
@@ -34,6 +35,7 @@ import { restartOnIdleManager } from "./restart-on-idle.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { canvasRouter } from "./routes/canvas.js";
+import { capabilityHealthRouter } from "./routes/capability-health.js";
 import { configRouter } from "./routes/config.js";
 import { createHealthzRouter } from "./routes/health.js";
 import { hooksRouter } from "./routes/hooks.js";
@@ -126,6 +128,8 @@ export function createApp(healthMonitor?: HealthMonitor) {
   app.route("/api/instances/:id/plugins", instancePluginsRouter);
   // Marketplace (WOP-203)
   app.route("/api/marketplace", marketplaceRouter);
+  // Capability health (WOP-501)
+  app.route("/api/capability-health", capabilityHealthRouter);
   // Instance CRUD (WOP-202)
   app.route("/instances", instancesRouter);
 
@@ -426,6 +430,33 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   });
   daemonLog("Health monitor started");
 
+  // Start capability health probing
+  const capabilityProber = getCapabilityHealthProber();
+  capabilityProber.start();
+  daemonLog("Capability health prober started");
+
+  // Wire up capability health alerting via WebSocket
+  capabilityProber.on("providerStatusChange", (event) => {
+    const { capability, providerId, providerName, currentHealthy, error } = event;
+    const wsEvent = {
+      type: "capability:health",
+      capability,
+      providerId,
+      providerName,
+      healthy: currentHealthy,
+      error: error || undefined,
+      ts: Date.now(),
+    };
+    publishToTopic("capability:health", wsEvent);
+    if (!currentHealthy) {
+      winstonLogger.warn(
+        `[capability-health] Provider ${providerId} (${capability}) is unhealthy: ${error || "health check failed"}`,
+      );
+    } else {
+      winstonLogger.info(`[capability-health] Provider ${providerId} (${capability}) recovered`);
+    }
+  });
+
   // WebSocket heartbeat interval (WOP-204)
   const heartbeatInterval = setInterval(() => {
     const disconnected = heartbeatTick();
@@ -445,6 +476,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     daemonLog("Daemon stopping...");
     clearInterval(heartbeatInterval);
     healthMonitor.stop();
+    capabilityProber.stop();
     restartOnIdleManager.shutdown();
     await shutdownAllPlugins();
     // Close storage database handle

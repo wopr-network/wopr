@@ -8,6 +8,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCapabilityDependencyGraph } from "../core/capability-deps.js";
+import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
 import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
 import { logger } from "../logger.js";
@@ -340,6 +341,15 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
     logger.info(`[plugins] ${name}: deregistered ${manifest.provides.capabilities.length} capability provider(s)`);
   }
 
+  // Deregister health probes for provided capabilities
+  if (manifest?.provides?.capabilities?.length) {
+    const prober = getCapabilityHealthProber();
+    for (const entry of manifest.provides.capabilities) {
+      prober.unregisterProbe(entry.type, entry.id);
+    }
+  }
+
+  // Unregister from capability dependency graph
   getCapabilityDependencyGraph().unregisterPlugin(name);
 
   // ── Step 5: Emit deactivated, clean up state ──

@@ -97,6 +97,13 @@ export interface ManifestProviderEntry {
   displayName: string;
   /** Config schema for this provider's settings (API key fields, model selection, etc.) */
   configSchema?: ConfigSchema;
+  /**
+   * Optional health probe configuration.
+   * If "endpoint", the platform makes an HTTP GET to the plugin's healthEndpoint.
+   * If "builtin", the plugin registers a probe function at init time via context.registerHealthProbe().
+   * Default: no probe (provider assumed healthy).
+   */
+  healthProbe?: "endpoint" | "builtin";
 }
 
 /**

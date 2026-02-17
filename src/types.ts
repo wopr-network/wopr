@@ -922,6 +922,9 @@ export interface WOPRPluginContext {
     capability: import("./plugin-types/manifest.js").AdapterCapability,
   ): import("./plugin-types/manifest.js").ProviderOption[];
   hasCapability(capability: import("./plugin-types/manifest.js").AdapterCapability): boolean;
+
+  /** Register a health probe for a capability provider this plugin provides */
+  registerHealthProbe?(capability: string, providerId: string, probe: () => Promise<boolean>): void;
 }
 
 export interface PluginLogger {
