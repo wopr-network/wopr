@@ -43,6 +43,7 @@ export async function updateRegistrySQL(entry: {
 }): Promise<void> {
   await initSandboxStorage();
   const repo = sandboxRepo();
+  // biome-ignore lint/suspicious/noExplicitAny: Repository findFirst requires generic filter type
   const existing = await repo.findFirst({ id: entry.containerName } as any);
 
   const record: SandboxRegistryRecord = {
@@ -68,6 +69,7 @@ export async function updateRegistrySQL(entry: {
 export async function removeRegistryEntrySQL(containerName: string): Promise<void> {
   await initSandboxStorage();
   const repo = sandboxRepo();
+  // biome-ignore lint/suspicious/noExplicitAny: Repository findFirst requires generic filter type
   const existing = await repo.findFirst({ id: containerName } as any);
   if (existing) {
     await repo.delete(containerName);
@@ -80,6 +82,7 @@ export async function removeRegistryEntrySQL(containerName: string): Promise<voi
 export async function findRegistryEntrySQL(containerName: string): Promise<SandboxRegistryRecord | undefined> {
   await initSandboxStorage();
   const repo = sandboxRepo();
+  // biome-ignore lint/suspicious/noExplicitAny: Repository findFirst requires generic filter type
   const entry = await repo.findFirst({ id: containerName } as any);
   return entry ?? undefined;
 }
