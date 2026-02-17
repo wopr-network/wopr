@@ -24,8 +24,8 @@ describe("observability API routes", () => {
     app.route("/observability", observabilityRouter);
   });
 
-  afterEach(() => {
-    resetStorage();
+  afterEach(async () => {
+    await resetStorage();
     healthMonitor._resetForTesting();
     _resetLogsForTesting();
     rmSync(testDir, { recursive: true, force: true });
