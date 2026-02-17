@@ -1,27 +1,22 @@
 /**
  * Storage implementation - hides Drizzle completely
- * 
+ *
  * This is the main StorageApi implementation that plugins receive via ctx.storage
  * All Drizzle-specific code is encapsulated here.
  */
 
+import { existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import Database, { type Database as DatabaseType } from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
-import { sqliteTable, text, integer, real, blob } from "drizzle-orm/sqlite-core";
 import { eq } from "drizzle-orm";
-import { existsSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { type blob, integer, type real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
-import type {
-  StorageApi,
-  Repository,
-  PluginSchema,
-  TableSchema,
-} from "./api/plugin-storage.js";
-import { DrizzleRepository } from "./repositories/drizzle-repository.js";
 import { logger } from "../logger.js";
 import { WOPR_HOME } from "../paths.js";
+import type { PluginSchema, Repository, StorageApi, TableSchema } from "./api/plugin-storage.js";
+import { DrizzleRepository } from "./repositories/drizzle-repository.js";
 
 /**
  * Registry of loaded repositories
@@ -45,13 +40,16 @@ const schemaVersionsTable = sqliteTable("_plugin_schema_versions", {
 /**
  * Maps Zod types to SQLite column types
  */
-function zodToSqliteColumn(name: string, zodType: z.ZodTypeAny): ReturnType<typeof text> | ReturnType<typeof integer> | ReturnType<typeof real> | ReturnType<typeof blob> {
+function zodToSqliteColumn(
+  name: string,
+  zodType: z.ZodTypeAny,
+): ReturnType<typeof text> | ReturnType<typeof integer> | ReturnType<typeof real> | ReturnType<typeof blob> {
   // Handle optional types
   const innerType = zodType instanceof z.ZodOptional ? zodType.unwrap() : zodType;
-  
+
   // Check for primary key
   const isPrimary = name === "id";
-  
+
   // Map Zod types to SQLite columns
   if (innerType instanceof z.ZodString) {
     if (isPrimary) {
@@ -59,31 +57,31 @@ function zodToSqliteColumn(name: string, zodType: z.ZodTypeAny): ReturnType<type
     }
     return text(name);
   }
-  
+
   if (innerType instanceof z.ZodNumber) {
     if (isPrimary) {
       return integer(name).primaryKey();
     }
     return integer(name);
   }
-  
+
   if (innerType instanceof z.ZodBoolean) {
     return integer(name); // SQLite stores booleans as 0/1
   }
-  
+
   if (innerType instanceof z.ZodDate) {
     return integer(name); // Store as timestamp
   }
-  
+
   if (innerType instanceof z.ZodArray || innerType instanceof z.ZodObject) {
     // JSON for arrays and objects
     return text(name);
   }
-  
+
   if (innerType instanceof z.ZodEnum || innerType instanceof z.ZodUnion) {
     return text(name);
   }
-  
+
   // Default to text for unknown types
   return text(name);
 }
@@ -94,13 +92,16 @@ function zodToSqliteColumn(name: string, zodType: z.ZodTypeAny): ReturnType<type
 function generateTable(namespace: string, tableName: string, tableSchema: TableSchema): ReturnType<typeof sqliteTable> {
   // Create table with full name (namespace_tableName)
   const fullTableName = `${namespace}_${tableName}`;
-  
+
   // Build columns dynamically
-  const columns: Record<string, ReturnType<typeof text> | ReturnType<typeof integer> | ReturnType<typeof real> | ReturnType<typeof blob>> = {};
+  const columns: Record<
+    string,
+    ReturnType<typeof text> | ReturnType<typeof integer> | ReturnType<typeof real> | ReturnType<typeof blob>
+  > = {};
   for (const [fieldName, zodType] of Object.entries(tableSchema.schema.shape)) {
     columns[fieldName] = zodToSqliteColumn(fieldName, zodType);
   }
-  
+
   // Create table without indexes first (simpler type)
   return sqliteTable(fullTableName, columns);
 }
@@ -116,20 +117,20 @@ export class Storage implements StorageApi {
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath ?? join(WOPR_HOME, "wopr.sqlite");
-    
+
     // Ensure directory exists
     const dir = dirname(this.dbPath);
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    
+
     // Initialize SQLite connection
     const sqlite = new Database(this.dbPath);
     this.db = drizzle(sqlite);
-    
+
     // Initialize schema versions table
     this.initSchemaVersions();
-    
+
     logger.info(`[storage] Initialized SQLite at ${this.dbPath}`);
   }
 
@@ -138,7 +139,7 @@ export class Storage implements StorageApi {
    */
   private initSchemaVersions(): void {
     // This runs raw SQL since we're initializing before the registry system
-    const sqlite = (this.db as unknown as { _: { session: DatabaseType }})._.session;
+    const sqlite = (this.db as unknown as { _: { session: DatabaseType } })._.session;
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS _plugin_schema_versions (
         namespace TEXT PRIMARY KEY,
@@ -158,7 +159,7 @@ export class Storage implements StorageApi {
       .from(schemaVersionsTable)
       .where(eq(schemaVersionsTable.namespace, namespace))
       .limit(1);
-    
+
     return result[0]?.version ?? 0;
   }
 
@@ -168,7 +169,7 @@ export class Storage implements StorageApi {
   private async updateVersion(namespace: string, version: number): Promise<void> {
     const now = Date.now();
     const existing = await this.getCurrentVersion(namespace);
-    
+
     if (existing === 0) {
       // Insert new
       await this.db.insert(schemaVersionsTable).values({
@@ -188,10 +189,10 @@ export class Storage implements StorageApi {
 
   async register(schema: PluginSchema): Promise<void> {
     const { namespace, version } = schema;
-    
+
     // Check current version
     const currentVersion = await this.getCurrentVersion(namespace);
-    
+
     if (currentVersion === version) {
       // Already up to date, just ensure repositories exist
       if (!this.repositories.has(namespace)) {
@@ -199,25 +200,25 @@ export class Storage implements StorageApi {
       }
       return;
     }
-    
+
     if (currentVersion > version) {
       logger.warn(`[storage] Schema version regression detected for ${namespace}: ${currentVersion} → ${version}`);
       // Continue anyway - might be intentional rollback
     }
-    
+
     logger.info(`[storage] Registering schema for ${namespace} v${version} (was v${currentVersion})`);
-    
+
     // Run custom migration if provided and version changed
     if (schema.migrate && currentVersion > 0) {
       await schema.migrate(currentVersion, version, this);
     }
-    
+
     // Generate and create tables
     await this.createRepositories(schema);
-    
+
     // Update version
     await this.updateVersion(namespace, version);
-    
+
     logger.info(`[storage] Schema registered for ${namespace} v${version}`);
   }
 
@@ -227,25 +228,20 @@ export class Storage implements StorageApi {
   private async createRepositories(schema: PluginSchema): Promise<void> {
     const tables = new Map<string, ReturnType<typeof sqliteTable>>();
     const repositories = new Map<string, Repository<Record<string, unknown>>>();
-    
+
     for (const [tableName, tableSchema] of Object.entries(schema.tables)) {
       // Generate Drizzle table
       const table = generateTable(schema.namespace, tableName, tableSchema);
       tables.set(tableName, table);
-      
+
       // Create repository
-      const repo = new DrizzleRepository(
-        this.db,
-        table,
-        tableSchema.primaryKey,
-        tableSchema.schema,
-      );
+      const repo = new DrizzleRepository(this.db, table, tableSchema.primaryKey, tableSchema.schema);
       repositories.set(tableName, repo);
-      
+
       // Note: Drizzle will create tables on first query
       // For explicit table creation, we'd use drizzle-kit migrations
     }
-    
+
     this.repositories.set(schema.namespace, {
       schema,
       tables,
@@ -277,7 +273,7 @@ export class Storage implements StorageApi {
 
   async raw(sql: string, params?: unknown[]): Promise<unknown[]> {
     // Use the underlying better-sqlite3 database for raw queries
-    const sqlite = (this.db as unknown as { _: { session: DatabaseType }})._.session;
+    const sqlite = (this.db as unknown as { _: { session: DatabaseType } })._.session;
     const stmt = sqlite.prepare(sql);
     const result = params ? stmt.all(...params) : stmt.all();
     return Array.isArray(result) ? result : [result];
@@ -297,7 +293,7 @@ export class Storage implements StorageApi {
  */
 class TransactionStorage implements StorageApi {
   readonly driver: "sqlite" | "postgres" = "sqlite";
-  
+
   constructor(
     private trx: BetterSQLite3Database,
     private parent: Storage,
@@ -309,7 +305,9 @@ class TransactionStorage implements StorageApi {
 
   getRepository<T extends Record<string, unknown>>(namespace: string, tableName: string): Repository<T> {
     // Get the table info from parent
-    const entry = (this.parent as unknown as { repositories: Map<string, RepositoryEntry> }).repositories.get(namespace);
+    const entry = (this.parent as unknown as { repositories: Map<string, RepositoryEntry> }).repositories.get(
+      namespace,
+    );
     if (!entry) {
       throw new Error(`Schema not registered: ${namespace}`);
     }
@@ -321,12 +319,7 @@ class TransactionStorage implements StorageApi {
 
     const tableSchema = entry.schema.tables[tableName];
 
-    return new DrizzleRepository(
-      this.trx,
-      table,
-      tableSchema.primaryKey,
-      tableSchema.schema,
-    ) as Repository<T>;
+    return new DrizzleRepository(this.trx, table, tableSchema.primaryKey, tableSchema.schema) as Repository<T>;
   }
 
   isRegistered(namespace: string): boolean {
@@ -338,7 +331,7 @@ class TransactionStorage implements StorageApi {
   }
 
   async raw(sqlStr: string, params?: unknown[]): Promise<unknown[]> {
-    const sqlite = (this.trx as unknown as { _: { session: DatabaseType }})._.session;
+    const sqlite = (this.trx as unknown as { _: { session: DatabaseType } })._.session;
     const stmt = sqlite.prepare(sqlStr);
     const result = params ? stmt.all(...params) : stmt.all();
     return Array.isArray(result) ? result : [result];

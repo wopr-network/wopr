@@ -1,26 +1,18 @@
 /**
  * Drizzle ORM implementation of Repository interface
- * 
+ *
  * This is the ONLY file in the codebase that imports Drizzle.
  * All other code uses the abstract Repository interface.
- * 
+ *
  * Currently supports SQLite only (via better-sqlite3).
  * Note: better-sqlite3 uses synchronous API, so we wrap calls in async functions.
  */
 
-import { 
-  eq, ne, gt, gte, lt, lte, inArray, notInArray, sql, and, asc, desc, like 
-} from "drizzle-orm";
-import type { SQLiteTable, SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { and, asc, desc, eq, gt, gte, inArray, like, lt, lte, ne, notInArray, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { z } from "zod";
-import type {
-  Repository,
-  QueryBuilder,
-  Filter,
-  FilterOperator,
-  OrderDirection,
-} from "../api/plugin-storage.js";
+import type { Filter, FilterOperator, OrderDirection, QueryBuilder, Repository } from "../api/plugin-storage.js";
 
 // Type for Drizzle database - SQLite only for now
 type DrizzleDB = BetterSQLite3Database;
@@ -77,9 +69,7 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
           break;
         case "$contains":
           // JSON array contains - SQLite specific
-          this.conditions.push(
-            sql`${column} LIKE ${`%"${value}"%`}`,
-          );
+          this.conditions.push(sql`${column} LIKE ${`%"${value}"%`}`);
           break;
         case "$startsWith":
           this.conditions.push(like(column, `${value}%`));
@@ -184,7 +174,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
   async insert(data: Omit<T, "id"> & Partial<Pick<T, "id">>): Promise<T> {
     // Validate with Zod
     const validated = this.zodSchema.parse(data) as T;
-    
+
     // better-sqlite3 uses synchronous API
     const stmt = this.db.insert(this.table).values(validated as Record<string, unknown>);
     const result = stmt.returning().all();
@@ -194,7 +184,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
   async insertMany(data: Array<Omit<T, "id"> & Partial<Pick<T, "id">>>): Promise<T[]> {
     // Validate all
     const validated = data.map((d) => this.zodSchema.parse(d)) as T[];
-    
+
     const stmt = this.db.insert(this.table).values(validated as Record<string, unknown>[]);
     const result = stmt.returning().all();
     return Promise.resolve(result as T[]);
@@ -204,12 +194,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     const pkColumn = this.columns[this.primaryKey];
     if (!pkColumn) throw new Error(`Primary key column not found: ${this.primaryKey}`);
 
-    const result = this.db
-      .select()
-      .from(this.table)
-      .where(eq(pkColumn, id))
-      .limit(1)
-      .all();
+    const result = this.db.select().from(this.table).where(eq(pkColumn, id)).limit(1).all();
 
     return Promise.resolve((result[0] as T) ?? null);
   }
@@ -217,7 +202,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
   async findFirst(filter: Filter<T>): Promise<T | null> {
     const conditions = this.buildFilterConditions(filter);
     let query = this.db.select().from(this.table);
-    
+
     if (conditions.length > 0) {
       query = query.where(and(...conditions)) as typeof query;
     }
@@ -263,7 +248,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
 
   async updateMany(filter: Filter<T>, data: Partial<T>): Promise<number> {
     const conditions = this.buildFilterConditions(filter);
-    
+
     // Partial validation
     const partialSchema = this.zodSchema.partial();
     const validated = partialSchema.parse(data);
@@ -288,7 +273,10 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
 
   async deleteMany(filter: Filter<T>): Promise<number> {
     const conditions = this.buildFilterConditions(filter);
-    const result = this.db.delete(this.table).where(and(...conditions)).run();
+    const result = this.db
+      .delete(this.table)
+      .where(and(...conditions))
+      .run();
     return Promise.resolve(result.changes ?? 0);
   }
 
@@ -317,7 +305,9 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
 
   async raw(sqlStr: string, params?: unknown[]): Promise<unknown[]> {
     // Use raw SQL with better-sqlite3
-    const result = this.db.run(sql`${sql.raw(sqlStr)}${params ? sql.raw(`, ${params.map(() => '?').join(', ')}`) : sql.raw('')}`);
+    const result = this.db.run(
+      sql`${sql.raw(sqlStr)}${params ? sql.raw(`, ${params.map(() => "?").join(", ")}`) : sql.raw("")}`,
+    );
     return Promise.resolve(Array.isArray(result) ? result : [result]);
   }
 

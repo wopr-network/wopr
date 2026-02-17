@@ -1,13 +1,13 @@
 /**
  * Storage API - Plugin-extensible storage abstraction
- * 
+ *
  * Hides Drizzle ORM completely. Could be replaced with:
  * - Prisma
  * - TypeORM
  * - Knex
  * - Raw SQL drivers
  * - Even a different database (MongoDB, etc.)
- * 
+ *
  * Plugins never see the underlying implementation.
  */
 
@@ -17,24 +17,24 @@ import type { z } from "zod";
  * Filter operators for queries
  */
 export type FilterOperator =
-  | "$eq"      // Equal
-  | "$ne"      // Not equal
-  | "$gt"      // Greater than
-  | "$gte"     // Greater than or equal
-  | "$lt"      // Less than
-  | "$lte"     // Less than or equal
-  | "$in"      // In array
-  | "$nin"     // Not in array
+  | "$eq" // Equal
+  | "$ne" // Not equal
+  | "$gt" // Greater than
+  | "$gte" // Greater than or equal
+  | "$lt" // Less than
+  | "$lte" // Less than or equal
+  | "$in" // In array
+  | "$nin" // Not in array
   | "$contains" // Array contains (for JSON arrays)
   | "$startsWith" // String starts with
-  | "$endsWith"   // String ends with
-  | "$regex";     // Regex match
+  | "$endsWith" // String ends with
+  | "$regex"; // Regex match
 
 /**
  * Filter condition for a single field
  */
-export type FilterCondition<T> = 
-  | T 
+export type FilterCondition<T> =
+  | T
   | { $eq: T }
   | { $ne: T }
   | { $gt: T }
@@ -75,7 +75,7 @@ export interface QueryBuilder<T> {
 
 /**
  * Repository interface - CRUD operations
- * 
+ *
  * This is the ONLY interface plugins see for storage.
  * No Drizzle types, no SQL, no database-specific concepts.
  */
@@ -162,7 +162,7 @@ export interface TableIndex {
 
 /**
  * Table schema definition
- * 
+ *
  * Plugin defines this with Zod schema.
  * Core generates Drizzle tables from this.
  */
@@ -177,7 +177,7 @@ export interface TableSchema {
 
 /**
  * Plugin schema definition
- * 
+ *
  * This is what plugins register with ctx.storage.register()
  */
 export interface PluginSchema {
@@ -193,7 +193,7 @@ export interface PluginSchema {
 
 /**
  * Storage API interface
- * 
+ *
  * The main interface plugins use to interact with storage.
  * Added to PluginContext as ctx.storage
  */

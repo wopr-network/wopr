@@ -24,6 +24,7 @@ import { cancelInject as cancelSessionInject, logMessage as logMessageToSession 
 import { resolveIdentity, resolveUserProfile } from "../core/workspace.js";
 import { logger } from "../logger.js";
 import type { AdapterCapability, ProviderOption } from "../plugin-types/manifest.js";
+import { getStorage } from "../storage/index.js";
 import type { ModelProvider } from "../types/provider.js";
 import type {
   ChannelAdapter,
@@ -57,7 +58,6 @@ import {
   uiComponents,
   webUiExtensions,
 } from "./state.js";
-import { getStorage } from "../storage/index.js";
 
 export function createPluginContext(
   plugin: InstalledPlugin,
