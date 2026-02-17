@@ -84,6 +84,22 @@ export interface PluginRequirements {
 }
 
 /**
+ * A capability provider entry declared in a plugin manifest.
+ * This tells the platform "I provide this capability" so the registry
+ * can auto-discover providers without requiring imperative registration.
+ */
+export interface ManifestProviderEntry {
+  /** The abstract capability type (e.g., "tts", "stt", "llm", "image-gen") */
+  type: string;
+  /** Unique provider identifier within this plugin (e.g., "chatterbox-local", "elevenlabs") */
+  id: string;
+  /** Human-readable display name (e.g., "Chatterbox TTS", "ElevenLabs") */
+  displayName: string;
+  /** Config schema for this provider's settings (API key fields, model selection, etc.) */
+  configSchema?: ConfigSchema;
+}
+
+/**
  * A setup step that guides users through plugin configuration.
  * WaaS renders these as a wizard flow.
  */
@@ -129,6 +145,23 @@ export interface PluginManifest {
 
   /** Runtime requirements for this plugin */
   requires?: PluginRequirements;
+
+  /**
+   * Capabilities this plugin provides to the platform.
+   * On plugin load, each entry is auto-registered in the capability registry.
+   * On plugin unload, entries are auto-deregistered.
+   *
+   * Example:
+   *   provides: {
+   *     capabilities: [
+   *       { type: "tts", id: "chatterbox-local", displayName: "Chatterbox TTS" },
+   *       { type: "stt", id: "whisper-local", displayName: "Local Whisper", configSchema: { ... } }
+   *     ]
+   *   }
+   */
+  provides?: {
+    capabilities: ManifestProviderEntry[];
+  };
 
   /** How to install missing dependencies (ordered by preference) */
   install?: InstallMethod[];

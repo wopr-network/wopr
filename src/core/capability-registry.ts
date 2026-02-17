@@ -78,6 +78,14 @@ export class CapabilityRegistry extends EventEmitter {
   }
 
   /**
+   * Get all providers for a capability with their source plugin IDs.
+   * Convenience method for UI surfaces like guided install (WOP-504).
+   */
+  getProvidersForCapability(capabilityType: string): ProviderOption[] {
+    return this.getProviders(capabilityType);
+  }
+
+  /**
    * Check which capabilities from a requirements list are unsatisfied.
    * Returns the list of missing required capabilities (ignores optional ones).
    */

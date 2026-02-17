@@ -5,6 +5,8 @@
  * This file preserves the original public API so existing imports keep working.
  */
 
+// Capability registry convenience
+export { getCapabilityRegistry } from "./core/capability-registry.js";
 // Public accessors for runtime state
 export {
   getChannel,

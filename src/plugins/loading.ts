@@ -150,6 +150,21 @@ export async function loadPlugin(
     }
   }
 
+  // ── Step 2.6: Auto-register provided capabilities ──
+  if (manifest?.provides?.capabilities?.length) {
+    const registry = getCapabilityRegistry();
+    for (const entry of manifest.provides.capabilities) {
+      registry.registerProvider(entry.type, {
+        id: entry.id,
+        name: entry.displayName,
+        configSchema: entry.configSchema,
+      });
+    }
+    logger.info(
+      `[plugins] ${installed.name}: registered ${manifest.provides.capabilities.length} capability provider(s): ${manifest.provides.capabilities.map((e) => `${e.type}:${e.id}`).join(", ")}`,
+    );
+  }
+
   // ── Step 3: Dynamic import ──
   // Temporarily change cwd to plugin directory for proper module resolution
   const originalCwd = process.cwd();
@@ -235,6 +250,16 @@ export async function unloadPlugin(name: string): Promise<void> {
   // Clean up registrations
   if (loaded.plugin.commands) {
     // Commands are registered per-plugin, no global registry to clean
+  }
+
+  // Deregister provided capabilities
+  const manifest = pluginManifests.get(name);
+  if (manifest?.provides?.capabilities?.length) {
+    const registry = getCapabilityRegistry();
+    for (const entry of manifest.provides.capabilities) {
+      registry.unregisterProvider(entry.type, entry.id);
+    }
+    logger.info(`[plugins] ${name}: deregistered ${manifest.provides.capabilities.length} capability provider(s)`);
   }
 
   // Unregister from capability dependency graph
