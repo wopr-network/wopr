@@ -11,8 +11,9 @@ vi.mock("../../src/paths.js", () => ({
   WOPR_HOME: testDir,
 }));
 
-import { observabilityRouter, closeMetricsStore } from "../../../src/daemon/routes/observability.js";
+import { observabilityRouter } from "../../../src/daemon/routes/observability.js";
 import { _resetLogsForTesting, healthMonitor, recordLog } from "../../../src/daemon/observability/index.js";
+import { resetStorage } from "../../../src/storage/index.js";
 
 describe("observability API routes", () => {
   let app: Hono;
@@ -23,8 +24,8 @@ describe("observability API routes", () => {
     app.route("/observability", observabilityRouter);
   });
 
-  afterEach(() => {
-    closeMetricsStore();
+  afterEach(async () => {
+    await resetStorage();
     healthMonitor._resetForTesting();
     _resetLogsForTesting();
     rmSync(testDir, { recursive: true, force: true });

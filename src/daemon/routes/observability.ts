@@ -4,10 +4,8 @@
  * Provides endpoints for metrics, logs, and health monitoring.
  */
 
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { Hono } from "hono";
-import { WOPR_HOME } from "../../paths.js";
+import { getStorage } from "../../storage/index.js";
 import {
   type GetLogsOptions,
   getInstanceLogs,
@@ -21,11 +19,10 @@ export const observabilityRouter = new Hono();
 // Lazily initialize the metrics store
 let metricsStore: MetricsStore | null = null;
 
-function getMetricsStore(): MetricsStore {
+async function getMetricsStore(): Promise<MetricsStore> {
   if (!metricsStore) {
-    const metricsDir = join(WOPR_HOME, "metrics");
-    mkdirSync(metricsDir, { recursive: true });
-    metricsStore = new MetricsStore(join(metricsDir, "metrics.sqlite"));
+    const storage = getStorage();
+    metricsStore = await MetricsStore.create(storage);
   }
   return metricsStore;
 }
@@ -33,17 +30,17 @@ function getMetricsStore(): MetricsStore {
 // --- Metrics Routes ---
 
 // GET /observability/metrics — platform-wide metrics summary
-observabilityRouter.get("/metrics", (c) => {
-  const store = getMetricsStore();
-  const summary = store.getPlatformSummary();
+observabilityRouter.get("/metrics", async (c) => {
+  const store = await getMetricsStore();
+  const summary = await store.getPlatformSummary();
   return c.json(summary);
 });
 
 // GET /observability/instances/:id/metrics — per-instance metrics
-observabilityRouter.get("/instances/:id/metrics", (c) => {
+observabilityRouter.get("/instances/:id/metrics", async (c) => {
   const instanceId = c.req.param("id");
-  const store = getMetricsStore();
-  const summary = store.getInstanceSummary(instanceId);
+  const store = await getMetricsStore();
+  const summary = await store.getInstanceSummary(instanceId);
   return c.json(summary);
 });
 
@@ -56,8 +53,8 @@ observabilityRouter.post("/metrics", async (c) => {
     return c.json({ error: "name and value are required" }, 400);
   }
 
-  const store = getMetricsStore();
-  store.record(name, value, instance_id ?? null, tags ?? {});
+  const store = await getMetricsStore();
+  await store.record(name, value, instance_id ?? null, tags ?? {});
   return c.json({ recorded: true }, 201);
 });
 
@@ -103,13 +100,3 @@ observabilityRouter.get("/instances/:id/health", (c) => {
 
   return c.json(health);
 });
-
-/**
- * Close the metrics store (for clean shutdown).
- */
-export function closeMetricsStore(): void {
-  if (metricsStore) {
-    metricsStore.close();
-    metricsStore = null;
-  }
-}
