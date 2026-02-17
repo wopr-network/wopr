@@ -60,7 +60,7 @@ export async function updateRegistrySQL(entry: {
   } else {
     try {
       await repo.insert(record);
-    } catch (err) {
+    } catch (_err) {
       // Handle duplicate key conflict - entry was inserted between findById and insert
       // Retry as an update instead
       await repo.update(entry.containerName, record);

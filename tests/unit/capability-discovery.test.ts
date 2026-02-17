@@ -36,17 +36,6 @@ afterEach(() => {
 });
 
 describe("capability_discover tool", () => {
-  // Helper: extract handler from the tool array
-  function getToolHandler() {
-    const tools = createCapabilityDiscoveryTools("test-session");
-    expect(tools).toHaveLength(1);
-    // The SDK tool() function returns an object with an execute method
-    // For testing, we need to invoke the tool. Since the internal structure
-    // depends on the SDK, we may need to adjust. The pattern from existing
-    // tests shows calling the tool handler directly.
-    return tools[0];
-  }
-
   it("should return empty capabilities when registry is empty", async () => {
     // Test that an empty registry returns an empty capabilities list
     const registry = getCapabilityRegistry();

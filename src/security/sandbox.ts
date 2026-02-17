@@ -167,12 +167,14 @@ export async function getSandboxStatus(
 /**
  * List all active sandboxes (legacy API)
  */
-export async function listSandboxes(): Promise<Array<{
-  containerId: string;
-  sessionName: string;
-  createdAt: number;
-  status: string;
-}>> {
+export async function listSandboxes(): Promise<
+  Array<{
+    containerId: string;
+    sessionName: string;
+    createdAt: number;
+    status: string;
+  }>
+> {
   const entries = await listRegistryEntries();
   return entries.map((e) => ({
     containerId: e.containerName,

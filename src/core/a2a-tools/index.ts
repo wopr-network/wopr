@@ -17,6 +17,7 @@ export {
 } from "./_base.js";
 export { closeAllBrowsers, createBrowserTools } from "./browser.js";
 export { createCanvasTools } from "./canvas.js";
+export { createCapabilityDiscoveryTools } from "./capability-discovery.js";
 export { createConfigTools } from "./config.js";
 export { createEventTools } from "./events.js";
 export { createHttpExecTools } from "./http-exec.js";
@@ -28,4 +29,3 @@ export { createSecurityTools } from "./security.js";
 export { createSessionTools } from "./sessions.js";
 export { createSoulTools } from "./soul.js";
 export { createWebSearchTools } from "./web-search.js";
-export { createCapabilityDiscoveryTools } from "./capability-discovery.js";

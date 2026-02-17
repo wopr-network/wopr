@@ -39,9 +39,7 @@ export async function migrateSandboxRegistryToSql(): Promise<void> {
 
     // Rename to backup
     renameSync(SANDBOX_REGISTRY_PATH, `${SANDBOX_REGISTRY_PATH}.backup`);
-    logger.info(
-      `[sandbox-migrate] Migrated ${successCount} entries from sandbox registry (${skipCount} skipped)`,
-    );
+    logger.info(`[sandbox-migrate] Migrated ${successCount} entries from sandbox registry (${skipCount} skipped)`);
   } catch (err) {
     logger.error(`[sandbox-migrate] Failed to migrate: ${err}`);
     throw err;
