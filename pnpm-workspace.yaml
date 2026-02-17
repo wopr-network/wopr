@@ -1,0 +1,22 @@
+ignoredBuiltDependencies:
+  - esbuild
+
+onlyBuiltDependencies:
+  - ' '
+  - ''''
+  - ','
+  - '-'
+  - '3'
+  - '['
+  - ']'
+  - b
+  - better-sqlite3
+  - d
+  - e
+  - i
+  - l
+  - q
+  - r
+  - s
+  - t
+  - u

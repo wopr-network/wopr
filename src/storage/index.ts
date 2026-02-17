@@ -350,11 +350,20 @@ export class Storage implements StorageApi {
   }
 
   async transaction<R>(fn: (storage: StorageApi) => Promise<R>): Promise<R> {
-    return this.sqliteRaw.transaction(() => {
-      // Create a transaction-aware storage wrapper
-      const trxStorage = new TransactionStorage(this.sqliteRaw, this);
-      return fn(trxStorage);
-    })();
+    // Use manual BEGIN/COMMIT/ROLLBACK to support async callbacks.
+    // better-sqlite3's .transaction() wrapper is synchronous and cannot
+    // handle async callbacks (await yields to microtask queue, causing
+    // the transaction to commit prematurely).
+    const trxStorage = new TransactionStorage(this.sqliteRaw, this);
+    this.sqliteRaw.exec("BEGIN");
+    try {
+      const result = await fn(trxStorage);
+      this.sqliteRaw.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.sqliteRaw.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   close(): void {

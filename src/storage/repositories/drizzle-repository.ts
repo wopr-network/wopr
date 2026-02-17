@@ -132,6 +132,9 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
 
     if (this.limitValue !== undefined) {
       query = query.limit(this.limitValue) as typeof query;
+    } else if (this.offsetValue !== undefined) {
+      // SQLite requires LIMIT when using OFFSET; -1 means no limit
+      query = query.limit(-1) as typeof query;
     }
 
     if (this.offsetValue !== undefined) {
@@ -398,8 +401,9 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
       };
     };
 
-    // Check if it's a SELECT query (should return rows) or modification query
-    const isSelect = sqlStr.trim().toUpperCase().startsWith("SELECT");
+    // Check if it's a row-returning query or modification query
+    const trimmed = sqlStr.trim().toUpperCase();
+    const isSelect = trimmed.startsWith("SELECT") || trimmed.startsWith("PRAGMA") || trimmed.startsWith("EXPLAIN");
 
     if (isSelect) {
       const stmt = db.prepare(sqlStr);

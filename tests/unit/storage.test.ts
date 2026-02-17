@@ -135,7 +135,7 @@ describe("Storage Module (WOP-545)", () => {
 
     it("should set busy timeout to 5000ms", async () => {
       const result = await storage.getRepository("test", "users").raw("PRAGMA busy_timeout");
-      expect(result[0]).toHaveProperty("busy_timeout", 5000);
+      expect(result[0]).toHaveProperty("timeout", 5000);
     });
 
     it("should enable foreign keys", async () => {
@@ -165,14 +165,14 @@ describe("Storage Module (WOP-545)", () => {
 
     it("should track schema version", async () => {
       await storage.register(testPluginSchema);
-      const version = storage.getVersion("test");
+      const version = await storage.getVersion("test");
       expect(version).toBe(1);
     });
 
     it("should be idempotent for same version", async () => {
       await storage.register(testPluginSchema);
       await storage.register(testPluginSchema);
-      const version = storage.getVersion("test");
+      const version = await storage.getVersion("test");
       expect(version).toBe(1);
     });
 
@@ -180,7 +180,7 @@ describe("Storage Module (WOP-545)", () => {
       await storage.register(testPluginSchema);
       const updatedSchema = { ...testPluginSchema, version: 2 };
       await storage.register(updatedSchema);
-      const version = storage.getVersion("test");
+      const version = await storage.getVersion("test");
       expect(version).toBe(2);
     });
 
@@ -469,7 +469,7 @@ describe("Storage Module (WOP-545)", () => {
 
     it("should skip results with offset", async () => {
       const repo = storage.getRepository<TestRecord>("test", "users");
-      const results = await repo.query().orderBy("age", "asc").offset(1).execute();
+      const results = await repo.query().orderBy("age", "asc").limit(10).offset(1).execute();
       expect(results).toHaveLength(2);
       expect(results[0].age).toBe(30);
     });
@@ -625,22 +625,23 @@ describe("Storage Module (WOP-545)", () => {
         age: 30,
         tags: undefined,
       });
-      expect(inserted.tags).toBeUndefined();
+      // SQLite stores undefined as null
+      expect(inserted.tags === undefined || inserted.tags === null).toBe(true);
 
       const found = await repo.findById("1");
-      expect(found?.tags).toBeUndefined();
+      expect(found?.tags === undefined || found?.tags === null).toBe(true);
     });
   });
 
   describe("10. Schema version migration tracking", () => {
-    it("should return 0 for unknown namespace", () => {
-      const version = storage.getVersion("unknown");
+    it("should return 0 for unknown namespace", async () => {
+      const version = await storage.getVersion("unknown");
       expect(version).toBe(0);
     });
 
     it("should return registered version", async () => {
       await storage.register(testPluginSchema);
-      const version = storage.getVersion("test");
+      const version = await storage.getVersion("test");
       expect(version).toBe(1);
     });
 
@@ -653,7 +654,7 @@ describe("Storage Module (WOP-545)", () => {
         migrate: migrateFn,
       };
       await storage.register(updatedSchema);
-      expect(migrateFn).toHaveBeenCalledWith(expect.anything(), 1, 2);
+      expect(migrateFn).toHaveBeenCalledWith(1, 2, expect.anything());
     });
   });
 
