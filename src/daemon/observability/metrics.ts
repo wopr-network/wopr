@@ -17,7 +17,7 @@ const metricsRowSchema = z.object({
   timestamp: z.number(),
   metric_name: z.string(),
   metric_value: z.number(),
-  instance_id: z.string().nullable(),
+  instance_id: z.string().optional(),
   tags: z.string(), // JSON-encoded tags object
 });
 
@@ -39,7 +39,7 @@ export interface MetricRecord {
   timestamp: number;
   metric_name: string;
   metric_value: number;
-  instance_id: string | null;
+  instance_id?: string;
   tags: string; // JSON-encoded tags object
 }
 
@@ -82,22 +82,17 @@ export class MetricsStore {
   /**
    * Record a metric data point.
    */
-  async record(
-    name: string,
-    value: number,
-    instanceId: string | null = null,
-    tags: Record<string, string> = {},
-  ): Promise<void> {
+  async record(name: string, value: number, instanceId?: string, tags: Record<string, string> = {}): Promise<void> {
     await this.storage.run(
       "INSERT INTO metrics_rows (id, timestamp, metric_name, metric_value, instance_id, tags) VALUES (?, ?, ?, ?, ?, ?)",
-      [randomUUID(), Date.now(), name, value, instanceId, JSON.stringify(tags)],
+      [randomUUID(), Date.now(), name, value, instanceId ?? null, JSON.stringify(tags)],
     );
   }
 
   /**
    * Get latest value of a metric for an instance.
    */
-  async getLatest(name: string, instanceId: string | null = null): Promise<number | null> {
+  async getLatest(name: string, instanceId?: string): Promise<number | null> {
     const sql = instanceId
       ? "SELECT metric_value FROM metrics_rows WHERE metric_name = ? AND instance_id = ? ORDER BY timestamp DESC LIMIT 1"
       : "SELECT metric_value FROM metrics_rows WHERE metric_name = ? AND instance_id IS NULL ORDER BY timestamp DESC LIMIT 1";
@@ -111,7 +106,7 @@ export class MetricsStore {
   /**
    * Get sum of a metric across all records for an instance.
    */
-  async getSum(name: string, instanceId: string | null = null, sinceMs?: number): Promise<number> {
+  async getSum(name: string, instanceId?: string, sinceMs?: number): Promise<number> {
     let sql = "SELECT COALESCE(SUM(metric_value), 0) as total FROM metrics_rows WHERE metric_name = ?";
     const params: (string | number)[] = [name];
 
