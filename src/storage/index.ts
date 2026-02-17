@@ -176,6 +176,13 @@ export class Storage implements StorageApi {
 
     // Initialize SQLite connection - store both raw and Drizzle-wrapped
     this.sqliteRaw = new Database(this.dbPath);
+
+    // SQLite pragmas for production hardening
+    this.sqliteRaw.pragma('journal_mode = WAL');
+    this.sqliteRaw.pragma('busy_timeout = 5000');
+    this.sqliteRaw.pragma('foreign_keys = ON');
+    this.sqliteRaw.pragma('synchronous = NORMAL');
+
     this.db = drizzle(this.sqliteRaw);
 
     // Initialize schema versions table
@@ -287,6 +294,20 @@ export class Storage implements StorageApi {
       const createTableSQL = generateCreateTableSQL(schema.namespace, tableName, tableSchema);
       this.sqliteRaw.exec(createTableSQL);
 
+      // Create indexes if defined
+      if (tableSchema.indexes) {
+        const fullTableName = `${schema.namespace}_${tableName}`;
+        for (let i = 0; i < tableSchema.indexes.length; i++) {
+          const idx = tableSchema.indexes[i];
+          const unique = idx.unique ? 'UNIQUE ' : '';
+          const indexName = `idx_${fullTableName}_${idx.fields.join('_')}`;
+          const columns = idx.fields.map(f => `"${f}"`).join(', ');
+          this.sqliteRaw.exec(
+            `CREATE ${unique}INDEX IF NOT EXISTS "${indexName}" ON "${fullTableName}" (${columns})`
+          );
+        }
+      }
+
       // Create repository
       const repo = new DrizzleRepository(this.db, table, tableSchema.primaryKey, tableSchema.schema, this.sqliteRaw);
       repositories.set(tableName, repo);
@@ -334,6 +355,10 @@ export class Storage implements StorageApi {
       const trxStorage = new TransactionStorage(this.sqliteRaw, this);
       return fn(trxStorage);
     })();
+  }
+
+  close(): void {
+    this.sqliteRaw.close();
   }
 }
 
@@ -417,5 +442,12 @@ export function getStorage(dbPath?: string): Storage {
  * Reset storage (for testing)
  */
 export function resetStorage(): void {
+  if (storageInstance) {
+    try {
+      storageInstance.close();
+    } catch {
+      // DB may already be closed
+    }
+  }
   storageInstance = null;
 }

@@ -537,6 +537,13 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     healthMonitor.stop();
     restartOnIdleManager.shutdown();
     await shutdownAllPlugins();
+    // Close storage database handle
+    try {
+      const { resetStorage } = await import("../storage/public.js");
+      resetStorage(); // closes DB + nullifies singleton
+    } catch {
+      // Storage may not have been initialized
+    }
     if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
     daemonLog("Daemon stopped");
     process.exit(exitCode);

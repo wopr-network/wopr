@@ -11,7 +11,7 @@
 import { and, asc, desc, eq, gt, gte, inArray, like, lt, lte, ne, notInArray, sql } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
-import type { z } from "zod";
+import { z } from "zod";
 import type { Filter, FilterOperator, OrderDirection, QueryBuilder, Repository } from "../api/plugin-storage.js";
 
 // Type for Drizzle database - SQLite only for now
@@ -30,6 +30,7 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
     private db: DrizzleDB,
     private table: SQLiteTable,
     private columns: Record<string, SQLiteColumn>,
+    private jsonColumns: Set<string> = new Set(),
   ) {}
 
   where<K extends keyof T>(field: K, opOrValue: FilterOperator | T[K], value?: unknown): QueryBuilder<T> {
@@ -138,7 +139,19 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
     }
 
     // Execute synchronously, wrap in Promise for async interface
-    return Promise.resolve(query.all() as T[]);
+    const rows = query.all() as T[];
+
+    // Deserialize JSON columns
+    if (this.jsonColumns.size === 0) return Promise.resolve(rows);
+    return Promise.resolve(rows.map(row => {
+      const r = { ...(row as Record<string, unknown>) };
+      for (const col of this.jsonColumns) {
+        if (col in r && typeof r[col] === 'string') {
+          try { r[col] = JSON.parse(r[col] as string); } catch { /* leave as-is */ }
+        }
+      }
+      return r as T;
+    }));
   }
 
   async count(): Promise<number> {
@@ -166,6 +179,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
   implements Repository<T, PK, PKType>
 {
   private columns: Record<string, SQLiteColumn>;
+  private jsonColumns: Set<string>;
 
   constructor(
     private db: DrizzleDB,
@@ -175,26 +189,85 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     private sqliteRaw?: unknown,
   ) {
     // Extract columns from table definition
-    this.columns = (table as unknown as { _: { columns: Record<string, SQLiteColumn> } })._.columns;
+    const tableInternal = table as unknown as { _: { columns: Record<string, SQLiteColumn> } };
+    if (!tableInternal._) {
+      // Fallback: table might have columns at a different path
+      // Try to extract columns directly from table definition keys
+      const tableAny = table as unknown as Record<string, unknown>;
+      this.columns = {};
+      for (const key of Object.keys(zodSchema.shape)) {
+        if (tableAny[key]) {
+          this.columns[key] = tableAny[key] as SQLiteColumn;
+        }
+      }
+      if (Object.keys(this.columns).length === 0) {
+        throw new Error(`Invalid table structure: cannot extract columns`);
+      }
+    } else if (!tableInternal._.columns) {
+      throw new Error(`Invalid table structure: _.columns is undefined`);
+    } else {
+      this.columns = tableInternal._.columns;
+    }
+
+    // Identify columns that store JSON (arrays/objects stored as TEXT)
+    this.jsonColumns = new Set<string>();
+    for (const [fieldName, zodType] of Object.entries(zodSchema.shape)) {
+      const inner = zodType instanceof z.ZodOptional ? zodType.unwrap() : zodType;
+      if (inner instanceof z.ZodArray || inner instanceof z.ZodObject) {
+        this.jsonColumns.add(fieldName);
+      }
+    }
+  }
+
+  /** Serialize JSON columns to strings before writing to SQLite */
+  private serializeJson(data: Record<string, unknown>): Record<string, unknown> {
+    if (this.jsonColumns.size === 0) return data;
+    const result = { ...data };
+    for (const col of this.jsonColumns) {
+      if (col in result && result[col] !== null && result[col] !== undefined) {
+        if (typeof result[col] !== 'string') {
+          result[col] = JSON.stringify(result[col]);
+        }
+      }
+    }
+    return result;
+  }
+
+  /** Deserialize JSON columns from strings after reading from SQLite */
+  private deserializeJson<R>(row: R): R {
+    if (this.jsonColumns.size === 0) return row;
+    const result = { ...(row as Record<string, unknown>) };
+    for (const col of this.jsonColumns) {
+      if (col in result && typeof result[col] === 'string') {
+        try {
+          result[col] = JSON.parse(result[col] as string);
+        } catch {
+          // Leave as string if not valid JSON
+        }
+      }
+    }
+    return result as R;
   }
 
   async insert(data: Omit<T, PK> & Partial<Pick<T, PK>>): Promise<T> {
     // Validate with Zod
     const validated = this.zodSchema.parse(data) as T;
+    const serialized = this.serializeJson(validated as Record<string, unknown>);
 
     // better-sqlite3 uses synchronous API
-    const stmt = this.db.insert(this.table).values(validated as Record<string, unknown>);
+    const stmt = this.db.insert(this.table).values(serialized);
     const result = stmt.returning().all();
-    return Promise.resolve(result[0] as T);
+    return Promise.resolve(this.deserializeJson(result[0] as T));
   }
 
   async insertMany(data: Array<Omit<T, PK> & Partial<Pick<T, PK>>>): Promise<T[]> {
     // Validate all
     const validated = data.map((d) => this.zodSchema.parse(d)) as T[];
+    const serialized = validated.map(v => this.serializeJson(v as Record<string, unknown>));
 
-    const stmt = this.db.insert(this.table).values(validated as Record<string, unknown>[]);
+    const stmt = this.db.insert(this.table).values(serialized);
     const result = stmt.returning().all();
-    return Promise.resolve(result as T[]);
+    return Promise.resolve((result as T[]).map(r => this.deserializeJson(r)));
   }
 
   async findById(id: PKType): Promise<T | null> {
@@ -203,7 +276,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
 
     const result = this.db.select().from(this.table).where(eq(pkColumn, id)).limit(1).all();
 
-    return Promise.resolve((result[0] as T) ?? null);
+    return Promise.resolve(result[0] ? this.deserializeJson(result[0] as T) : null);
   }
 
   async findFirst(filter: Filter<T>): Promise<T | null> {
@@ -215,7 +288,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     }
 
     const result = query.limit(1).all();
-    return Promise.resolve((result[0] as T) ?? null);
+    return Promise.resolve(result[0] ? this.deserializeJson(result[0] as T) : null);
   }
 
   async findMany(filter?: Filter<T>): Promise<T[]> {
@@ -228,7 +301,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
       }
     }
 
-    return Promise.resolve(query.all() as T[]);
+    return Promise.resolve((query.all() as T[]).map(r => this.deserializeJson(r)));
   }
 
   async update(id: PKType, data: Partial<T>): Promise<T> {
@@ -238,10 +311,11 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     // Partial validation - only validate provided fields
     const partialSchema = this.zodSchema.partial();
     const validated = partialSchema.parse(data);
+    const serialized = this.serializeJson(validated as Record<string, unknown>);
 
     const result = this.db
       .update(this.table)
-      .set(validated as Record<string, unknown>)
+      .set(serialized)
       .where(eq(pkColumn, id))
       .returning()
       .all();
@@ -250,7 +324,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
       throw new Error(`Record not found: ${id}`);
     }
 
-    return Promise.resolve(result[0] as T);
+    return Promise.resolve(this.deserializeJson(result[0] as T));
   }
 
   async updateMany(filter: Filter<T>, data: Partial<T>): Promise<number> {
@@ -259,10 +333,11 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     // Partial validation
     const partialSchema = this.zodSchema.partial();
     const validated = partialSchema.parse(data);
+    const serialized = this.serializeJson(validated as Record<string, unknown>);
 
     const result = this.db
       .update(this.table)
-      .set(validated as Record<string, unknown>)
+      .set(serialized)
       .where(and(...conditions))
       .run();
 
@@ -307,7 +382,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
   }
 
   query(): QueryBuilder<T> {
-    return new QueryBuilderImpl(this.db, this.table, this.columns);
+    return new QueryBuilderImpl(this.db, this.table, this.columns, this.jsonColumns);
   }
 
   async raw(sqlStr: string, params?: unknown[]): Promise<unknown[]> {
