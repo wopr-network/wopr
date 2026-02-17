@@ -25,11 +25,13 @@ vi.mock("../../src/logger.js", () => ({
 const mockLoadedPlugins = new Map<string, any>();
 const mockPluginManifests = new Map<string, any>();
 const mockConfigSchemas = new Map<string, any>();
+const mockPluginStates = new Map<string, any>();
 
 vi.mock("../../src/plugins/state.js", () => ({
   loadedPlugins: mockLoadedPlugins,
   pluginManifests: mockPluginManifests,
   configSchemas: mockConfigSchemas,
+  pluginStates: mockPluginStates,
   WOPR_HOME: "/tmp/wopr-test",
   PLUGINS_DIR: "/tmp/wopr-test/plugins",
   PLUGINS_FILE: "/tmp/wopr-test/plugins.json",
@@ -79,6 +81,7 @@ beforeEach(async () => {
   mockLoadedPlugins.clear();
   mockPluginManifests.clear();
   mockConfigSchemas.clear();
+  mockPluginStates.clear();
 
   const mod = await import("../../src/plugins/loading.js");
   readPluginManifest = mod.readPluginManifest;

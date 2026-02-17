@@ -48,12 +48,24 @@ beforeEach(async () => {
   vi.resetModules();
   // Create fresh test directory
   mkdirSync(TEST_WOPR_HOME, { recursive: true });
+
+  // Initialize pairing storage (required for pairing module)
+  const { initPairing } = await import("../../src/core/pairing-store.js");
+  await initPairing();
   pairing = await import("../../src/core/pairing.js");
   pairingCommands = await import("../../src/core/pairing-commands.js");
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Reset storage
+  const resetStorageFn = async () => {
+    const { resetStorage } = await import("../../src/storage/index.js");
+    const { resetPairingStoreState } = await import("../../src/core/pairing-store.js");
+    resetStorage();
+    resetPairingStoreState();
+  };
+  resetStorageFn();
   // Clean up test directory
   if (existsSync(TEST_WOPR_HOME)) {
     rmSync(TEST_WOPR_HOME, { recursive: true, force: true });
@@ -65,8 +77,8 @@ afterEach(() => {
 // ============================================================================
 
 describe("Identity Management", () => {
-  it("should create a new identity with default trust level", () => {
-    const identity = pairing.createIdentity("alice");
+  it("should create a new identity with default trust level", async () => {
+    const identity = await pairing.createIdentity("alice");
     expect(identity.name).toBe("alice");
     expect(identity.trustLevel).toBe("semi-trusted");
     expect(identity.links).toEqual([]);
@@ -74,76 +86,76 @@ describe("Identity Management", () => {
     expect(identity.createdAt).toBeGreaterThan(0);
   });
 
-  it("should create identity with specified trust level", () => {
-    const identity = pairing.createIdentity("bob", "trusted");
+  it("should create identity with specified trust level", async () => {
+    const identity = await pairing.createIdentity("bob", "trusted");
     expect(identity.trustLevel).toBe("trusted");
   });
 
-  it("should reject duplicate identity names", () => {
-    pairing.createIdentity("alice");
-    expect(() => pairing.createIdentity("alice")).toThrow('Identity with name "alice" already exists');
+  it("should reject duplicate identity names", async () => {
+    await pairing.createIdentity("alice");
+    await expect(pairing.createIdentity("alice")).rejects.toThrow('Identity with name "alice" already exists');
   });
 
-  it("should get identity by ID", () => {
-    const created = pairing.createIdentity("alice");
-    const found = pairing.getIdentity(created.id);
+  it("should get identity by ID", async () => {
+    const created = await pairing.createIdentity("alice");
+    const found = await pairing.getIdentity(created.id);
     expect(found).toBeDefined();
     expect(found!.name).toBe("alice");
   });
 
-  it("should return undefined for unknown ID", () => {
-    expect(pairing.getIdentity("nonexistent")).toBeUndefined();
+  it("should return undefined for unknown ID", async () => {
+    expect(await pairing.getIdentity("nonexistent")).toBeNull();
   });
 
-  it("should get identity by name", () => {
-    pairing.createIdentity("alice");
-    const found = pairing.getIdentityByName("alice");
+  it("should get identity by name", async () => {
+    await pairing.createIdentity("alice");
+    const found = await pairing.getIdentityByName("alice");
     expect(found).toBeDefined();
     expect(found!.name).toBe("alice");
   });
 
-  it("should return undefined for unknown name", () => {
-    expect(pairing.getIdentityByName("nobody")).toBeUndefined();
+  it("should return undefined for unknown name", async () => {
+    expect(await pairing.getIdentityByName("nobody")).toBeNull();
   });
 
-  it("should list all identities", () => {
-    pairing.createIdentity("alice");
-    pairing.createIdentity("bob");
-    const list = pairing.listIdentities();
+  it("should list all identities", async () => {
+    await pairing.createIdentity("alice");
+    await pairing.createIdentity("bob");
+    const list = await pairing.listIdentities();
     expect(list).toHaveLength(2);
     expect(list.map((i) => i.name).sort()).toEqual(["alice", "bob"]);
   });
 
-  it("should update identity trust level", () => {
-    const identity = pairing.createIdentity("alice", "untrusted");
-    const updated = pairing.setIdentityTrustLevel(identity.id, "trusted");
+  it("should update identity trust level", async () => {
+    const identity = await pairing.createIdentity("alice", "untrusted");
+    const updated = await pairing.setIdentityTrustLevel(identity.id, "trusted");
     expect(updated.trustLevel).toBe("trusted");
 
     // Verify persistence
-    const loaded = pairing.getIdentity(identity.id);
+    const loaded = await pairing.getIdentity(identity.id);
     expect(loaded!.trustLevel).toBe("trusted");
   });
 
-  it("should throw when updating trust for nonexistent identity", () => {
-    expect(() => pairing.setIdentityTrustLevel("fake-id", "trusted")).toThrow("Identity not found");
+  it("should throw when updating trust for nonexistent identity", async () => {
+    await expect(pairing.setIdentityTrustLevel("fake-id", "trusted")).rejects.toThrow("Identity not found");
   });
 
-  it("should remove identity", () => {
-    const identity = pairing.createIdentity("alice");
-    const result = pairing.removeIdentity(identity.id);
+  it("should remove identity", async () => {
+    const identity = await pairing.createIdentity("alice");
+    const result = await pairing.removeIdentity(identity.id);
     expect(result).toBe(true);
-    expect(pairing.getIdentity(identity.id)).toBeUndefined();
+    expect(await pairing.getIdentity(identity.id)).toBeNull();
   });
 
-  it("should return false when removing nonexistent identity", () => {
-    expect(pairing.removeIdentity("fake-id")).toBe(false);
+  it("should return false when removing nonexistent identity", async () => {
+    expect(await pairing.removeIdentity("fake-id")).toBe(false);
   });
 
-  it("should remove pending codes when removing identity", () => {
-    const code = pairing.generatePairingCode("alice", "trusted");
-    const identity = pairing.getIdentityByName("alice");
-    pairing.removeIdentity(identity!.id);
-    expect(pairing.listPendingCodes()).toHaveLength(0);
+  it("should remove pending codes when removing identity", async () => {
+    const code = await pairing.generatePairingCode("alice", "trusted");
+    const identity = await pairing.getIdentityByName("alice");
+    await pairing.removeIdentity(identity!.id);
+    expect(await pairing.listPendingCodes()).toHaveLength(0);
   });
 });
 
@@ -152,72 +164,72 @@ describe("Identity Management", () => {
 // ============================================================================
 
 describe("Platform Linking", () => {
-  it("should link a platform sender to an identity", () => {
-    const identity = pairing.createIdentity("alice");
-    const linked = pairing.linkPlatform(identity.id, "discord", "discord-user-123");
+  it("should link a platform sender to an identity", async () => {
+    const identity = await pairing.createIdentity("alice");
+    const linked = await pairing.linkPlatform(identity.id, "discord", "discord-user-123");
     expect(linked.links).toHaveLength(1);
     expect(linked.links[0].channelType).toBe("discord");
     expect(linked.links[0].senderId).toBe("discord-user-123");
   });
 
-  it("should support multiple platforms on one identity", () => {
-    const identity = pairing.createIdentity("alice");
-    pairing.linkPlatform(identity.id, "discord", "discord-123");
-    const linked = pairing.linkPlatform(identity.id, "telegram", "tg-456");
+  it("should support multiple platforms on one identity", async () => {
+    const identity = await pairing.createIdentity("alice");
+    await pairing.linkPlatform(identity.id, "discord", "discord-123");
+    const linked = await pairing.linkPlatform(identity.id, "telegram", "tg-456");
     expect(linked.links).toHaveLength(2);
   });
 
-  it("should update existing link for same channel type", () => {
-    const identity = pairing.createIdentity("alice");
-    pairing.linkPlatform(identity.id, "discord", "old-id");
-    const updated = pairing.linkPlatform(identity.id, "discord", "new-id");
+  it("should update existing link for same channel type", async () => {
+    const identity = await pairing.createIdentity("alice");
+    await pairing.linkPlatform(identity.id, "discord", "old-id");
+    const updated = await pairing.linkPlatform(identity.id, "discord", "new-id");
     expect(updated.links).toHaveLength(1);
     expect(updated.links[0].senderId).toBe("new-id");
   });
 
-  it("should reject linking sender already linked to another identity", () => {
-    const alice = pairing.createIdentity("alice");
-    const bob = pairing.createIdentity("bob");
-    pairing.linkPlatform(alice.id, "discord", "user-123");
-    expect(() => pairing.linkPlatform(bob.id, "discord", "user-123")).toThrow("already linked");
+  it("should reject linking sender already linked to another identity", async () => {
+    const alice = await pairing.createIdentity("alice");
+    const bob = await pairing.createIdentity("bob");
+    await pairing.linkPlatform(alice.id, "discord", "user-123");
+    await expect(pairing.linkPlatform(bob.id, "discord", "user-123")).rejects.toThrow("already linked");
   });
 
-  it("should throw when linking to nonexistent identity", () => {
-    expect(() => pairing.linkPlatform("fake-id", "discord", "user-123")).toThrow("Identity not found");
+  it("should throw when linking to nonexistent identity", async () => {
+    await expect(pairing.linkPlatform("fake-id", "discord", "user-123")).rejects.toThrow("Identity not found");
   });
 
-  it("should find identity by sender", () => {
-    const identity = pairing.createIdentity("alice");
-    pairing.linkPlatform(identity.id, "discord", "user-123");
-    const found = pairing.findIdentityBySender("discord", "user-123");
+  it("should find identity by sender", async () => {
+    const identity = await pairing.createIdentity("alice");
+    await pairing.linkPlatform(identity.id, "discord", "user-123");
+    const found = await pairing.findIdentityBySender("discord", "user-123");
     expect(found).toBeDefined();
     expect(found!.name).toBe("alice");
   });
 
-  it("should return undefined for unknown sender", () => {
-    expect(pairing.findIdentityBySender("discord", "unknown")).toBeUndefined();
+  it("should return undefined for unknown sender", async () => {
+    expect(await pairing.findIdentityBySender("discord", "unknown")).toBeNull();
   });
 
-  it("should unlink platform from identity", () => {
-    const identity = pairing.createIdentity("alice");
-    pairing.linkPlatform(identity.id, "discord", "user-123");
-    pairing.linkPlatform(identity.id, "telegram", "tg-456");
+  it("should unlink platform from identity", async () => {
+    const identity = await pairing.createIdentity("alice");
+    await pairing.linkPlatform(identity.id, "discord", "user-123");
+    await pairing.linkPlatform(identity.id, "telegram", "tg-456");
 
-    const result = pairing.unlinkPlatform(identity.id, "discord");
+    const result = await pairing.unlinkPlatform(identity.id, "discord");
     expect(result).toBe(true);
 
-    const updated = pairing.getIdentity(identity.id);
+    const updated = await pairing.getIdentity(identity.id);
     expect(updated!.links).toHaveLength(1);
     expect(updated!.links[0].channelType).toBe("telegram");
   });
 
-  it("should return false when unlinking nonexistent platform", () => {
-    const identity = pairing.createIdentity("alice");
-    expect(pairing.unlinkPlatform(identity.id, "discord")).toBe(false);
+  it("should return false when unlinking nonexistent platform", async () => {
+    const identity = await pairing.createIdentity("alice");
+    expect(await pairing.unlinkPlatform(identity.id, "discord")).toBe(false);
   });
 
-  it("should return false when unlinking from nonexistent identity", () => {
-    expect(pairing.unlinkPlatform("fake-id", "discord")).toBe(false);
+  it("should return false when unlinking from nonexistent identity", async () => {
+    expect(await pairing.unlinkPlatform("fake-id", "discord")).toBe(false);
   });
 });
 
@@ -226,116 +238,117 @@ describe("Platform Linking", () => {
 // ============================================================================
 
 describe("Pairing Code Flow", () => {
-  it("should generate a pairing code for a new identity", () => {
-    const code = pairing.generatePairingCode("alice", "trusted");
+  it("should generate a pairing code for a new identity", async () => {
+    const code = await pairing.generatePairingCode("alice", "trusted");
     expect(code.code).toHaveLength(6);
     expect(code.trustLevel).toBe("trusted");
     expect(code.expiresAt).toBeGreaterThan(Date.now());
 
     // Identity should have been created
-    const identity = pairing.getIdentityByName("alice");
+    const identity = await pairing.getIdentityByName("alice");
     expect(identity).toBeDefined();
   });
 
-  it("should generate code for existing identity", () => {
-    pairing.createIdentity("alice", "untrusted");
-    const code = pairing.generatePairingCode("alice", "trusted");
+  it("should generate code for existing identity", async () => {
+    await pairing.createIdentity("alice", "untrusted");
+    const code = await pairing.generatePairingCode("alice", "trusted");
     expect(code.trustLevel).toBe("trusted");
 
     // Should still be just one identity
-    expect(pairing.listIdentities()).toHaveLength(1);
+    expect(await pairing.listIdentities()).toHaveLength(1);
   });
 
-  it("should revoke previous code when generating new one", () => {
-    const code1 = pairing.generatePairingCode("alice", "trusted");
-    const code2 = pairing.generatePairingCode("alice", "trusted");
+  it("should revoke previous code when generating new one", async () => {
+    const code1 = await pairing.generatePairingCode("alice", "trusted");
+    const code2 = await pairing.generatePairingCode("alice", "trusted");
     expect(code1.code).not.toBe(code2.code);
 
     // Only one pending code should exist
-    expect(pairing.listPendingCodes()).toHaveLength(1);
-    expect(pairing.listPendingCodes()[0].code).toBe(code2.code);
+    const pendingCodes = await pairing.listPendingCodes();
+    expect(pendingCodes).toHaveLength(1);
+    expect(pendingCodes[0].code).toBe(code2.code);
   });
 
-  it("should verify valid pairing code and link sender", () => {
-    const code = pairing.generatePairingCode("alice", "trusted");
-    const result = pairing.verifyPairingCode(code.code, "discord", "user-123");
+  it("should verify valid pairing code and link sender", async () => {
+    const code = await pairing.generatePairingCode("alice", "trusted");
+    const result = await pairing.verifyPairingCode(code.code, "discord", "user-123");
 
     expect(result).toBeDefined();
     expect(result!.identity.name).toBe("alice");
     expect(result!.trustLevel).toBe("trusted");
 
     // Sender should be linked
-    const identity = pairing.findIdentityBySender("discord", "user-123");
+    const identity = await pairing.findIdentityBySender("discord", "user-123");
     expect(identity).toBeDefined();
     expect(identity!.name).toBe("alice");
   });
 
-  it("should be case-insensitive for pairing codes", () => {
-    const code = pairing.generatePairingCode("alice", "trusted");
-    const result = pairing.verifyPairingCode(code.code.toLowerCase(), "discord", "user-123");
+  it("should be case-insensitive for pairing codes", async () => {
+    const code = await pairing.generatePairingCode("alice", "trusted");
+    const result = await pairing.verifyPairingCode(code.code.toLowerCase(), "discord", "user-123");
     expect(result).toBeDefined();
     expect(result!.identity.name).toBe("alice");
   });
 
-  it("should consume code after verification", () => {
-    const code = pairing.generatePairingCode("alice", "trusted");
-    pairing.verifyPairingCode(code.code, "discord", "user-123");
+  it("should consume code after verification", async () => {
+    const code = await pairing.generatePairingCode("alice", "trusted");
+    await pairing.verifyPairingCode(code.code, "discord", "user-123");
 
     // Code should be consumed
-    expect(pairing.listPendingCodes()).toHaveLength(0);
+    expect(await pairing.listPendingCodes()).toHaveLength(0);
 
     // Second attempt should fail
-    const result2 = pairing.verifyPairingCode(code.code, "telegram", "tg-456");
+    const result2 = await pairing.verifyPairingCode(code.code, "telegram", "tg-456");
     expect(result2).toBeNull();
   });
 
-  it("should reject expired pairing code", () => {
+  it("should reject expired pairing code", async () => {
     // Generate code with 0ms expiry (already expired)
-    const code = pairing.generatePairingCode("alice", "trusted", 0);
-    const result = pairing.verifyPairingCode(code.code, "discord", "user-123");
+    const code = await pairing.generatePairingCode("alice", "trusted", 0);
+    const result = await pairing.verifyPairingCode(code.code, "discord", "user-123");
     expect(result).toBeNull();
   });
 
-  it("should reject invalid pairing code", () => {
-    const result = pairing.verifyPairingCode("BADCODE", "discord", "user-123");
+  it("should reject invalid pairing code", async () => {
+    const result = await pairing.verifyPairingCode("BADCODE", "discord", "user-123");
     expect(result).toBeNull();
   });
 
-  it("should reject if sender already linked to another identity", () => {
+  it("should reject if sender already linked to another identity", async () => {
     // Link user-123 to bob
-    const bob = pairing.createIdentity("bob");
-    pairing.linkPlatform(bob.id, "discord", "user-123");
+    const bob = await pairing.createIdentity("bob");
+    await pairing.linkPlatform(bob.id, "discord", "user-123");
 
     // Try to pair user-123 to alice via code
-    const code = pairing.generatePairingCode("alice", "trusted");
-    const result = pairing.verifyPairingCode(code.code, "discord", "user-123");
+    const code = await pairing.generatePairingCode("alice", "trusted");
+    const result = await pairing.verifyPairingCode(code.code, "discord", "user-123");
     expect(result).toBeNull();
   });
 
-  it("should apply trust level from code to identity", () => {
-    pairing.createIdentity("alice", "untrusted");
-    const code = pairing.generatePairingCode("alice", "owner");
-    pairing.verifyPairingCode(code.code, "discord", "user-123");
+  it("should apply trust level from code to identity", async () => {
+    await pairing.createIdentity("alice", "untrusted");
+    const code = await pairing.generatePairingCode("alice", "owner");
+    await pairing.verifyPairingCode(code.code, "discord", "user-123");
 
-    const identity = pairing.getIdentityByName("alice");
+    const identity = await pairing.getIdentityByName("alice");
     expect(identity!.trustLevel).toBe("owner");
   });
 
-  it("should list pending codes excluding expired", () => {
-    pairing.generatePairingCode("alice", "trusted");
-    pairing.generatePairingCode("bob", "trusted", 0); // expired
-    const codes = pairing.listPendingCodes();
+  it("should list pending codes excluding expired", async () => {
+    await pairing.generatePairingCode("alice", "trusted");
+    await pairing.generatePairingCode("bob", "trusted", 0); // expired
+    const codes = await pairing.listPendingCodes();
     expect(codes).toHaveLength(1);
   });
 
-  it("should revoke a pending code", () => {
-    const code = pairing.generatePairingCode("alice", "trusted");
-    expect(pairing.revokePairingCode(code.code)).toBe(true);
-    expect(pairing.listPendingCodes()).toHaveLength(0);
+  it("should revoke a pending code", async () => {
+    const code = await pairing.generatePairingCode("alice", "trusted");
+    expect(await pairing.revokePairingCode(code.code)).toBe(true);
+    expect(await pairing.listPendingCodes()).toHaveLength(0);
   });
 
-  it("should return false when revoking nonexistent code", () => {
-    expect(pairing.revokePairingCode("ABCDEF")).toBe(false);
+  it("should return false when revoking nonexistent code", async () => {
+    expect(await pairing.revokePairingCode("ABCDEF")).toBe(false);
   });
 });
 
@@ -344,34 +357,34 @@ describe("Pairing Code Flow", () => {
 // ============================================================================
 
 describe("Trust Level Resolution", () => {
-  it("should return trust level for paired sender", () => {
-    const identity = pairing.createIdentity("alice", "trusted");
-    pairing.linkPlatform(identity.id, "discord", "user-123");
-    expect(pairing.resolveTrustLevel("discord", "user-123")).toBe("trusted");
+  it("should return trust level for paired sender", async () => {
+    const identity = await pairing.createIdentity("alice", "trusted");
+    await pairing.linkPlatform(identity.id, "discord", "user-123");
+    expect(await pairing.resolveTrustLevel("discord", "user-123")).toBe("trusted");
   });
 
-  it("should return untrusted for unpaired sender", () => {
-    expect(pairing.resolveTrustLevel("discord", "unknown")).toBe("untrusted");
+  it("should return untrusted for unpaired sender", async () => {
+    expect(await pairing.resolveTrustLevel("discord", "unknown")).toBe("untrusted");
   });
 
-  it("should return consistent trust across channels", () => {
-    const identity = pairing.createIdentity("alice", "owner");
-    pairing.linkPlatform(identity.id, "discord", "discord-123");
-    pairing.linkPlatform(identity.id, "telegram", "tg-456");
+  it("should return consistent trust across channels", async () => {
+    const identity = await pairing.createIdentity("alice", "owner");
+    await pairing.linkPlatform(identity.id, "discord", "discord-123");
+    await pairing.linkPlatform(identity.id, "telegram", "tg-456");
 
-    expect(pairing.resolveTrustLevel("discord", "discord-123")).toBe("owner");
-    expect(pairing.resolveTrustLevel("telegram", "tg-456")).toBe("owner");
+    expect(await pairing.resolveTrustLevel("discord", "discord-123")).toBe("owner");
+    expect(await pairing.resolveTrustLevel("telegram", "tg-456")).toBe("owner");
   });
 
-  it("should reflect trust level changes across all channels", () => {
-    const identity = pairing.createIdentity("alice", "trusted");
-    pairing.linkPlatform(identity.id, "discord", "d-1");
-    pairing.linkPlatform(identity.id, "telegram", "t-1");
+  it("should reflect trust level changes across all channels", async () => {
+    const identity = await pairing.createIdentity("alice", "trusted");
+    await pairing.linkPlatform(identity.id, "discord", "d-1");
+    await pairing.linkPlatform(identity.id, "telegram", "t-1");
 
-    pairing.setIdentityTrustLevel(identity.id, "semi-trusted");
+    await pairing.setIdentityTrustLevel(identity.id, "semi-trusted");
 
-    expect(pairing.resolveTrustLevel("discord", "d-1")).toBe("semi-trusted");
-    expect(pairing.resolveTrustLevel("telegram", "t-1")).toBe("semi-trusted");
+    expect(await pairing.resolveTrustLevel("discord", "d-1")).toBe("semi-trusted");
+    expect(await pairing.resolveTrustLevel("telegram", "t-1")).toBe("semi-trusted");
   });
 });
 
@@ -380,47 +393,47 @@ describe("Trust Level Resolution", () => {
 // ============================================================================
 
 describe("Cross-Channel Scenarios", () => {
-  it("should pair user from Discord then recognize on Telegram", () => {
+  it("should pair user from Discord then recognize on Telegram", async () => {
     // Admin generates code
-    const code = pairing.generatePairingCode("alice", "trusted");
+    const code = await pairing.generatePairingCode("alice", "trusted");
 
     // User verifies from Discord
-    pairing.verifyPairingCode(code.code, "discord", "discord-alice");
+    await pairing.verifyPairingCode(code.code, "discord", "discord-alice");
 
     // Later, user links Telegram via direct linkPlatform (admin action)
-    const identity = pairing.getIdentityByName("alice")!;
-    pairing.linkPlatform(identity.id, "telegram", "tg-alice");
+    const identity = await pairing.getIdentityByName("alice")!;
+    await pairing.linkPlatform(identity.id, "telegram", "tg-alice");
 
     // Both channels should resolve to same identity
-    const fromDiscord = pairing.findIdentityBySender("discord", "discord-alice");
-    const fromTelegram = pairing.findIdentityBySender("telegram", "tg-alice");
+    const fromDiscord = await pairing.findIdentityBySender("discord", "discord-alice");
+    const fromTelegram = await pairing.findIdentityBySender("telegram", "tg-alice");
     expect(fromDiscord!.id).toBe(fromTelegram!.id);
   });
 
-  it("should allow multiple users with different trust levels", () => {
-    const codeAlice = pairing.generatePairingCode("alice", "owner");
-    const codeBob = pairing.generatePairingCode("bob", "untrusted");
+  it("should allow multiple users with different trust levels", async () => {
+    const codeAlice = await pairing.generatePairingCode("alice", "owner");
+    const codeBob = await pairing.generatePairingCode("bob", "untrusted");
 
-    pairing.verifyPairingCode(codeAlice.code, "discord", "alice-d");
-    pairing.verifyPairingCode(codeBob.code, "discord", "bob-d");
+    await pairing.verifyPairingCode(codeAlice.code, "discord", "alice-d");
+    await pairing.verifyPairingCode(codeBob.code, "discord", "bob-d");
 
-    expect(pairing.resolveTrustLevel("discord", "alice-d")).toBe("owner");
-    expect(pairing.resolveTrustLevel("discord", "bob-d")).toBe("untrusted");
+    expect(await pairing.resolveTrustLevel("discord", "alice-d")).toBe("owner");
+    expect(await pairing.resolveTrustLevel("discord", "bob-d")).toBe("untrusted");
   });
 
-  it("should handle revoking identity and re-pairing", () => {
-    const code1 = pairing.generatePairingCode("alice", "trusted");
-    pairing.verifyPairingCode(code1.code, "discord", "alice-d");
+  it("should handle revoking identity and re-pairing", async () => {
+    const code1 = await pairing.generatePairingCode("alice", "trusted");
+    await pairing.verifyPairingCode(code1.code, "discord", "alice-d");
 
     // Revoke
-    const identity = pairing.getIdentityByName("alice")!;
-    pairing.removeIdentity(identity.id);
-    expect(pairing.resolveTrustLevel("discord", "alice-d")).toBe("untrusted");
+    const identity = await pairing.getIdentityByName("alice")!;
+    await pairing.removeIdentity(identity.id);
+    expect(await pairing.resolveTrustLevel("discord", "alice-d")).toBe("untrusted");
 
     // Re-pair with new identity
-    const code2 = pairing.generatePairingCode("alice-v2", "semi-trusted");
-    pairing.verifyPairingCode(code2.code, "discord", "alice-d");
-    expect(pairing.resolveTrustLevel("discord", "alice-d")).toBe("semi-trusted");
+    const code2 = await pairing.generatePairingCode("alice-v2", "semi-trusted");
+    await pairing.verifyPairingCode(code2.code, "discord", "alice-d");
+    expect(await pairing.resolveTrustLevel("discord", "alice-d")).toBe("semi-trusted");
   });
 });
 
@@ -445,9 +458,9 @@ describe("Channel Commands", () => {
   }
 
   /** Link test-user as owner so admin commands pass auth checks */
-  function makeOwner(): void {
-    const owner = pairing.createIdentity("test-owner", "owner");
-    pairing.linkPlatform(owner.id, "discord", "test-user");
+  async function makeOwner(): Promise<void> {
+    const owner = await pairing.createIdentity("test-owner", "owner");
+    await pairing.linkPlatform(owner.id, "discord", "test-user");
   }
 
   it("should show usage for empty command", async () => {
@@ -463,7 +476,7 @@ describe("Channel Commands", () => {
   });
 
   it("should generate a pairing code", async () => {
-    makeOwner();
+    await makeOwner();
     const ctx = makeCtx(["generate", "alice", "trusted"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Pairing code"));
@@ -471,21 +484,21 @@ describe("Channel Commands", () => {
   });
 
   it("should require name for generate", async () => {
-    makeOwner();
+    await makeOwner();
     const ctx = makeCtx(["generate"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
   });
 
   it("should reject invalid trust level for generate", async () => {
-    makeOwner();
+    await makeOwner();
     const ctx = makeCtx(["generate", "alice", "superadmin"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Invalid trust level"));
   });
 
   it("should verify a pairing code", async () => {
-    const code = pairing.generatePairingCode("alice", "trusted");
+    const code = await pairing.generatePairingCode("alice", "trusted");
     const ctx = makeCtx(["verify", code.code], { sender: "alice-user" });
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Paired successfully"));
@@ -504,9 +517,9 @@ describe("Channel Commands", () => {
   });
 
   it("should list identities", async () => {
-    makeOwner();
-    pairing.createIdentity("alice", "trusted");
-    pairing.createIdentity("bob", "untrusted");
+    await makeOwner();
+    await pairing.createIdentity("alice", "trusted");
+    await pairing.createIdentity("bob", "untrusted");
     const ctx = makeCtx(["list"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("alice"));
@@ -514,7 +527,7 @@ describe("Channel Commands", () => {
   });
 
   it("should show empty list message when only owner exists", async () => {
-    makeOwner();
+    await makeOwner();
     const ctx = makeCtx(["list"]);
     await pairingCommands.pairCommand.handler(ctx);
     // Owner identity exists, so it shows at least that
@@ -522,31 +535,31 @@ describe("Channel Commands", () => {
   });
 
   it("should deny revoke for non-owner", async () => {
-    pairing.createIdentity("alice");
+    await pairing.createIdentity("alice");
     const ctx = makeCtx(["revoke", "alice"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Permission denied"));
   });
 
   it("should revoke identity", async () => {
-    makeOwner();
-    pairing.createIdentity("alice");
+    await makeOwner();
+    await pairing.createIdentity("alice");
     const ctx = makeCtx(["revoke", "alice"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Revoked"));
-    expect(pairing.getIdentityByName("alice")).toBeUndefined();
+    expect(await pairing.getIdentityByName("alice")).toBeNull();
   });
 
   it("should handle revoking nonexistent identity", async () => {
-    makeOwner();
+    await makeOwner();
     const ctx = makeCtx(["revoke", "ghost"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("not found"));
   });
 
   it("should show whois for paired user", async () => {
-    const code = pairing.generatePairingCode("alice", "trusted");
-    pairing.verifyPairingCode(code.code, "discord", "test-user");
+    const code = await pairing.generatePairingCode("alice", "trusted");
+    await pairing.verifyPairingCode(code.code, "discord", "test-user");
 
     const ctx = makeCtx(["whois"]);
     await pairingCommands.pairCommand.handler(ctx);
@@ -567,21 +580,21 @@ describe("Channel Commands", () => {
   });
 
   it("should list pending codes", async () => {
-    makeOwner();
-    pairing.generatePairingCode("alice", "trusted");
+    await makeOwner();
+    await pairing.generatePairingCode("alice", "trusted");
     const ctx = makeCtx(["codes"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith(expect.stringContaining("Pending pairing codes"));
   });
 
   it("should show empty codes message", async () => {
-    makeOwner();
+    await makeOwner();
     const ctx = makeCtx(["codes"]);
     await pairingCommands.pairCommand.handler(ctx);
     expect(ctx.reply).toHaveBeenCalledWith("No pending pairing codes.");
   });
 
-  it("should register commands on a channel provider", () => {
+  it("should register commands on a channel provider", async () => {
     const provider = {
       id: "discord",
       registerCommand: vi.fn(),
@@ -600,7 +613,7 @@ describe("Channel Commands", () => {
     );
   });
 
-  it("should register on all providers", () => {
+  it("should register on all providers", async () => {
     const p1 = {
       id: "discord",
       registerCommand: vi.fn(),
@@ -636,12 +649,14 @@ describe("Channel Commands", () => {
 
 describe("Persistence", () => {
   it("should persist identities across module reloads", async () => {
-    pairing.createIdentity("persistent-alice", "trusted");
+    await pairing.createIdentity("persistent-alice", "trusted");
 
     // Re-import to simulate fresh load
     vi.resetModules();
+    const { initPairing } = await import("../../src/core/pairing-store.js");
+    await initPairing();
     const freshPairing = await import("../../src/core/pairing.js");
-    const found = freshPairing.getIdentityByName("persistent-alice");
+    const found = await freshPairing.getIdentityByName("persistent-alice");
     expect(found).toBeDefined();
     expect(found!.trustLevel).toBe("trusted");
   });
@@ -653,8 +668,10 @@ describe("Persistence", () => {
     writeFileSync(join(pairingDir, "identities.json"), "not valid json{{{");
 
     vi.resetModules();
+    const { initPairing } = await import("../../src/core/pairing-store.js");
+    await initPairing();
     const freshPairing = await import("../../src/core/pairing.js");
     // Should recover and return empty list
-    expect(freshPairing.listIdentities()).toEqual([]);
+    expect(await freshPairing.listIdentities()).toEqual([]);
   });
 });

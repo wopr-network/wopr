@@ -120,6 +120,13 @@ export class PairingStore {
   }
 
   /**
+   * Delete all codes for a specific identity
+   */
+  async deleteCodesByIdentityId(identityId: string): Promise<number> {
+    return this.codes.deleteMany({ identityId });
+  }
+
+  /**
    * Clean up expired codes
    */
   async cleanExpiredCodes(): Promise<number> {

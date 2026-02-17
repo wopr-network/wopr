@@ -29,7 +29,6 @@ import { loadedPlugins } from "../../src/plugins/state.js";
 import {
   _resetForTesting,
   checkReadiness,
-  markCronRunning,
   markStartupComplete,
 } from "../../src/daemon/readiness.js";
 
@@ -53,17 +52,9 @@ describe("readiness probe", () => {
     expect(result.checks.startup.message).toBe("Startup in progress");
   });
 
-  it("returns not ready when cron scheduler is not running", () => {
-    markStartupComplete();
-    const result = checkReadiness();
-    expect(result.checks.cron.healthy).toBe(false);
-    expect(result.checks.cron.message).toBe("Cron scheduler not started");
-  });
-
   it("checks memory db - file not found", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     markStartupComplete();
-    markCronRunning();
     const result = checkReadiness();
     expect(result.checks.memory.healthy).toBe(false);
     expect(result.checks.memory.message).toBe("Database file not found");
@@ -72,7 +63,6 @@ describe("readiness probe", () => {
   it("checks memory db - file exists and accessible", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     markStartupComplete();
-    markCronRunning();
     vi.mocked(providerRegistry.listProviders).mockReturnValue([
       { id: "test", name: "Test", available: true },
     ]);
@@ -129,7 +119,6 @@ describe("readiness probe", () => {
       { id: "openai", name: "OpenAI", available: true },
     ]);
     markStartupComplete();
-    markCronRunning();
     loadedPlugins.set("test-plugin", { plugin: {} as any, context: {} as any });
 
     const result = checkReadiness();
