@@ -87,11 +87,22 @@ describe("capability_discover tool", () => {
 
   it("should include config schemas when requested", () => {
     const registry = getCapabilityRegistry();
-    const configSchema = { apiKey: { type: "string", required: true } };
+    const configSchema = {
+      title: "ElevenLabs Configuration",
+      description: "API configuration for ElevenLabs TTS",
+      fields: [
+        {
+          name: "apiKey",
+          type: "password" as const,
+          label: "API Key",
+          required: true,
+        },
+      ],
+    };
     registry.registerProvider("tts", {
       id: "elevenlabs",
       name: "ElevenLabs",
-      configSchema: configSchema as any,
+      configSchema,
     });
 
     const providers = registry.getProviders("tts");
