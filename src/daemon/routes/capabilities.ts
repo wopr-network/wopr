@@ -172,7 +172,7 @@ capabilitiesRouter.post("/activate", mutateRateLimit, async (c) => {
       // Set WOPR-hosted config (auto-configure to api.wopr.bot)
       // Only set config if not already configured (don't overwrite existing user config)
       await centralConfig.load();
-      const cfg = centralConfig.get() as unknown as PluginConfigData;
+      const cfg = structuredClone(centralConfig.get()) as unknown as PluginConfigData;
       if (!cfg.plugins) cfg.plugins = {};
       if (!cfg.plugins.data) cfg.plugins.data = {};
 
