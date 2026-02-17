@@ -4,8 +4,11 @@
  * Tests policy resolution, enforcement checks, session access,
  * capability checking, tool access, and edge cases.
  */
+import { randomBytes } from "node:crypto";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdirSync, existsSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createMockFs } from "../mocks/index.js";
 
 // Mock the logger to suppress output during tests
 vi.mock("../../src/logger.js", () => ({
@@ -17,23 +20,14 @@ vi.mock("../../src/logger.js", () => ({
   },
 }));
 
-// Set up filesystem mock before importing policy module
-const mockFs = createMockFs();
-
-vi.mock("node:fs", async (importOriginal) => {
-  const actual = (await importOriginal()) as any;
-  return {
-    ...actual,
-    existsSync: (p: string) => mockFs.existsSync(p),
-    readFileSync: (p: string, enc?: string) => mockFs.readFileSync(p, enc),
-    writeFileSync: (p: string, content: string) => mockFs.writeFileSync(p, content),
-  };
-});
+// Import storage functions
+const { getStorage, resetStorage } = await import("../../src/storage/index.js");
 
 // Import after mocks are set up
 const {
   initSecurity,
   getSecurityConfig,
+  getSecurityConfigAsync,
   saveSecurityConfig,
   resolvePolicy,
   checkSessionAccess,
@@ -61,16 +55,18 @@ import type { InjectionSource, SecurityConfig } from "../../src/security/types.j
 // Helpers
 // ============================================================================
 
+let testDir: string;
+
 function makeSource(type: InjectionSource["type"], overrides?: Partial<InjectionSource>): InjectionSource {
   return createInjectionSource(type, overrides);
 }
 
-function setSecurityConfig(config: Partial<SecurityConfig>): void {
+async function setSecurityConfig(config: Partial<SecurityConfig>): Promise<void> {
   const full = {
     ...DEFAULT_SECURITY_CONFIG,
     ...config,
   };
-  mockFs.set("/mock/wopr/security.json", JSON.stringify(full));
+  await saveSecurityConfig(full);
 }
 
 // ============================================================================
@@ -78,13 +74,21 @@ function setSecurityConfig(config: Partial<SecurityConfig>): void {
 // ============================================================================
 
 describe("Security Policy Module", () => {
-  beforeEach(() => {
-    mockFs.clear();
-    // Reset cached config by re-initializing
-    initSecurity("/mock/wopr");
+  beforeEach(async () => {
+    // Create temp directory for test database
+    testDir = join(tmpdir(), `wopr-test-${randomBytes(8).toString("hex")}`);
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
+
+    // Reset storage and initialize security
+    resetStorage();
+    const storage = getStorage(join(testDir, "test.sqlite"));
+    await initSecurity(testDir);
   });
 
   afterEach(() => {
+    resetStorage();
     vi.restoreAllMocks();
   });
 
@@ -92,50 +96,49 @@ describe("Security Policy Module", () => {
   // Config Loading
   // ==========================================================================
   describe("getSecurityConfig", () => {
-    it("should return default config when no security.json exists", () => {
+    it("should return default config when no security.json exists", async () => {
       const config = getSecurityConfig();
       expect(config.enforcement).toBe("warn");
       expect(config.defaults.minTrustLevel).toBe("semi-trusted");
     });
 
-    it("should load and merge config from security.json", () => {
-      setSecurityConfig({ enforcement: "enforce" });
+    it("should load and merge config from security.json", async () => {
+      await setSecurityConfig({ enforcement: "enforce" });
 
-      const config = getSecurityConfig();
+      const config = await getSecurityConfigAsync();
       expect(config.enforcement).toBe("enforce");
       // Defaults should still be merged
       expect(config.defaults).toBeDefined();
     });
 
-    it("should cache loaded config on subsequent calls", () => {
-      setSecurityConfig({ enforcement: "enforce" });
+    it("should cache loaded config on subsequent calls", async () => {
+      await setSecurityConfig({ enforcement: "enforce" });
 
       const config1 = getSecurityConfig();
       const config2 = getSecurityConfig();
       expect(config1).toBe(config2); // Same reference (cached)
     });
 
-    it("should return default config when security.json is invalid JSON", () => {
-      mockFs.set("/mock/wopr/security.json", "not valid json{{{");
-
+    it("should return default config when not initialized", async () => {
+      // Before init, should return defaults
       const config = getSecurityConfig();
       expect(config.enforcement).toBe("warn"); // Falls back to default
     });
   });
 
   describe("saveSecurityConfig", () => {
-    it("should save config to security.json", () => {
+    it("should save config to SQL", async () => {
       const config = { ...DEFAULT_SECURITY_CONFIG, enforcement: "enforce" as const };
-      saveSecurityConfig(config);
+      await saveSecurityConfig(config);
 
-      const saved = JSON.parse(mockFs.get("/mock/wopr/security.json")!);
+      const saved = await getSecurityConfigAsync();
       expect(saved.enforcement).toBe("enforce");
     });
 
-    it("should write to the configured security.json path", () => {
+    it("should update the cached config", async () => {
       const config = { ...DEFAULT_SECURITY_CONFIG, enforcement: "off" as const };
-      saveSecurityConfig(config);
-      const saved = JSON.parse(mockFs.get("/mock/wopr/security.json")!);
+      await saveSecurityConfig(config);
+      const saved = getSecurityConfig();
       expect(saved.enforcement).toBe("off");
     });
   });
@@ -144,7 +147,7 @@ describe("Security Policy Module", () => {
   // Policy Resolution
   // ==========================================================================
   describe("resolvePolicy", () => {
-    it("should resolve owner trust level with wildcard capabilities", () => {
+    it("should resolve owner trust level with wildcard capabilities", async () => {
       const source = makeSource("cli"); // owner trust
       const policy = resolvePolicy(source);
 
@@ -152,7 +155,7 @@ describe("Security Policy Module", () => {
       expect(policy.capabilities).toContain("*");
     });
 
-    it("should resolve trusted with appropriate capability set", () => {
+    it("should resolve trusted with appropriate capability set", async () => {
       const source = makeSource("plugin"); // trusted
       const policy = resolvePolicy(source);
 
@@ -162,7 +165,7 @@ describe("Security Policy Module", () => {
       expect(policy.capabilities).toContain("session.spawn");
     });
 
-    it("should resolve semi-trusted with limited capabilities", () => {
+    it("should resolve semi-trusted with limited capabilities", async () => {
       const source = makeSource("api"); // semi-trusted
       const policy = resolvePolicy(source);
 
@@ -172,7 +175,7 @@ describe("Security Policy Module", () => {
       expect(policy.capabilities).not.toContain("memory.write");
     });
 
-    it("should resolve untrusted with minimal capabilities", () => {
+    it("should resolve untrusted with minimal capabilities", async () => {
       const source = makeSource("p2p"); // untrusted
       const policy = resolvePolicy(source);
 
@@ -180,7 +183,7 @@ describe("Security Policy Module", () => {
       expect(policy.capabilities).toEqual(["inject"]);
     });
 
-    it("should merge granted capabilities with base capabilities", () => {
+    it("should merge granted capabilities with base capabilities", async () => {
       const source = makeSource("p2p", {
         grantedCapabilities: ["memory.read", "session.history"],
       });
@@ -191,7 +194,7 @@ describe("Security Policy Module", () => {
       expect(policy.capabilities).toContain("session.history");
     });
 
-    it("should not duplicate granted capabilities already in base set", () => {
+    it("should not duplicate granted capabilities already in base set", async () => {
       const source = makeSource("p2p", {
         grantedCapabilities: ["inject"], // already in untrusted base
       });
@@ -201,7 +204,7 @@ describe("Security Policy Module", () => {
       expect(injectCount).toBe(1);
     });
 
-    it("should apply sandbox defaults by trust level", () => {
+    it("should apply sandbox defaults by trust level", async () => {
       const untrustedSource = makeSource("p2p");
       const untrustedPolicy = resolvePolicy(untrustedSource);
       expect(untrustedPolicy.sandbox.enabled).toBe(true);
@@ -212,7 +215,7 @@ describe("Security Policy Module", () => {
       expect(ownerPolicy.sandbox.enabled).toBe(false);
     });
 
-    it("should apply rate limits from defaults", () => {
+    it("should apply rate limits from defaults", async () => {
       const source = makeSource("api");
       const policy = resolvePolicy(source);
 
@@ -220,8 +223,8 @@ describe("Security Policy Module", () => {
       expect(policy.rateLimit.perHour).toBeGreaterThan(0);
     });
 
-    it("should apply trust level rate limit overrides", () => {
-      setSecurityConfig({
+    it("should apply trust level rate limit overrides", async () => {
+      await setSecurityConfig({
         trustLevels: {
           "semi-trusted": {
             capabilities: ["inject"],
@@ -237,8 +240,8 @@ describe("Security Policy Module", () => {
       expect(policy.rateLimit.perHour).toBe(100);
     });
 
-    it("should resolve session access from trust level policy", () => {
-      setSecurityConfig({
+    it("should resolve session access from trust level policy", async () => {
+      await setSecurityConfig({
         trustLevels: {
           untrusted: {
             capabilities: ["inject"],
@@ -257,7 +260,7 @@ describe("Security Policy Module", () => {
       expect(policy.blockedSessions).toEqual(["admin-session"]);
     });
 
-    it("should default to wildcard session access when no restrictions", () => {
+    it("should default to wildcard session access when no restrictions", async () => {
       const source = makeSource("cli");
       const policy = resolvePolicy(source);
 
@@ -265,8 +268,8 @@ describe("Security Policy Module", () => {
       expect(policy.blockedSessions).toEqual([]);
     });
 
-    it("should detect gateway sessions", () => {
-      setSecurityConfig({
+    it("should detect gateway sessions", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["discord-gateway"],
           forwardRules: {
@@ -286,8 +289,8 @@ describe("Security Policy Module", () => {
       expect(policy.forwardRules!.allowForwardTo).toContain("main");
     });
 
-    it("should set canForward when gateway and has cross.inject", () => {
-      setSecurityConfig({
+    it("should set canForward when gateway and has cross.inject", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["gateway-session"],
         },
@@ -305,8 +308,8 @@ describe("Security Policy Module", () => {
       expect(policy.canForward).toBe(true);
     });
 
-    it("should not canForward when gateway but no cross.inject", () => {
-      setSecurityConfig({
+    it("should not canForward when gateway but no cross.inject", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["gateway-session"],
         },
@@ -324,15 +327,15 @@ describe("Security Policy Module", () => {
   // Session Access Checks
   // ==========================================================================
   describe("checkSessionAccess", () => {
-    it("should allow owner to access any session", () => {
+    it("should allow owner to access any session", async () => {
       const source = makeSource("cli");
       const result = checkSessionAccess(source, "any-session");
 
       expect(result.allowed).toBe(true);
     });
 
-    it("should deny untrusted below minimum trust level", () => {
-      setSecurityConfig({
+    it("should deny untrusted below minimum trust level", async () => {
+      await setSecurityConfig({
         defaults: {
           ...DEFAULT_SECURITY_CONFIG.defaults,
           minTrustLevel: "trusted",
@@ -347,8 +350,8 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("below minimum");
     });
 
-    it("should deny access to blocked sessions", () => {
-      setSecurityConfig({
+    it("should deny access to blocked sessions", async () => {
+      await setSecurityConfig({
         trustLevels: {
           untrusted: {
             capabilities: ["inject"],
@@ -371,8 +374,8 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("blocked");
     });
 
-    it("should deny access when session not in allowed list", () => {
-      setSecurityConfig({
+    it("should deny access when session not in allowed list", async () => {
+      await setSecurityConfig({
         trustLevels: {
           untrusted: {
             capabilities: ["inject"],
@@ -395,8 +398,8 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("not in allowed list");
     });
 
-    it("should allow access when session is in allowed list and matches access patterns", () => {
-      setSecurityConfig({
+    it("should allow access when session is in allowed list and matches access patterns", async () => {
+      await setSecurityConfig({
         trustLevels: {
           "semi-trusted": {
             capabilities: ["inject"],
@@ -422,8 +425,8 @@ describe("Security Policy Module", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("should deny when source does not match session access patterns", () => {
-      setSecurityConfig({
+    it("should deny when source does not match session access patterns", async () => {
+      await setSecurityConfig({
         defaults: {
           ...DEFAULT_SECURITY_CONFIG.defaults,
           minTrustLevel: "untrusted",
@@ -447,21 +450,21 @@ describe("Security Policy Module", () => {
   // Capability Checks
   // ==========================================================================
   describe("checkCapability", () => {
-    it("should allow owner all capabilities via wildcard", () => {
+    it("should allow owner all capabilities via wildcard", async () => {
       const source = makeSource("cli");
       const result = checkCapability(source, "config.write");
 
       expect(result.allowed).toBe(true);
     });
 
-    it("should allow trusted sources their granted capabilities", () => {
+    it("should allow trusted sources their granted capabilities", async () => {
       const source = makeSource("plugin");
       const result = checkCapability(source, "inject.tools");
 
       expect(result.allowed).toBe(true);
     });
 
-    it("should deny untrusted sources capabilities they don't have", () => {
+    it("should deny untrusted sources capabilities they don't have", async () => {
       const source = makeSource("p2p");
       const result = checkCapability(source, "config.write");
 
@@ -469,7 +472,7 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("not granted");
     });
 
-    it("should allow explicitly granted capabilities to override base", () => {
+    it("should allow explicitly granted capabilities to override base", async () => {
       const source = makeSource("p2p", {
         grantedCapabilities: ["memory.read"],
       });
@@ -478,7 +481,7 @@ describe("Security Policy Module", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("should check parent capability (inject grants inject.tools)", () => {
+    it("should check parent capability (inject grants inject.tools)", async () => {
       // Semi-trusted has "inject" which should grant "inject.tools" via parent check
       const source = makeSource("api");
       const result = checkCapability(source, "inject.tools");
@@ -486,7 +489,7 @@ describe("Security Policy Module", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("should deny capabilities with no parent match", () => {
+    it("should deny capabilities with no parent match", async () => {
       const source = makeSource("p2p"); // only has "inject"
       const result = checkCapability(source, "config.read");
 
@@ -498,15 +501,15 @@ describe("Security Policy Module", () => {
   // Tool Access Checks
   // ==========================================================================
   describe("checkToolAccess", () => {
-    it("should allow owner access to all tools", () => {
+    it("should allow owner access to all tools", async () => {
       const source = makeSource("cli");
       const result = checkToolAccess(source, "config_set");
 
       expect(result.allowed).toBe(true);
     });
 
-    it("should deny explicitly denied tools", () => {
-      setSecurityConfig({
+    it("should deny explicitly denied tools", async () => {
+      await setSecurityConfig({
         enforcement: "enforce",
         trustLevels: {
           "semi-trusted": {
@@ -523,8 +526,8 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("denied");
     });
 
-    it("should allow explicitly allowed tools even when wildcard deny", () => {
-      setSecurityConfig({
+    it("should allow explicitly allowed tools even when wildcard deny", async () => {
+      await setSecurityConfig({
         enforcement: "enforce",
         trustLevels: {
           untrusted: {
@@ -540,8 +543,8 @@ describe("Security Policy Module", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("should return warning instead of deny in warn mode", () => {
-      setSecurityConfig({
+    it("should return warning instead of deny in warn mode", async () => {
+      await setSecurityConfig({
         enforcement: "warn",
         trustLevels: {
           untrusted: {
@@ -558,8 +561,8 @@ describe("Security Policy Module", () => {
       expect(result.warning).toContain("warn mode");
     });
 
-    it("should deny tools requiring capabilities the source lacks", () => {
-      setSecurityConfig({ enforcement: "enforce" });
+    it("should deny tools requiring capabilities the source lacks", async () => {
+      await setSecurityConfig({ enforcement: "enforce" });
 
       const source = makeSource("p2p"); // untrusted, only has "inject"
       // http_fetch requires inject.network, but untrusted has deny: ["*"]
@@ -570,7 +573,7 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("denied");
     });
 
-    it("should warn about missing capability in warn mode", () => {
+    it("should warn about missing capability in warn mode", async () => {
       // Default config is "warn" mode
       const source = makeSource("p2p");
       const result = checkToolAccess(source, "http_fetch");
@@ -579,7 +582,7 @@ describe("Security Policy Module", () => {
       expect(result.warning).toContain("warn mode");
     });
 
-    it("should allow tools with no capability requirement", () => {
+    it("should allow tools with no capability requirement", async () => {
       const source = makeSource("p2p");
       // A tool not in the TOOL_CAPABILITY_MAP has no requirement
       const result = checkToolAccess(source, "unknown_tool");
@@ -596,21 +599,21 @@ describe("Security Policy Module", () => {
   // Sandbox Checks
   // ==========================================================================
   describe("checkSandboxRequired", () => {
-    it("should not require sandbox for owner", () => {
+    it("should not require sandbox for owner", async () => {
       const source = makeSource("cli");
       const result = checkSandboxRequired(source);
 
       expect(result).toBeNull();
     });
 
-    it("should not require sandbox for trusted", () => {
+    it("should not require sandbox for trusted", async () => {
       const source = makeSource("plugin");
       const result = checkSandboxRequired(source);
 
       expect(result).toBeNull();
     });
 
-    it("should require sandbox for semi-trusted", () => {
+    it("should require sandbox for semi-trusted", async () => {
       const source = makeSource("api");
       const result = checkSandboxRequired(source);
 
@@ -619,7 +622,7 @@ describe("Security Policy Module", () => {
       expect(result!.network).toBe("bridge");
     });
 
-    it("should require sandbox for untrusted with stricter config", () => {
+    it("should require sandbox for untrusted with stricter config", async () => {
       const source = makeSource("p2p");
       const result = checkSandboxRequired(source);
 
@@ -633,7 +636,7 @@ describe("Security Policy Module", () => {
   // Tool Filtering
   // ==========================================================================
   describe("filterToolsByPolicy", () => {
-    it("should return all tools for owner", () => {
+    it("should return all tools for owner", async () => {
       const source = makeSource("cli");
       const tools = ["config_set", "http_fetch", "exec_command", "memory_write"];
       const filtered = filterToolsByPolicy(source, tools);
@@ -641,8 +644,8 @@ describe("Security Policy Module", () => {
       expect(filtered).toEqual(tools);
     });
 
-    it("should filter denied tools in enforce mode", () => {
-      setSecurityConfig({
+    it("should filter denied tools in enforce mode", async () => {
+      await setSecurityConfig({
         enforcement: "enforce",
         trustLevels: {
           untrusted: {
@@ -661,7 +664,7 @@ describe("Security Policy Module", () => {
       expect(filtered).not.toContain("http_fetch");
     });
 
-    it("should filter tools denied by wildcard even in warn mode", () => {
+    it("should filter tools denied by wildcard even in warn mode", async () => {
       // Default untrusted has tools: { deny: ["*"] }
       // filterToolsByPolicy checks deny list first - deny list is enforced
       // even in warn mode (warn mode only applies to capability checks)
@@ -678,18 +681,18 @@ describe("Security Policy Module", () => {
   // Enforcement Mode
   // ==========================================================================
   describe("isEnforcementEnabled", () => {
-    it("should return false for default config (warn mode)", () => {
+    it("should return false for default config (warn mode)", async () => {
       expect(isEnforcementEnabled()).toBe(false);
     });
 
-    it("should return true when enforcement is 'enforce'", () => {
-      setSecurityConfig({ enforcement: "enforce" });
+    it("should return true when enforcement is 'enforce'", async () => {
+      await setSecurityConfig({ enforcement: "enforce" });
       const result = isEnforcementEnabled();
       expect(result).toBe(true);
     });
 
-    it("should return false when enforcement is 'off'", () => {
-      setSecurityConfig({ enforcement: "off" });
+    it("should return false when enforcement is 'off'", async () => {
+      await setSecurityConfig({ enforcement: "off" });
       expect(isEnforcementEnabled()).toBe(false);
     });
   });
@@ -698,29 +701,29 @@ describe("Security Policy Module", () => {
   // Audit Logging
   // ==========================================================================
   describe("shouldLogSecurityEvent", () => {
-    it("should log denied events when audit.logDenied is true", () => {
-      setSecurityConfig({
+    it("should log denied events when audit.logDenied is true", async () => {
+      await setSecurityConfig({
         audit: { enabled: true, logDenied: true, logSuccess: false },
       });
       expect(shouldLogSecurityEvent(false)).toBe(true);
     });
 
-    it("should not log success events when audit.logSuccess is false", () => {
-      setSecurityConfig({
+    it("should not log success events when audit.logSuccess is false", async () => {
+      await setSecurityConfig({
         audit: { enabled: true, logDenied: true, logSuccess: false },
       });
       expect(shouldLogSecurityEvent(true)).toBe(false);
     });
 
-    it("should log success events when audit.logSuccess is true", () => {
-      setSecurityConfig({
+    it("should log success events when audit.logSuccess is true", async () => {
+      await setSecurityConfig({
         audit: { enabled: true, logDenied: true, logSuccess: true },
       });
       expect(shouldLogSecurityEvent(true)).toBe(true);
     });
 
-    it("should not log anything when audit is disabled", () => {
-      setSecurityConfig({
+    it("should not log anything when audit is disabled", async () => {
+      await setSecurityConfig({
         audit: { enabled: false, logDenied: true, logSuccess: true },
       });
       expect(shouldLogSecurityEvent(true)).toBe(false);
@@ -732,8 +735,8 @@ describe("Security Policy Module", () => {
   // Session Access Helpers
   // ==========================================================================
   describe("sessionAllowsUntrusted", () => {
-    it("should return true for sessions with wildcard access", () => {
-      setSecurityConfig({
+    it("should return true for sessions with wildcard access", async () => {
+      await setSecurityConfig({
         sessions: {
           "open-session": { access: ["*"] },
         },
@@ -742,8 +745,8 @@ describe("Security Policy Module", () => {
       expect(sessionAllowsUntrusted("open-session")).toBe(true);
     });
 
-    it("should return true for sessions with trust:untrusted access", () => {
-      setSecurityConfig({
+    it("should return true for sessions with trust:untrusted access", async () => {
+      await setSecurityConfig({
         sessions: {
           "public-session": { access: ["trust:untrusted"] },
         },
@@ -752,8 +755,8 @@ describe("Security Policy Module", () => {
       expect(sessionAllowsUntrusted("public-session")).toBe(true);
     });
 
-    it("should return false for sessions with only trusted access", () => {
-      setSecurityConfig({
+    it("should return false for sessions with only trusted access", async () => {
+      await setSecurityConfig({
         sessions: {
           "private-session": { access: ["trust:trusted"] },
         },
@@ -762,15 +765,15 @@ describe("Security Policy Module", () => {
       expect(sessionAllowsUntrusted("private-session")).toBe(false);
     });
 
-    it("should return false for sessions with default access", () => {
+    it("should return false for sessions with default access", async () => {
       // Default access is trust:trusted
       expect(sessionAllowsUntrusted("default-session")).toBe(false);
     });
   });
 
   describe("isGatewaySession (deprecated)", () => {
-    it("should return true for sessions in legacy gateways config", () => {
-      setSecurityConfig({
+    it("should return true for sessions in legacy gateways config", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["discord-gw"],
         },
@@ -779,8 +782,8 @@ describe("Security Policy Module", () => {
       expect(isGatewaySession("discord-gw")).toBe(true);
     });
 
-    it("should return true for sessions allowing untrusted access (new pattern)", () => {
-      setSecurityConfig({
+    it("should return true for sessions allowing untrusted access (new pattern)", async () => {
+      await setSecurityConfig({
         sessions: {
           "public-gw": { access: ["trust:untrusted"] },
         },
@@ -789,14 +792,14 @@ describe("Security Policy Module", () => {
       expect(isGatewaySession("public-gw")).toBe(true);
     });
 
-    it("should return false for non-gateway sessions", () => {
+    it("should return false for non-gateway sessions", async () => {
       expect(isGatewaySession("normal-session")).toBe(false);
     });
   });
 
   describe("getGatewayRules (deprecated)", () => {
-    it("should return forward rules for configured gateways", () => {
-      setSecurityConfig({
+    it("should return forward rules for configured gateways", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["my-gw"],
           forwardRules: {
@@ -815,7 +818,7 @@ describe("Security Policy Module", () => {
       expect(rules!.requireApproval).toBe(true);
     });
 
-    it("should return undefined for sessions without forward rules", () => {
+    it("should return undefined for sessions without forward rules", async () => {
       expect(getGatewayRules("no-rules")).toBeUndefined();
     });
   });
@@ -824,8 +827,8 @@ describe("Security Policy Module", () => {
   // Session Forwarding
   // ==========================================================================
   describe("canSessionForward", () => {
-    it("should deny when source session lacks cross.inject capability", () => {
-      setSecurityConfig({
+    it("should deny when source session lacks cross.inject capability", async () => {
+      await setSecurityConfig({
         sessions: {
           "no-forward": { capabilities: ["inject"] },
         },
@@ -838,8 +841,8 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("cross.inject");
     });
 
-    it("should allow when source session has cross.inject and target is accessible", () => {
-      setSecurityConfig({
+    it("should allow when source session has cross.inject and target is accessible", async () => {
+      await setSecurityConfig({
         defaults: {
           ...DEFAULT_SECURITY_CONFIG.defaults,
           minTrustLevel: "untrusted",
@@ -858,8 +861,8 @@ describe("Security Policy Module", () => {
   });
 
   describe("canGatewayForward (deprecated)", () => {
-    it("should allow forwarding based on legacy gateway rules", () => {
-      setSecurityConfig({
+    it("should allow forwarding based on legacy gateway rules", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["legacy-gw"],
           forwardRules: {
@@ -875,8 +878,8 @@ describe("Security Policy Module", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("should deny forwarding to non-allowed targets", () => {
-      setSecurityConfig({
+    it("should deny forwarding to non-allowed targets", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["legacy-gw"],
           forwardRules: {
@@ -892,8 +895,8 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("cannot forward");
     });
 
-    it("should deny non-allowed actions", () => {
-      setSecurityConfig({
+    it("should deny non-allowed actions", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["legacy-gw"],
           forwardRules: {
@@ -910,8 +913,8 @@ describe("Security Policy Module", () => {
       expect(result.reason).toContain("not allowed");
     });
 
-    it("should allow wildcard forward targets", () => {
-      setSecurityConfig({
+    it("should allow wildcard forward targets", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["wildcard-gw"],
           forwardRules: {
@@ -931,8 +934,8 @@ describe("Security Policy Module", () => {
   // Edge Cases
   // ==========================================================================
   describe("Edge Cases", () => {
-    it("should handle missing trust level policy gracefully", () => {
-      setSecurityConfig({
+    it("should handle missing trust level policy gracefully", async () => {
+      await setSecurityConfig({
         trustLevels: {}, // No trust level policies defined
       });
 
@@ -944,8 +947,8 @@ describe("Security Policy Module", () => {
       expect(policy.capabilities).toBeDefined();
     });
 
-    it("should handle conflicting allow and deny tool lists", () => {
-      setSecurityConfig({
+    it("should handle conflicting allow and deny tool lists", async () => {
+      await setSecurityConfig({
         enforcement: "enforce",
         trustLevels: {
           "semi-trusted": {
@@ -964,8 +967,8 @@ describe("Security Policy Module", () => {
       expect(result.allowed).toBe(true);
     });
 
-    it("should handle privilege escalation attempt (untrusted trying owner caps)", () => {
-      setSecurityConfig({ enforcement: "enforce" });
+    it("should handle privilege escalation attempt (untrusted trying owner caps)", async () => {
+      await setSecurityConfig({ enforcement: "enforce" });
 
       const source = makeSource("p2p"); // untrusted, only has "inject"
       const configWrite = checkCapability(source, "config.write");
@@ -984,14 +987,14 @@ describe("Security Policy Module", () => {
       expect(execCmd.allowed).toBe(true);
     });
 
-    it("should prevent untrusted from spawning sessions", () => {
+    it("should prevent untrusted from spawning sessions", async () => {
       const source = makeSource("p2p");
       const result = checkCapability(source, "session.spawn");
 
       expect(result.allowed).toBe(false);
     });
 
-    it("should handle multiple granted capabilities correctly", () => {
+    it("should handle multiple granted capabilities correctly", async () => {
       const source = makeSource("p2p", {
         grantedCapabilities: ["memory.read", "session.history", "config.read"],
       });
@@ -1006,8 +1009,8 @@ describe("Security Policy Module", () => {
       expect(policy.capabilities).not.toContain("*");
     });
 
-    it("should apply sandbox overrides from trust level policy", () => {
-      setSecurityConfig({
+    it("should apply sandbox overrides from trust level policy", async () => {
+      await setSecurityConfig({
         trustLevels: {
           "semi-trusted": {
             capabilities: ["inject"],
@@ -1027,8 +1030,8 @@ describe("Security Policy Module", () => {
       expect(policy.sandbox.memoryLimit).toBe("128m");
     });
 
-    it("should apply tool policy overrides from trust level", () => {
-      setSecurityConfig({
+    it("should apply tool policy overrides from trust level", async () => {
+      await setSecurityConfig({
         enforcement: "enforce",
         trustLevels: {
           trusted: {
