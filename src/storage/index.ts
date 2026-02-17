@@ -426,6 +426,11 @@ class TransactionStorage implements StorageApi {
   async transaction<R>(_fn: (storage: StorageApi) => Promise<R>): Promise<R> {
     throw new Error("Nested transactions not supported");
   }
+
+  close(): void {
+    // No-op: TransactionStorage does not own the connection.
+    // The parent Storage instance manages the database lifecycle.
+  }
 }
 
 // Singleton instance

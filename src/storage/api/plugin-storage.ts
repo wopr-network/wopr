@@ -237,4 +237,10 @@ export interface StorageApi {
    * Run cross-table transaction
    */
   transaction<R>(fn: (storage: StorageApi) => Promise<R>): Promise<R>;
+
+  /**
+   * Close the storage connection and release resources.
+   * Safe to call multiple times. No-op if already closed.
+   */
+  close(): void;
 }
