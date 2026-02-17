@@ -35,6 +35,7 @@ import { restartOnIdleManager } from "./restart-on-idle.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { canvasRouter } from "./routes/canvas.js";
+import { capabilitiesRouter } from "./routes/capabilities.js";
 import { capabilityHealthRouter } from "./routes/capability-health.js";
 import { configRouter } from "./routes/config.js";
 import { createHealthzRouter } from "./routes/health.js";
@@ -130,6 +131,8 @@ export function createApp(healthMonitor?: HealthMonitor) {
   app.route("/api/marketplace", marketplaceRouter);
   // Capability health (WOP-501)
   app.route("/api/capability-health", capabilityHealthRouter);
+  // Capability activation (WOP-504)
+  app.route("/api/capabilities", capabilitiesRouter);
   // Instance CRUD (WOP-202)
   app.route("/instances", instancesRouter);
 

@@ -5,6 +5,8 @@
  * This file preserves the original public API so existing imports keep working.
  */
 
+// Capability catalog (WOP-504)
+export { getCapabilityCatalogEntry, listCapabilityCatalog } from "./core/capability-catalog.js";
 // Capability registry convenience
 export { getCapabilityRegistry } from "./core/capability-registry.js";
 // Public accessors for runtime state
