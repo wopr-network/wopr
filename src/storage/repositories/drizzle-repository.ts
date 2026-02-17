@@ -1,0 +1,397 @@
+/**
+ * Drizzle ORM implementation of Repository interface
+ * 
+ * This is the ONLY file in the codebase that imports Drizzle.
+ * All other code uses the abstract Repository interface.
+ * 
+ * Currently supports SQLite only (via better-sqlite3).
+ * Note: better-sqlite3 uses synchronous API, so we wrap calls in async functions.
+ */
+
+import { 
+  eq, ne, gt, gte, lt, lte, inArray, notInArray, sql, and, asc, desc, like 
+} from "drizzle-orm";
+import type { SQLiteTable, SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { z } from "zod";
+import type {
+  Repository,
+  QueryBuilder,
+  Filter,
+  FilterOperator,
+  OrderDirection,
+} from "../api/plugin-storage.js";
+
+// Type for Drizzle database - SQLite only for now
+type DrizzleDB = BetterSQLite3Database;
+
+/**
+ * Implementation of QueryBuilder using Drizzle
+ */
+class QueryBuilderImpl<T> implements QueryBuilder<T> {
+  private conditions: ReturnType<typeof sql>[] = [];
+  private orderByFields: { column: string; direction: OrderDirection }[] = [];
+  private limitValue?: number;
+  private offsetValue?: number;
+
+  constructor(
+    private db: DrizzleDB,
+    private table: SQLiteTable,
+    private columns: Record<string, SQLiteColumn>,
+  ) {}
+
+  where<K extends keyof T>(field: K, opOrValue: FilterOperator | T[K], value?: unknown): QueryBuilder<T> {
+    const column = this.columns[field as string];
+    if (!column) throw new Error(`Unknown column: ${String(field)}`);
+
+    if (value === undefined) {
+      // Direct value - treat as $eq
+      this.conditions.push(eq(column, opOrValue));
+    } else {
+      // Operator + value
+      const op = opOrValue as FilterOperator;
+      switch (op) {
+        case "$eq":
+          this.conditions.push(eq(column, value));
+          break;
+        case "$ne":
+          this.conditions.push(ne(column, value));
+          break;
+        case "$gt":
+          this.conditions.push(gt(column, value));
+          break;
+        case "$gte":
+          this.conditions.push(gte(column, value));
+          break;
+        case "$lt":
+          this.conditions.push(lt(column, value));
+          break;
+        case "$lte":
+          this.conditions.push(lte(column, value));
+          break;
+        case "$in":
+          this.conditions.push(inArray(column, value as unknown[]));
+          break;
+        case "$nin":
+          this.conditions.push(notInArray(column, value as unknown[]));
+          break;
+        case "$contains":
+          // JSON array contains - SQLite specific
+          this.conditions.push(
+            sql`${column} LIKE ${`%"${value}"%`}`,
+          );
+          break;
+        case "$startsWith":
+          this.conditions.push(like(column, `${value}%`));
+          break;
+        case "$endsWith":
+          this.conditions.push(like(column, `%${value}`));
+          break;
+        case "$regex":
+          // SQLite doesn't support regex natively, use LIKE approximation
+          this.conditions.push(like(column, `%${value}%`));
+          break;
+        default:
+          throw new Error(`Unknown operator: ${op}`);
+      }
+    }
+    return this;
+  }
+
+  orderBy<K extends keyof T>(field: K, direction: OrderDirection = "asc"): QueryBuilder<T> {
+    this.orderByFields.push({ column: field as string, direction });
+    return this;
+  }
+
+  limit(count: number): QueryBuilder<T> {
+    this.limitValue = count;
+    return this;
+  }
+
+  offset(count: number): QueryBuilder<T> {
+    this.offsetValue = count;
+    return this;
+  }
+
+  select<K extends keyof T>(..._fields: K[]): QueryBuilder<Pick<T, K>> {
+    // For now, select all fields. Can be optimized later to only select specified fields.
+    return this as unknown as QueryBuilder<Pick<T, K>>;
+  }
+
+  async execute(): Promise<T[]> {
+    // Build query synchronously
+    let query = this.db.select().from(this.table);
+
+    if (this.conditions.length > 0) {
+      query = query.where(and(...this.conditions)) as typeof query;
+    }
+
+    if (this.orderByFields.length > 0) {
+      for (const { column, direction } of this.orderByFields) {
+        const col = this.columns[column];
+        if (col) {
+          query = query.orderBy(direction === "asc" ? asc(col) : desc(col)) as typeof query;
+        }
+      }
+    }
+
+    if (this.limitValue !== undefined) {
+      query = query.limit(this.limitValue) as typeof query;
+    }
+
+    if (this.offsetValue !== undefined) {
+      query = query.offset(this.offsetValue) as typeof query;
+    }
+
+    // Execute synchronously, wrap in Promise for async interface
+    return Promise.resolve(query.all() as T[]);
+  }
+
+  async count(): Promise<number> {
+    let query = this.db.select({ count: sql<number>`count(*)` }).from(this.table);
+
+    if (this.conditions.length > 0) {
+      query = query.where(and(...this.conditions)) as typeof query;
+    }
+
+    const result = query.all();
+    return Promise.resolve(result[0]?.count ?? 0);
+  }
+
+  async first(): Promise<T | null> {
+    this.limit(1);
+    const results = await this.execute();
+    return results[0] ?? null;
+  }
+}
+
+/**
+ * Drizzle implementation of Repository interface
+ */
+export class DrizzleRepository<T extends Record<string, unknown>> implements Repository<T> {
+  private columns: Record<string, SQLiteColumn>;
+
+  constructor(
+    private db: DrizzleDB,
+    private table: SQLiteTable,
+    private primaryKey: string,
+    private zodSchema: z.ZodObject<Record<string, z.ZodTypeAny>>,
+  ) {
+    // Extract columns from table definition
+    this.columns = (table as unknown as { _: { columns: Record<string, SQLiteColumn> } })._.columns;
+  }
+
+  async insert(data: Omit<T, "id"> & Partial<Pick<T, "id">>): Promise<T> {
+    // Validate with Zod
+    const validated = this.zodSchema.parse(data) as T;
+    
+    // better-sqlite3 uses synchronous API
+    const stmt = this.db.insert(this.table).values(validated as Record<string, unknown>);
+    const result = stmt.returning().all();
+    return Promise.resolve(result[0] as T);
+  }
+
+  async insertMany(data: Array<Omit<T, "id"> & Partial<Pick<T, "id">>>): Promise<T[]> {
+    // Validate all
+    const validated = data.map((d) => this.zodSchema.parse(d)) as T[];
+    
+    const stmt = this.db.insert(this.table).values(validated as Record<string, unknown>[]);
+    const result = stmt.returning().all();
+    return Promise.resolve(result as T[]);
+  }
+
+  async findById(id: string): Promise<T | null> {
+    const pkColumn = this.columns[this.primaryKey];
+    if (!pkColumn) throw new Error(`Primary key column not found: ${this.primaryKey}`);
+
+    const result = this.db
+      .select()
+      .from(this.table)
+      .where(eq(pkColumn, id))
+      .limit(1)
+      .all();
+
+    return Promise.resolve((result[0] as T) ?? null);
+  }
+
+  async findFirst(filter: Filter<T>): Promise<T | null> {
+    const conditions = this.buildFilterConditions(filter);
+    let query = this.db.select().from(this.table);
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
+    }
+
+    const result = query.limit(1).all();
+    return Promise.resolve((result[0] as T) ?? null);
+  }
+
+  async findMany(filter?: Filter<T>): Promise<T[]> {
+    let query = this.db.select().from(this.table);
+
+    if (filter) {
+      const conditions = this.buildFilterConditions(filter);
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
+      }
+    }
+
+    return Promise.resolve(query.all() as T[]);
+  }
+
+  async update(id: string, data: Partial<T>): Promise<T> {
+    const pkColumn = this.columns[this.primaryKey];
+    if (!pkColumn) throw new Error(`Primary key column not found: ${this.primaryKey}`);
+
+    // Partial validation - only validate provided fields
+    const partialSchema = this.zodSchema.partial();
+    const validated = partialSchema.parse(data);
+
+    const result = this.db
+      .update(this.table)
+      .set(validated as Record<string, unknown>)
+      .where(eq(pkColumn, id))
+      .returning()
+      .all();
+
+    if (result.length === 0) {
+      throw new Error(`Record not found: ${id}`);
+    }
+
+    return Promise.resolve(result[0] as T);
+  }
+
+  async updateMany(filter: Filter<T>, data: Partial<T>): Promise<number> {
+    const conditions = this.buildFilterConditions(filter);
+    
+    // Partial validation
+    const partialSchema = this.zodSchema.partial();
+    const validated = partialSchema.parse(data);
+
+    const result = this.db
+      .update(this.table)
+      .set(validated as Record<string, unknown>)
+      .where(and(...conditions))
+      .all();
+
+    // better-sqlite3 RunResult has changes property
+    return Promise.resolve((result as unknown as { changes: number }).changes ?? 0);
+  }
+
+  async delete(id: string): Promise<boolean> {
+    const pkColumn = this.columns[this.primaryKey];
+    if (!pkColumn) throw new Error(`Primary key column not found: ${this.primaryKey}`);
+
+    const result = this.db.delete(this.table).where(eq(pkColumn, id)).run();
+    return Promise.resolve(result.changes > 0);
+  }
+
+  async deleteMany(filter: Filter<T>): Promise<number> {
+    const conditions = this.buildFilterConditions(filter);
+    const result = this.db.delete(this.table).where(and(...conditions)).run();
+    return Promise.resolve(result.changes ?? 0);
+  }
+
+  async count(filter?: Filter<T>): Promise<number> {
+    let query = this.db.select({ count: sql<number>`count(*)` }).from(this.table);
+
+    if (filter) {
+      const conditions = this.buildFilterConditions(filter);
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
+      }
+    }
+
+    const result = query.all();
+    return Promise.resolve(result[0]?.count ?? 0);
+  }
+
+  async exists(id: string): Promise<boolean> {
+    const count = await this.count({ [this.primaryKey]: id } as Filter<T>);
+    return count > 0;
+  }
+
+  query(): QueryBuilder<T> {
+    return new QueryBuilderImpl(this.db, this.table, this.columns);
+  }
+
+  async raw(sqlStr: string, params?: unknown[]): Promise<unknown[]> {
+    // Use raw SQL with better-sqlite3
+    const result = this.db.run(sql`${sql.raw(sqlStr)}${params ? sql.raw(`, ${params.map(() => '?').join(', ')}`) : sql.raw('')}`);
+    return Promise.resolve(Array.isArray(result) ? result : [result]);
+  }
+
+  async transaction<R>(fn: (repo: Repository<T>) => Promise<R>): Promise<R> {
+    // For now, just run the function without transaction
+    // Better-sqlite3 transactions work differently and need more work
+    return fn(this);
+  }
+
+  /**
+   * Build Drizzle conditions from filter object
+   */
+  private buildFilterConditions(filter: Filter<T>): ReturnType<typeof sql>[] {
+    const conditions: ReturnType<typeof sql>[] = [];
+
+    for (const [field, condition] of Object.entries(filter)) {
+      const column = this.columns[field];
+      if (!column) continue;
+
+      if (condition === null || condition === undefined) {
+        continue;
+      }
+
+      // Check if it's a condition object or direct value
+      if (typeof condition === "object" && !Array.isArray(condition) && condition !== null) {
+        // It's a condition object like { $eq: value }
+        const entries = Object.entries(condition);
+        if (entries.length === 1) {
+          const [op, value] = entries[0];
+          switch (op) {
+            case "$eq":
+              conditions.push(eq(column, value));
+              break;
+            case "$ne":
+              conditions.push(ne(column, value));
+              break;
+            case "$gt":
+              conditions.push(gt(column, value));
+              break;
+            case "$gte":
+              conditions.push(gte(column, value));
+              break;
+            case "$lt":
+              conditions.push(lt(column, value));
+              break;
+            case "$lte":
+              conditions.push(lte(column, value));
+              break;
+            case "$in":
+              conditions.push(inArray(column, value as unknown[]));
+              break;
+            case "$nin":
+              conditions.push(notInArray(column, value as unknown[]));
+              break;
+            case "$contains":
+              conditions.push(sql`${column} LIKE ${`%"${value}"%`}`);
+              break;
+            case "$startsWith":
+              conditions.push(like(column, `${value}%`));
+              break;
+            case "$endsWith":
+              conditions.push(like(column, `%${value}`));
+              break;
+            case "$regex":
+              conditions.push(like(column, `%${value}%`));
+              break;
+          }
+        }
+      } else {
+        // Direct value - treat as $eq
+        conditions.push(eq(column, condition));
+      }
+    }
+
+    return conditions;
+  }
+}

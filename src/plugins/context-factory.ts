@@ -35,7 +35,6 @@ import type {
   PluginInjectOptions,
   UiComponentExtension,
   WebUiExtension,
-  WOPRPluginContext,
 } from "../types.js";
 import { getVoiceRegistry } from "../voice/index.js";
 import type { STTProvider, TTSProvider } from "../voice/types.js";
@@ -58,6 +57,7 @@ import {
   uiComponents,
   webUiExtensions,
 } from "./state.js";
+import { getStorage } from "../storage/index.js";
 
 export function createPluginContext(
   plugin: InstalledPlugin,
@@ -65,7 +65,7 @@ export function createPluginContext(
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
     getSessions: () => string[];
   },
-): WOPRPluginContext {
+) {
   const pluginName = plugin.name;
 
   return {
@@ -291,7 +291,7 @@ export function createPluginContext(
     },
 
     // A2A tools - plugins register MCP tools for agent-to-agent communication
-    registerA2AServer(config) {
+    registerA2AServer(config: import("../plugin-types/a2a.js").A2AServerConfig) {
       registerA2AServerImpl(config);
     },
 
@@ -317,5 +317,8 @@ export function createPluginContext(
     hasCapability(capability: AdapterCapability): boolean {
       return getCapabilityRegistry().hasProvider(capability);
     },
+
+    // Storage API - plugin-extensible database storage
+    storage: getStorage(),
   };
 }

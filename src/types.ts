@@ -15,6 +15,17 @@ export type {
 } from "./security/types.js";
 // Re-export provider types for plugins
 export type { ModelProvider, ProviderResponse } from "./types/provider.js";
+// Re-export storage types for plugins
+export type {
+  StorageApi,
+  Repository,
+  QueryBuilder,
+  Filter,
+  FilterOperator,
+  OrderDirection,
+  PluginSchema,
+  TableSchema,
+} from "./storage/api/plugin-storage.js";
 
 // Import InjectionSource for use within this file
 import type { InjectionSource as _InjectionSource } from "./security/types.js";

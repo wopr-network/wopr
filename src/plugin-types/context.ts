@@ -11,6 +11,7 @@ import type { ConfigSchema } from "./config.js";
 import type { ContextProvider } from "./context-provider.js";
 import type { WOPREventBus, WOPRHookManager } from "./events.js";
 import type { AdapterCapability, ProviderOption } from "./manifest.js";
+import type { StorageApi } from "../storage/api/plugin-storage.js";
 
 /**
  * Multimodal message with optional images.
@@ -245,4 +246,7 @@ export interface WOPRPluginContext {
   unregisterCapabilityProvider(capability: AdapterCapability, providerId: string): void;
   getCapabilityProviders(capability: AdapterCapability): ProviderOption[];
   hasCapability(capability: AdapterCapability): boolean;
+
+  // Storage API - plugin-extensible database storage
+  storage: StorageApi;
 }
