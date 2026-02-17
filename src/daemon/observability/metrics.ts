@@ -82,12 +82,7 @@ export class MetricsStore {
   /**
    * Record a metric data point.
    */
-  async record(
-    name: string,
-    value: number,
-    instanceId?: string,
-    tags: Record<string, string> = {},
-  ): Promise<void> {
+  async record(name: string, value: number, instanceId?: string, tags: Record<string, string> = {}): Promise<void> {
     await this.storage.run(
       "INSERT INTO metrics_rows (id, timestamp, metric_name, metric_value, instance_id, tags) VALUES (?, ?, ?, ?, ?, ?)",
       [randomUUID(), Date.now(), name, value, instanceId ?? null, JSON.stringify(tags)],

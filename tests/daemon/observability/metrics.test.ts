@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { MetricsStore, metricsPluginSchema } from "../../../src/daemon/observability/metrics.js";
+import { MetricsStore } from "../../../src/daemon/observability/metrics.js";
 import { getStorage, resetStorage } from "../../../src/storage/index.js";
 
 describe("MetricsStore", () => {
