@@ -6,7 +6,7 @@
 
 import { logger } from "../logger.js";
 import { dockerContainerState, execDocker } from "./docker.js";
-import { readRegistry, removeRegistryEntry } from "./registry.js";
+import { listRegistryEntries, removeRegistryEntry } from "./registry.js";
 import type { SandboxConfig } from "./types.js";
 
 let lastPruneAtMs = 0;
@@ -20,8 +20,8 @@ async function pruneSandboxContainers(cfg: SandboxConfig): Promise<void> {
     return;
   }
 
-  const registry = readRegistry();
-  for (const entry of registry.entries) {
+  const entries = await listRegistryEntries();
+  for (const entry of entries) {
     const idleMs = now - entry.lastUsedAtMs;
     const ageMs = now - entry.createdAtMs;
 
@@ -37,7 +37,7 @@ async function pruneSandboxContainers(cfg: SandboxConfig): Promise<void> {
       } catch {
         // ignore prune failures
       } finally {
-        removeRegistryEntry(entry.containerName);
+        await removeRegistryEntry(entry.containerName);
       }
     }
   }
@@ -67,13 +67,13 @@ export async function ensureDockerContainerIsRunning(containerName: string): Pro
 }
 
 export async function pruneAllSandboxes(): Promise<number> {
-  const registry = readRegistry();
+  const entries = await listRegistryEntries();
   let pruned = 0;
 
-  for (const entry of registry.entries) {
+  for (const entry of entries) {
     try {
       await execDocker(["rm", "-f", entry.containerName], { allowFailure: true });
-      removeRegistryEntry(entry.containerName);
+      await removeRegistryEntry(entry.containerName);
       pruned++;
     } catch {
       // ignore

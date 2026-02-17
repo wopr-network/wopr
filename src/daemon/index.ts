@@ -248,6 +248,14 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await migrateBrowserProfilesToSql();
   daemonLog("Browser profile storage initialized");
 
+  // Initialize sandbox storage and migrate from JSON
+  daemonLog("Initializing sandbox storage...");
+  const { initSandboxStorage } = await import("../sandbox/sandbox-repository.js");
+  const { migrateSandboxRegistryToSql } = await import("../sandbox/sandbox-migrate.js");
+  await initSandboxStorage();
+  await migrateSandboxRegistryToSql();
+  daemonLog("Sandbox storage initialized");
+
   // Ensure bearer token exists for API authentication
   ensureToken();
   daemonLog("Bearer token ready for API authentication");
