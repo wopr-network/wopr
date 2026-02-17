@@ -4,7 +4,6 @@
 
 import {
   canIndexSession,
-  centralConfig,
   eventBus,
   existsSync,
   GLOBAL_IDENTITY_DIR,
@@ -15,7 +14,6 @@ import {
   join,
   listAllMemoryFiles,
   logger,
-  MemoryIndexManager,
   mkdirSync,
   parseTemporalFilter,
   readdirSync,
@@ -25,7 +23,6 @@ import {
   SESSIONS_DIR,
   statSync,
   tool,
-  WOPR_HOME,
   withSecurityCheck,
   writeFileSync,
   z,
@@ -34,20 +31,8 @@ import {
 export function createMemoryTools(sessionName: string): unknown[] {
   const tools: unknown[] = [];
 
-  let memoryManager: MemoryIndexManager | null = null;
-  const getMemoryManager = async () => {
-    if (!memoryManager) {
-      const sessionDir = join(SESSIONS_DIR, sessionName);
-      const mainConfig = centralConfig.get();
-      const memCfg = mainConfig.memory || {};
-      memoryManager = await MemoryIndexManager.create({
-        globalDir: GLOBAL_IDENTITY_DIR,
-        sessionDir,
-        config: { ...memCfg, store: { path: join(WOPR_HOME, "memory", "index.sqlite") } },
-      });
-    }
-    return memoryManager;
-  };
+  // Memory manager is now owned by the memory-semantic plugin
+  // Core provides only fallback grep-based search
 
   tools.push(
     tool(
@@ -212,13 +197,11 @@ export function createMemoryTools(sessionName: string): unknown[] {
           logger.info(
             `[memory_search] After hook: results=${hookPayload.results ? hookPayload.results.length : "null"}, query="${query}"`,
           );
-          let results =
-            hookPayload.results ??
-            (await (async () => {
-              logger.info(`[memory_search] Falling through to core FTS5 for query: "${query}"`);
-              const manager = await getMemoryManager();
-              return manager.search(query, { maxResults: maxResults * 2, minScore, temporal });
-            })());
+          let results = hookPayload.results;
+          if (!results) {
+            // No plugin handled memory:search — fall through to grep fallback
+            throw new Error("No memory plugin available");
+          }
           const ctx = getContext(sessionName);
           const trustLevel = ctx?.source?.trustLevel ?? "owner";
           const secConfig = getSecurityConfig();

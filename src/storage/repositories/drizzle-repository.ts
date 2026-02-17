@@ -146,15 +146,21 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
 
     // Deserialize JSON columns
     if (this.jsonColumns.size === 0) return Promise.resolve(rows);
-    return Promise.resolve(rows.map(row => {
-      const r = { ...(row as Record<string, unknown>) };
-      for (const col of this.jsonColumns) {
-        if (col in r && typeof r[col] === 'string') {
-          try { r[col] = JSON.parse(r[col] as string); } catch { /* leave as-is */ }
+    return Promise.resolve(
+      rows.map((row) => {
+        const r = { ...(row as Record<string, unknown>) };
+        for (const col of this.jsonColumns) {
+          if (col in r && typeof r[col] === "string") {
+            try {
+              r[col] = JSON.parse(r[col] as string);
+            } catch {
+              /* leave as-is */
+            }
+          }
         }
-      }
-      return r as T;
-    }));
+        return r as T;
+      }),
+    );
   }
 
   async count(): Promise<number> {
@@ -228,7 +234,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     const result = { ...data };
     for (const col of this.jsonColumns) {
       if (col in result && result[col] !== null && result[col] !== undefined) {
-        if (typeof result[col] !== 'string') {
+        if (typeof result[col] !== "string") {
           result[col] = JSON.stringify(result[col]);
         }
       }
@@ -241,7 +247,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     if (this.jsonColumns.size === 0) return row;
     const result = { ...(row as Record<string, unknown>) };
     for (const col of this.jsonColumns) {
-      if (col in result && typeof result[col] === 'string') {
+      if (col in result && typeof result[col] === "string") {
         try {
           result[col] = JSON.parse(result[col] as string);
         } catch {
@@ -266,11 +272,11 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
   async insertMany(data: Array<Omit<T, PK> & Partial<Pick<T, PK>>>): Promise<T[]> {
     // Validate all
     const validated = data.map((d) => this.zodSchema.parse(d)) as T[];
-    const serialized = validated.map(v => this.serializeJson(v as Record<string, unknown>));
+    const serialized = validated.map((v) => this.serializeJson(v as Record<string, unknown>));
 
     const stmt = this.db.insert(this.table).values(serialized);
     const result = stmt.returning().all();
-    return Promise.resolve((result as T[]).map(r => this.deserializeJson(r)));
+    return Promise.resolve((result as T[]).map((r) => this.deserializeJson(r)));
   }
 
   async findById(id: PKType): Promise<T | null> {
@@ -304,7 +310,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
       }
     }
 
-    return Promise.resolve((query.all() as T[]).map(r => this.deserializeJson(r)));
+    return Promise.resolve((query.all() as T[]).map((r) => this.deserializeJson(r)));
   }
 
   async update(id: PKType, data: Partial<T>): Promise<T> {
@@ -316,12 +322,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     const validated = partialSchema.parse(data);
     const serialized = this.serializeJson(validated as Record<string, unknown>);
 
-    const result = this.db
-      .update(this.table)
-      .set(serialized)
-      .where(eq(pkColumn, id))
-      .returning()
-      .all();
+    const result = this.db.update(this.table).set(serialized).where(eq(pkColumn, id)).returning().all();
 
     if (result.length === 0) {
       throw new Error(`Record not found: ${id}`);

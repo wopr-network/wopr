@@ -43,9 +43,10 @@ export function markCronRunning(): void {
   cronSchedulerRunning = true;
 }
 
-/** Check if the memory SQLite database file exists and is openable. */
+/** Check if the wopr.sqlite database file exists and is openable. */
 function checkMemoryDb(): SubsystemCheck {
-  const dbPath = join(WOPR_HOME, "memory", "index.sqlite");
+  // Memory is now optional (provided by plugin), check main wopr.sqlite
+  const dbPath = join(WOPR_HOME, "wopr.sqlite");
   try {
     if (!existsSync(dbPath)) {
       return { healthy: false, message: "Database file not found" };
