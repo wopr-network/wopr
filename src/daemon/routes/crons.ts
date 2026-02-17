@@ -3,8 +3,9 @@
  */
 
 import { Hono } from "hono";
+import { createOnceJob } from "../../../plugins/wopr-plugin-cron/src/cron.js";
+import { addCron, getCron, getCrons, removeCron } from "../../../plugins/wopr-plugin-cron/src/cron-repository.js";
 import { config } from "../../core/config.js";
-import { addCron, createOnceJob, getCron, getCrons, removeCron } from "../../core/cron.js";
 import { inject } from "../../core/sessions.js";
 import type { CronJob } from "../../types.js";
 

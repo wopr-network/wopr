@@ -29,11 +29,7 @@ export const metricsPluginSchema: PluginSchema = {
     rows: {
       schema: metricsRowSchema,
       primaryKey: "id",
-      indexes: [
-        { fields: ["instance_id"] },
-        { fields: ["metric_name"] },
-        { fields: ["timestamp"] },
-      ],
+      indexes: [{ fields: ["instance_id"] }, { fields: ["metric_name"] }, { fields: ["timestamp"] }],
     },
   },
 };
@@ -86,7 +82,12 @@ export class MetricsStore {
   /**
    * Record a metric data point.
    */
-  async record(name: string, value: number, instanceId: string | null = null, tags: Record<string, string> = {}): Promise<void> {
+  async record(
+    name: string,
+    value: number,
+    instanceId: string | null = null,
+    tags: Record<string, string> = {},
+  ): Promise<void> {
     await this.storage.raw(
       "INSERT INTO metrics_rows (id, timestamp, metric_name, metric_value, instance_id, tags) VALUES (?, ?, ?, ?, ?, ?)",
       [randomUUID(), Date.now(), name, value, instanceId, JSON.stringify(tags)],
@@ -167,19 +168,14 @@ export class MetricsStore {
    * Get platform-wide metrics summary.
    */
   async getPlatformSummary(): Promise<MetricsSummary> {
-    const [
-      total_instances,
-      total_messages_processed,
-      total_tokens_consumed,
-      active_sessions,
-      total_errors,
-    ] = await Promise.all([
-      this.getDistinctInstanceCount(),
-      this.getSum("messages_processed"),
-      this.getSum("tokens_consumed"),
-      this.getSum("active_sessions"),
-      this.getSum("error_count"),
-    ]);
+    const [total_instances, total_messages_processed, total_tokens_consumed, active_sessions, total_errors] =
+      await Promise.all([
+        this.getDistinctInstanceCount(),
+        this.getSum("messages_processed"),
+        this.getSum("tokens_consumed"),
+        this.getSum("active_sessions"),
+        this.getSum("error_count"),
+      ]);
 
     return {
       total_instances,
@@ -193,7 +189,12 @@ export class MetricsStore {
   /**
    * Query metrics with time range and optional filters.
    */
-  async query(options: { name?: string; instanceId?: string; since?: number; limit?: number }): Promise<MetricRecord[]> {
+  async query(options: {
+    name?: string;
+    instanceId?: string;
+    since?: number;
+    limit?: number;
+  }): Promise<MetricRecord[]> {
     let sql = "SELECT id, timestamp, metric_name, metric_value, instance_id, tags FROM metrics_rows WHERE 1=1";
     const params: (string | number)[] = [];
 

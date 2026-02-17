@@ -6,6 +6,7 @@
  */
 
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
@@ -17,15 +18,6 @@ import { initBrowserProfileStorage } from "../core/browser-profile-repository.js
 import { setCanvasPublish } from "../core/canvas.js";
 import { config as centralConfig } from "../core/config.js";
 // Core imports for daemon functionality
-import {
-  addCronRun,
-  executeCronScripts,
-  getCrons,
-  initCronStorage,
-  resolveScriptTemplates,
-  shouldRunCron,
-} from "../core/cron.js";
-import { migrateCronsToSql } from "../core/cron-migrate.js";
 import { initPairing } from "../core/pairing.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
@@ -37,7 +29,7 @@ import { ensureToken } from "./auth-token.js";
 import { HealthMonitor } from "./health.js";
 import { bearerAuth, requireAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rate-limit.js";
-import { checkReadiness, markCronRunning, markStartupComplete } from "./readiness.js";
+import { checkReadiness, markStartupComplete } from "./readiness.js";
 import { restartOnIdleManager } from "./restart-on-idle.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
@@ -223,11 +215,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     startupWarnings.push(msg);
   }
 
-  // Initialize cron storage and migrate from JSON
-  daemonLog("Initializing cron storage...");
-  await initCronStorage();
-  await migrateCronsToSql();
-  daemonLog("Cron storage initialized");
+  // Cron storage is now initialized by wopr-plugin-cron
 
   // Initialize skills storage and migrate from JSON
   daemonLog("Initializing skills storage...");
@@ -382,6 +370,31 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // Memory system (indexing, FTS5, file watching, session hooks) delegated to memory-semantic plugin
   daemonLog("Memory system delegated to memory-semantic plugin");
 
+  // Auto-register bundled plugins before loading
+  daemonLog("Auto-registering bundled plugins...");
+  const { addInstalledPlugin, getInstalledPlugins } = await import("../plugins/installation.js");
+  const installed = await getInstalledPlugins();
+  const bundled = [
+    {
+      name: "wopr-plugin-cron",
+      path: join(import.meta.dirname, "../../plugins/wopr-plugin-cron"),
+      version: "1.0.0",
+    },
+  ];
+  for (const bp of bundled) {
+    if (!installed.find((p) => p.name === bp.name)) {
+      await addInstalledPlugin({
+        name: bp.name,
+        version: bp.version,
+        source: "bundled",
+        path: bp.path,
+        enabled: true,
+        installedAt: Date.now(),
+      });
+      daemonLog(`Registered bundled plugin: ${bp.name}`);
+    }
+  }
+
   // Load plugins (this is where providers register themselves)
   await loadAllPlugins(injectors);
 
@@ -438,114 +451,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   });
   daemonLog("Health monitor started");
 
-  // Start cron scheduler
-  const lastRun: Record<string, number> = {};
-  const cronTick = async () => {
-    const now = new Date();
-    const nowTs = now.getTime();
-    const crons = await getCrons();
-    const toRemove: string[] = [];
-
-    for (const cron of crons) {
-      const key = cron.name;
-      let shouldExecute = false;
-
-      if (cron.runAt) {
-        if (nowTs >= cron.runAt && !lastRun[key]) shouldExecute = true;
-      } else {
-        const lastMinute = lastRun[key] || 0;
-        const currentMinute = Math.floor(nowTs / 60000);
-        if (currentMinute > lastMinute && shouldRunCron(cron.schedule, now)) shouldExecute = true;
-      }
-
-      if (shouldExecute) {
-        lastRun[key] = Math.floor(nowTs / 60000);
-        daemonLog(`Running: ${cron.name} -> ${cron.session}`);
-        const startTime = Date.now();
-        const CRON_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes max per cron job
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        try {
-          // Execute scripts and resolve templates if scripts are defined
-          let resolvedMessage = cron.message;
-          let scriptResults: import("../types.js").CronScriptResult[] | undefined;
-          if (cron.scripts && cron.scripts.length > 0) {
-            const cfg = centralConfig.get();
-            if (!cfg.daemon.cronScriptsEnabled) {
-              daemonLog(
-                `Cron scripts disabled for ${cron.name} — set cronScriptsEnabled: true in daemon config to enable`,
-              );
-            } else {
-              daemonLog(`Executing ${cron.scripts.length} script(s) for ${cron.name}`);
-              scriptResults = await executeCronScripts(cron.scripts);
-              resolvedMessage = resolveScriptTemplates(cron.message, scriptResults);
-              const failedScripts = scriptResults.filter((r) => r.error);
-              if (failedScripts.length > 0) {
-                daemonLog(
-                  `Warning: ${failedScripts.length} script(s) failed for ${cron.name}: ${failedScripts.map((r) => r.name).join(", ")}`,
-                );
-              }
-            }
-          }
-
-          await Promise.race([
-            inject(cron.session, resolvedMessage, { silent: true, from: "cron" }),
-            new Promise<never>((_, reject) => {
-              timeoutId = setTimeout(
-                () => reject(new Error(`Cron job '${cron.name}' timed out after ${CRON_TIMEOUT_MS / 1000}s`)),
-                CRON_TIMEOUT_MS,
-              );
-            }),
-          ]);
-          const durationMs = Date.now() - startTime;
-          daemonLog(`Completed: ${cron.name} (${durationMs}ms)`);
-
-          // Log success to history
-          await addCronRun({
-            cronName: cron.name,
-            session: cron.session,
-            startedAt: startTime,
-            status: "success",
-            durationMs,
-            message: resolvedMessage,
-            scriptResults,
-          });
-
-          if (cron.once) {
-            toRemove.push(cron.name);
-            daemonLog(`Auto-removed one-time job: ${cron.name}`);
-          }
-        } catch (err) {
-          const durationMs = Date.now() - startTime;
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          daemonLog(`Error: ${cron.name} - ${errorMsg}`);
-
-          // Log failure to history
-          await addCronRun({
-            cronName: cron.name,
-            session: cron.session,
-            startedAt: startTime,
-            status: "failure",
-            durationMs,
-            error: errorMsg,
-            message: cron.message,
-          });
-        } finally {
-          if (timeoutId !== undefined) clearTimeout(timeoutId);
-        }
-      }
-    }
-
-    if (toRemove.length > 0) {
-      // Remove one-time jobs
-      for (const name of toRemove) {
-        await (await import("../core/cron.js")).removeCron(name);
-      }
-    }
-  };
-
-  setInterval(cronTick, 30000);
-  markCronRunning();
-  cronTick();
+  // Cron scheduler is now handled by wopr-plugin-cron
 
   // WebSocket heartbeat interval (WOP-204)
   const heartbeatInterval = setInterval(() => {

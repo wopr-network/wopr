@@ -81,9 +81,9 @@ export {
   // Legacy (deprecated)
   isGatewaySession,
   type PolicyCheckResult,
+  type ResolvedPolicy,
   registerSecurityRule,
   removeSecurityRules,
-  type ResolvedPolicy,
   resolvePolicy,
   saveSecurityConfig,
   // New session access helpers

@@ -11,6 +11,19 @@
  *   import type { WOPRPlugin, WOPRPluginContext, ConfigSchema } from "../plugin-types/index.js";
  */
 
+// Storage API types
+export type {
+  Filter,
+  FilterCondition,
+  FilterOperator,
+  OrderDirection,
+  PluginSchema,
+  QueryBuilder,
+  Repository,
+  StorageApi,
+  TableIndex,
+  TableSchema,
+} from "../storage/api/plugin-storage.js";
 // A2A types
 export type { A2AServerConfig, A2AToolDefinition, A2AToolResult } from "./a2a.js";
 // Channel types
@@ -25,7 +38,6 @@ export type {
 } from "./channel.js";
 // Config types
 export type { ConfigField, ConfigSchema, SetupFlowType } from "./config.js";
-
 // Context (the runtime API plugins receive)
 export type {
   AgentIdentity,
@@ -42,7 +54,6 @@ export type {
 } from "./context.js";
 // Context provider types
 export type { ContextPart, ContextProvider, MessageInfo } from "./context-provider.js";
-
 // Event and hook types
 export type {
   CapabilityProviderRegisteredEvent,
@@ -92,17 +103,3 @@ export type {
 } from "./manifest.js";
 // Core plugin types
 export type { InstalledPlugin, PluginCommand, PluginRegistryEntry, WOPRPlugin } from "./plugin.js";
-
-// Storage API types
-export type {
-  Filter,
-  FilterCondition,
-  FilterOperator,
-  OrderDirection,
-  PluginSchema,
-  QueryBuilder,
-  Repository,
-  StorageApi,
-  TableIndex,
-  TableSchema,
-} from "../storage/api/plugin-storage.js";

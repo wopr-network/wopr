@@ -13,7 +13,8 @@ sessions/
 *.local
 .env
 web/node_modules/
-/plugins/
+/plugins/*/node_modules/
+/plugins/*/dist/
 .pnpm-store
 bots/*/.env
 docker-compose.generated.yml

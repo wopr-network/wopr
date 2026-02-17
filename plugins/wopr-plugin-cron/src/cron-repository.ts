@@ -3,8 +3,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { Repository } from "../storage/api/plugin-storage.js";
-import { getStorage } from "../storage/public.js";
+import type { Repository, StorageApi } from "../../../src/storage/api/plugin-storage.js";
 import type { CronJobRow, CronRunRow } from "./cron-schema.js";
 import { cronPluginSchema } from "./cron-schema.js";
 
@@ -14,8 +13,7 @@ let runsRepo: Repository<CronRunRow, "id", string> | null = null;
 /**
  * Initialize cron storage (registers schema and gets repositories)
  */
-export async function initCronStorage(): Promise<void> {
-  const storage = getStorage();
+export async function initCronStorage(storage: StorageApi): Promise<void> {
   await storage.register(cronPluginSchema);
   jobsRepo = storage.getRepository<CronJobRow>("cron", "jobs");
   runsRepo = storage.getRepository<CronRunRow>("cron", "runs");

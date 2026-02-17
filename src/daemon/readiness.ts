@@ -8,7 +8,6 @@
  *  - Memory SQLite database is accessible
  *  - At least one AI provider is healthy
  *  - Plugin system initialized
- *  - Cron scheduler running
  */
 
 import { existsSync } from "node:fs";
@@ -30,17 +29,11 @@ export interface ReadinessResult {
 }
 
 let startupComplete = false;
-let cronSchedulerRunning = false;
 const startTime = Date.now();
 
 /** Mark startup as complete (called after all init steps finish). */
 export function markStartupComplete(): void {
   startupComplete = true;
-}
-
-/** Mark the cron scheduler as running (called after setInterval). */
-export function markCronRunning(): void {
-  cronSchedulerRunning = true;
 }
 
 /** Check if the wopr.sqlite database file exists and is openable. */
@@ -99,14 +92,6 @@ function checkPlugins(): SubsystemCheck {
   };
 }
 
-/** Check that the cron scheduler interval is running. */
-function checkCron(): SubsystemCheck {
-  if (!cronSchedulerRunning) {
-    return { healthy: false, message: "Cron scheduler not started" };
-  }
-  return { healthy: true, message: "ok" };
-}
-
 /**
  * Run all readiness checks and return a composite result.
  *
@@ -122,7 +107,6 @@ export function checkReadiness(): ReadinessResult {
     memory: checkMemoryDb(),
     providers: checkProviders(),
     plugins: checkPlugins(),
-    cron: checkCron(),
   };
 
   const ready = Object.values(checks).every((c) => c.healthy);
@@ -134,5 +118,4 @@ export function checkReadiness(): ReadinessResult {
 /** Reset state -- used by tests. */
 export function _resetForTesting(): void {
   startupComplete = false;
-  cronSchedulerRunning = false;
 }

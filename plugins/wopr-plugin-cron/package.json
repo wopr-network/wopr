@@ -1,0 +1,22 @@
+{
+  "name": "@wopr-network/wopr-plugin-cron",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cron scheduling plugin for WOPR",
+  "main": "src/index.ts",
+  "wopr": {
+    "name": "wopr-plugin-cron",
+    "version": "1.0.0",
+    "description": "Scheduled message injection and script execution",
+    "capabilities": ["cron"],
+    "provides": {
+      "capabilities": [
+        {
+          "type": "cron",
+          "id": "wopr-cron",
+          "displayName": "Cron Scheduler"
+        }
+      ]
+    }
+  }
+}

@@ -2,7 +2,7 @@
  * `wopr cron` commands - scheduled injection management.
  */
 import { readFileSync } from "node:fs";
-import { parseTimeSpec } from "../core/cron.js";
+import { parseTimeSpec } from "../../plugins/wopr-plugin-cron/src/cron.js";
 import { logger } from "../logger.js";
 import type { CronScript } from "../types.js";
 import { help } from "./help.js";

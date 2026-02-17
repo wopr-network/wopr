@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { PluginSchema } from "../storage/api/plugin-storage.js";
+import type { PluginSchema } from "../../../src/storage/api/plugin-storage.js";
 
 // Schema for CronScript - stored as JSON in scripts column
 export const cronScriptSchema = z.object({
