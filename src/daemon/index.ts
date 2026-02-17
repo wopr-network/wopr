@@ -12,6 +12,8 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
+import { migrateBrowserProfilesToSql } from "../core/browser-profile-migrate.js";
+import { initBrowserProfileStorage } from "../core/browser-profile-repository.js";
 import { setCanvasPublish } from "../core/canvas.js";
 import { config as centralConfig } from "../core/config.js";
 // Core imports for daemon functionality
@@ -24,8 +26,6 @@ import {
   shouldRunCron,
 } from "../core/cron.js";
 import { migrateCronsToSql } from "../core/cron-migrate.js";
-import { migrateBrowserProfilesToSql } from "../core/browser-profile-migrate.js";
-import { initBrowserProfileStorage } from "../core/browser-profile-repository.js";
 import { initPairing } from "../core/pairing.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";

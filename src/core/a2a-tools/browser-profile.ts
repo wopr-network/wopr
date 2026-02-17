@@ -5,6 +5,10 @@
  * for backwards-compatible use in browser.ts.
  */
 
-export { initBrowserProfileStorage } from "../browser-profile-repository.js";
-export { listProfileNames as listProfiles } from "../browser-profile-repository.js";
-export { loadProfile, saveProfile, type BrowserProfile } from "../browser-profile-repository.js";
+export {
+  type BrowserProfile,
+  initBrowserProfileStorage,
+  listProfileNames as listProfiles,
+  loadProfile,
+  saveProfile,
+} from "../browser-profile-repository.js";

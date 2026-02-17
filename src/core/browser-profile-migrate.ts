@@ -103,9 +103,7 @@ export async function migrateBrowserProfilesToSql(): Promise<void> {
     }
   }
 
-  logger.info(
-    `[browser-profile-migrate] Migration complete: ${migratedCount} migrated, ${errorCount} errors`,
-  );
+  logger.info(`[browser-profile-migrate] Migration complete: ${migratedCount} migrated, ${errorCount} errors`);
 
   // Create marker file
   try {
