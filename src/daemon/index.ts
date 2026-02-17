@@ -24,6 +24,8 @@ import {
   shouldRunCron,
 } from "../core/cron.js";
 import { migrateCronsToSql } from "../core/cron-migrate.js";
+import { migrateBrowserProfilesToSql } from "../core/browser-profile-migrate.js";
+import { initBrowserProfileStorage } from "../core/browser-profile-repository.js";
 import { initPairing } from "../core/pairing.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
@@ -213,6 +215,12 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   daemonLog("Initializing pairing storage...");
   await initPairing();
   daemonLog("Pairing storage initialized");
+
+  // Initialize browser profile storage and migrate from JSON
+  daemonLog("Initializing browser profile storage...");
+  await initBrowserProfileStorage();
+  await migrateBrowserProfilesToSql();
+  daemonLog("Browser profile storage initialized");
 
   // Ensure bearer token exists for API authentication
   ensureToken();

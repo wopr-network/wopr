@@ -230,7 +230,7 @@ async function getOrCreateInstance(profileName: string): Promise<BrowserInstance
   ensureProcessCleanup();
 
   const playwright = await getPlaywright();
-  const profile = loadProfile(profileName);
+  const profile = await loadProfile(profileName);
 
   const browser = await playwright.chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -250,9 +250,9 @@ async function getOrCreateInstance(profileName: string): Promise<BrowserInstance
 async function persistProfile(instance: BrowserInstance): Promise<void> {
   try {
     const cookies = await instance.context.cookies();
-    const profile = loadProfile(instance.profileName);
+    const profile = await loadProfile(instance.profileName);
     profile.cookies = cookies;
-    saveProfile(profile);
+    await saveProfile(profile);
   } catch (err) {
     logger.warn(`[browser] Failed to persist profile "${instance.profileName}": ${err}`);
   }
