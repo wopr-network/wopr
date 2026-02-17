@@ -68,13 +68,14 @@ function validateInstanceId(id: string): string | null {
 // Helpers
 // ============================================================================
 
-function createInjectors() {
+async function createInjectors() {
+  const sessions = await getSessions();
   return {
     inject: async (session: string, message: string, options?: PluginInjectOptions): Promise<string> => {
       const result = await inject(session, message, { silent: true, ...options });
       return result.response;
     },
-    getSessions: () => Object.keys(getSessions()),
+    getSessions: () => Object.keys(sessions),
   };
 }
 
@@ -187,7 +188,7 @@ instancePluginsRouter.post("/", async (c) => {
     const plugin = await installPlugin(source);
     enablePlugin(plugin.name);
 
-    const injectors = createInjectors();
+    const injectors = await createInjectors();
     await loadPlugin(plugin, injectors);
     await providerRegistry.checkHealth();
 
@@ -247,7 +248,7 @@ instancePluginsRouter.post("/:name/enable", async (c) => {
 
   try {
     enablePlugin(name);
-    const injectors = createInjectors();
+    const injectors = await createInjectors();
     await loadPlugin(plugin, injectors);
     await providerRegistry.checkHealth();
     return c.json({ enabled: true, loaded: true });

@@ -99,7 +99,7 @@ export class HealthMonitor extends EventEmitter {
   async check(): Promise<HealthSnapshot> {
     const plugins = this.checkPlugins();
     const providers = this.checkProviders();
-    const sessions = this.checkSessions();
+    const sessions = await this.checkSessions();
     const mem = process.memoryUsage();
 
     const status = this.computeStatus(plugins, providers);
@@ -174,8 +174,8 @@ export class HealthMonitor extends EventEmitter {
     }));
   }
 
-  private checkSessions(): SessionStats {
-    const sessions = getSessions();
+  private async checkSessions(): Promise<SessionStats> {
+    const sessions = await getSessions();
     const total = Object.keys(sessions).length;
     // All persisted sessions are considered "active" since WOPR doesn't
     // distinguish idle vs active at the session-file level.

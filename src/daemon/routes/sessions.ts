@@ -24,17 +24,17 @@ import { broadcastInjection, broadcastStream } from "../ws.js";
 export const sessionsRouter = new Hono();
 
 // List all sessions
-sessionsRouter.get("/", (c) => {
-  const sessions = listSessions();
+sessionsRouter.get("/", async (c) => {
+  const sessions = await listSessions();
   return c.json({ sessions });
 });
 
 // Get session details
-sessionsRouter.get("/:name", (c) => {
+sessionsRouter.get("/:name", async (c) => {
   const name = c.req.param("name");
   validateSessionName(name);
-  const sessions = getSessions();
-  const context = getSessionContext(name);
+  const sessions = await getSessions();
+  const context = await getSessionContext(name);
 
   if (!sessions[name] && !context) {
     return c.json({ error: "Session not found" }, 404);
@@ -48,13 +48,13 @@ sessionsRouter.get("/:name", (c) => {
 });
 
 // Get conversation history
-sessionsRouter.get("/:name/conversation", (c) => {
+sessionsRouter.get("/:name/conversation", async (c) => {
   const name = c.req.param("name");
   validateSessionName(name);
   const limitParam = c.req.query("limit");
   const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
-  const entries = readConversationLog(name, limit);
+  const entries = await readConversationLog(name, limit);
 
   return c.json({
     name,
@@ -75,7 +75,7 @@ sessionsRouter.post("/", async (c) => {
   validateSessionName(name);
 
   const defaultContext = context || `You are WOPR session "${name}".`;
-  setSessionContext(name, defaultContext);
+  await setSessionContext(name, defaultContext);
 
   return c.json(
     {
@@ -98,7 +98,7 @@ sessionsRouter.put("/:name", async (c) => {
     return c.json({ error: "Context is required" }, 400);
   }
 
-  setSessionContext(name, context);
+  await setSessionContext(name, context);
 
   return c.json({
     name,
@@ -200,7 +200,7 @@ sessionsRouter.post("/:name/log", async (c) => {
     return c.json({ error: "Message is required" }, 400);
   }
 
-  logMessage(name, message, { from });
+  await logMessage(name, message, { from });
 
   return c.json({
     session: name,
@@ -216,8 +216,8 @@ sessionsRouter.post("/:name/init-docs", async (c) => {
   const { agentName, userName } = body;
 
   // Check session exists
-  const sessions = getSessions();
-  const context = getSessionContext(name);
+  const sessions = await getSessions();
+  const context = await getSessionContext(name);
   if (!sessions[name] && !context) {
     return c.json({ error: "Session not found" }, 404);
   }

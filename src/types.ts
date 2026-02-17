@@ -773,7 +773,7 @@ export interface WOPRPluginContext {
     session: string,
     message: string,
     options?: { from?: string; senderId?: string; channel?: ChannelRef },
-  ): void;
+  ): void | Promise<void>;
 
   // Agent persona identity (from IDENTITY.md workspace file)
   getAgentIdentity(): AgentIdentity | Promise<AgentIdentity>;
@@ -782,7 +782,7 @@ export interface WOPRPluginContext {
   getUserProfile(): UserProfile | Promise<UserProfile>;
 
   // Sessions
-  getSessions(): string[];
+  getSessions(): string[] | Promise<string[]>;
 
   // Cancel an in-progress injection for a session
   // Returns true if there was an injection to cancel, false otherwise

@@ -1,10 +1,9 @@
 /**
  * Core session management and injection with provider routing
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
 import { logger } from "../logger.js";
-import { SESSIONS_DIR, SESSIONS_FILE } from "../paths.js";
+import { SESSIONS_DIR } from "../paths.js";
 import {
   checkSessionAccess,
   clearContext,
@@ -25,6 +24,19 @@ import {
   emitSessionResponseChunk,
 } from "./events.js";
 import { providerRegistry } from "./providers.js";
+import {
+  appendMessageAsync,
+  deleteSessionIdAsync,
+  getSessionContextAsync,
+  getSessionCreatedAsync,
+  getSessionProviderAsync,
+  getSessionsAsync,
+  listSessionsAsync,
+  readConversationLogAsync,
+  saveSessionIdAsync,
+  setSessionContextAsync,
+  setSessionProviderAsync,
+} from "./session-repository.js";
 
 // Re-export A2A tool registration for plugins
 export {
@@ -131,128 +143,67 @@ export interface Session {
   provider?: ProviderConfig;
 }
 
-export function getSessions(): Record<string, string> {
-  return existsSync(SESSIONS_FILE) ? JSON.parse(readFileSync(SESSIONS_FILE, "utf-8")) : {};
+export async function getSessions(): Promise<Record<string, string>> {
+  return getSessionsAsync();
 }
 
-export function saveSessionId(name: string, id: string): void {
-  const sessions = getSessions();
-  const isNew = !(name in sessions);
-  sessions[name] = id;
-  writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
-
-  // Persist creation timestamp for new sessions
-  if (isNew) {
-    const createdFile = join(SESSIONS_DIR, `${name}.created`);
-    writeFileSync(createdFile, String(Date.now()));
-  }
+export async function saveSessionId(name: string, id: string): Promise<void> {
+  return saveSessionIdAsync(name, id);
 }
 
-export function deleteSessionId(name: string): void {
-  const sessions = getSessions();
-  delete sessions[name];
-  writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
+export async function deleteSessionId(name: string): Promise<void> {
+  return deleteSessionIdAsync(name);
 }
 
-export function getSessionCreated(name: string): number {
-  const createdFile = join(SESSIONS_DIR, `${name}.created`);
-  if (existsSync(createdFile)) {
-    const ts = Number(readFileSync(createdFile, "utf-8"));
-    if (!Number.isNaN(ts)) return ts;
-  }
-  return 0;
+export async function getSessionCreated(name: string): Promise<number> {
+  return getSessionCreatedAsync(name);
 }
 
-export function getSessionContext(name: string): string | undefined {
-  const contextFile = join(SESSIONS_DIR, `${name}.md`);
-  return existsSync(contextFile) ? readFileSync(contextFile, "utf-8") : undefined;
+export async function getSessionContext(name: string): Promise<string | undefined> {
+  return getSessionContextAsync(name);
 }
 
-export function setSessionContext(name: string, context: string): void {
-  const contextFile = join(SESSIONS_DIR, `${name}.md`);
-  writeFileSync(contextFile, context);
+export async function setSessionContext(name: string, context: string): Promise<void> {
+  return setSessionContextAsync(name, context);
 }
 
-export function getSessionProvider(name: string): ProviderConfig | undefined {
-  const providerFile = join(SESSIONS_DIR, `${name}.provider.json`);
-  return existsSync(providerFile) ? JSON.parse(readFileSync(providerFile, "utf-8")) : undefined;
+export async function getSessionProvider(name: string): Promise<ProviderConfig | undefined> {
+  return getSessionProviderAsync(name);
 }
 
-export function setSessionProvider(name: string, provider: ProviderConfig): void {
-  const providerFile = join(SESSIONS_DIR, `${name}.provider.json`);
-  writeFileSync(providerFile, JSON.stringify(provider, null, 2));
+export async function setSessionProvider(name: string, provider: ProviderConfig): Promise<void> {
+  return setSessionProviderAsync(name, provider);
 }
 
 export async function deleteSession(name: string, reason?: string): Promise<void> {
   // Get conversation history before deletion
-  const history = getConversationHistory(name);
+  const history = await readConversationLog(name);
 
-  deleteSessionId(name);
-  const contextFile = join(SESSIONS_DIR, `${name}.md`);
-  if (existsSync(contextFile)) unlinkSync(contextFile);
-  const providerFile = join(SESSIONS_DIR, `${name}.provider.json`);
-  if (existsSync(providerFile)) unlinkSync(providerFile);
-  const createdFile = join(SESSIONS_DIR, `${name}.created`);
-  if (existsSync(createdFile)) unlinkSync(createdFile);
+  await deleteSessionId(name);
 
   // Emit session:destroy event
   await emitSessionDestroy(name, history, reason);
 }
 
-// Get conversation history for a session
-function getConversationHistory(name: string): ConversationEntry[] {
-  const logPath = getConversationLogPath(name);
-  if (!existsSync(logPath)) return [];
-
-  try {
-    const content = readFileSync(logPath, "utf-8");
-    return content
-      .split("\n")
-      .filter((line) => line.trim())
-      .map((line) => {
-        try {
-          return JSON.parse(line) as ConversationEntry;
-        } catch {
-          return null;
-        }
-      })
-      .filter((entry): entry is ConversationEntry => entry !== null);
-  } catch {
-    return [];
-  }
-}
-
-export function listSessions(): Session[] {
-  const sessions = getSessions();
-  return Object.keys(sessions).map((name) => ({
-    name,
-    id: sessions[name],
-    context: getSessionContext(name),
-    created: getSessionCreated(name),
-  }));
+export async function listSessions(): Promise<Session[]> {
+  return listSessionsAsync();
 }
 
 // Conversation log functions
-export function getConversationLogPath(name: string): string {
-  return join(SESSIONS_DIR, `${name}.conversation.jsonl`);
-}
-
-export function appendToConversationLog(name: string, entry: ConversationEntry): void {
-  const logPath = getConversationLogPath(name);
-  const line = `${JSON.stringify(entry)}\n`;
-  appendFileSync(logPath, line, "utf-8");
+export async function appendToConversationLog(name: string, entry: ConversationEntry): Promise<void> {
+  return appendMessageAsync(name, entry);
 }
 
 /**
  * Log a message to conversation history without triggering a response
  * Used by plugins to capture context from messages not directed at the bot
  */
-export function logMessage(
+export async function logMessage(
   session: string,
   content: string,
   options?: { from?: string; senderId?: string; channel?: ChannelRef },
-): void {
-  appendToConversationLog(session, {
+): Promise<void> {
+  await appendToConversationLog(session, {
     ts: Date.now(),
     from: options?.from || "unknown",
     senderId: options?.senderId,
@@ -262,21 +213,8 @@ export function logMessage(
   });
 }
 
-export function readConversationLog(name: string, limit?: number): ConversationEntry[] {
-  const logPath = getConversationLogPath(name);
-  if (!existsSync(logPath)) return [];
-
-  const content = readFileSync(logPath, "utf-8");
-  const lines = content
-    .trim()
-    .split("\n")
-    .filter((l) => l);
-  const entries = lines.map((line) => JSON.parse(line) as ConversationEntry);
-
-  if (limit && limit > 0) {
-    return entries.slice(-limit);
-  }
-  return entries;
+export async function readConversationLog(name: string, limit?: number): Promise<ConversationEntry[]> {
+  return readConversationLogAsync(name, limit);
 }
 
 // Re-export types from queue module for backwards compatibility
@@ -304,9 +242,9 @@ async function executeInjectInternal(
   options: InjectOptions | undefined,
   abortSignal: AbortSignal,
 ): Promise<InjectResult> {
-  const sessions = getSessions();
+  const sessions = await getSessions();
   const existingSessionId = sessions[name];
-  const context = getSessionContext(name);
+  const context = await getSessionContext(name);
   const silent = options?.silent ?? false;
   const onStream = options?.onStream;
   const from = options?.from ?? "cli";
@@ -361,7 +299,7 @@ async function executeInjectInternal(
 
     // Emit session:create event for new sessions
     if (!existingSessionId) {
-      await emitSessionCreate(name, { context, provider: getSessionProvider(name) });
+      await emitSessionCreate(name, { context, provider: await getSessionProvider(name) });
     }
 
     if (!silent) {
@@ -403,7 +341,7 @@ async function executeInjectInternal(
 
     // Log context to conversation log
     if (assembled.context) {
-      appendToConversationLog(name, {
+      await appendToConversationLog(name, {
         ts: Date.now(),
         from: "system",
         content: assembled.context,
@@ -416,7 +354,7 @@ async function executeInjectInternal(
     const incomingResult = await emitMutableIncoming(name, messageText, from, channel);
 
     if (incomingResult.prevented) {
-      appendToConversationLog(name, {
+      await appendToConversationLog(name, {
         ts: Date.now(),
         from: "system",
         content: "Message blocked by hook.",
@@ -428,7 +366,7 @@ async function executeInjectInternal(
 
     const processedMessage = incomingResult.message;
 
-    appendToConversationLog(name, {
+    await appendToConversationLog(name, {
       ts: Date.now(),
       from,
       content: processedMessage + (messageImages.length > 0 ? `\n[Images: ${messageImages.join(", ")}]` : ""),
@@ -462,7 +400,7 @@ async function executeInjectInternal(
     const fullContext = assembled.system || context || `You are WOPR session "${name}".`;
 
     // Load provider config from session or auto-detect available provider
-    let providerConfig = getSessionProvider(name);
+    let providerConfig = await getSessionProvider(name);
     if (!providerConfig) {
       // Auto-detect: use first available provider
       const available = providerRegistry.listProviders().filter((p) => p.available);
@@ -471,7 +409,7 @@ async function executeInjectInternal(
           name: available[0].id,
         };
         // Save this provider config for the session
-        setSessionProvider(name, providerConfig);
+        await setSessionProvider(name, providerConfig);
       } else {
         throw new Error(
           "No AI providers available. Install a provider plugin (e.g., wopr plugin install wopr-plugin-provider-anthropic) and restart.",
@@ -562,7 +500,7 @@ async function executeInjectInternal(
           case "system":
             if (msg.subtype === "init") {
               sessionId = (msg as { session_id?: string }).session_id || "";
-              saveSessionId(name, sessionId);
+              await saveSessionId(name, sessionId);
               if (!silent) logger.info(`[wopr] Session ID: ${sessionId}`);
             }
             // Log compact_metadata for debugging
@@ -649,7 +587,7 @@ async function executeInjectInternal(
       if (!sessionResumeRetried && existingSessionId && errorMsg.includes("process exited with code 1")) {
         // The session might be stale - clear it and retry without resume
         logger.warn(`[wopr] Session resume may have failed, clearing session ID and retrying...`);
-        deleteSessionId(name);
+        await deleteSessionId(name);
         sessionResumeRetried = true;
 
         // Create new query without resume
@@ -667,7 +605,7 @@ async function executeInjectInternal(
             case "system":
               if (msg.subtype === "init") {
                 sessionId = (msg as { session_id?: string }).session_id || "";
-                saveSessionId(name, sessionId);
+                await saveSessionId(name, sessionId);
                 if (!silent) logger.info(`[wopr] New session ID: ${sessionId}`);
               }
               // Pass all system messages to onStream
@@ -734,7 +672,7 @@ async function executeInjectInternal(
     const outgoingResult = await emitMutableOutgoing(name, response, from, channel);
 
     if (outgoingResult.prevented) {
-      appendToConversationLog(name, {
+      await appendToConversationLog(name, {
         ts: Date.now(),
         from: "system",
         content: "Response blocked by hook.",
@@ -748,7 +686,7 @@ async function executeInjectInternal(
 
     // Log response to conversation log
     if (response) {
-      appendToConversationLog(name, {
+      await appendToConversationLog(name, {
         ts: Date.now(),
         from: "WOPR",
         content: response,
