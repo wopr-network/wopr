@@ -63,21 +63,12 @@ export const cronPluginSchema: PluginSchema = {
     jobs: {
       schema: cronJobSchema,
       primaryKey: "name",
-      indexes: [
-        { fields: ["session"] },
-        { fields: ["schedule"] },
-        { fields: ["runAt"] },
-      ],
+      indexes: [{ fields: ["session"] }, { fields: ["schedule"] }, { fields: ["runAt"] }],
     },
     runs: {
       schema: cronRunSchema,
       primaryKey: "id",
-      indexes: [
-        { fields: ["cronName"] },
-        { fields: ["session"] },
-        { fields: ["startedAt"] },
-        { fields: ["status"] },
-      ],
+      indexes: [{ fields: ["cronName"] }, { fields: ["session"] }, { fields: ["startedAt"] }, { fields: ["status"] }],
     },
   },
 };

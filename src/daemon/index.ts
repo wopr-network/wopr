@@ -399,7 +399,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const { getPluginExtension } = await import("../plugins/extensions.js");
   const maybeSkillsRouter = getPluginExtension("skills:router");
   if (maybeSkillsRouter) {
-    app.route("/skills", maybeSkillsRouter as any);
+    app.route("/skills", maybeSkillsRouter as Hono);
     daemonLog("Skills REST routes mounted from plugin");
   }
 
