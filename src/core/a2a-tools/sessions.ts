@@ -27,7 +27,7 @@ export function createSessionTools(sessionName: string): unknown[] {
       },
       async (args: { limit?: number }) => {
         if (!getSessions) throw new Error("Session functions not initialized");
-        const sessions = getSessions();
+        const sessions = await getSessions();
         let sessionList = Object.keys(sessions).map((key) => ({
           name: key,
           id: sessions[key],
@@ -130,7 +130,7 @@ export function createSessionTools(sessionName: string): unknown[] {
           }
 
           if (full) {
-            const allEntries = readConversationLog(session, 0);
+            const allEntries = await readConversationLog(session, 0);
             const totalCount = allEntries.length;
             const pageSize = limit > 0 ? limit : 100;
             const startIdx = offset;
@@ -170,7 +170,7 @@ export function createSessionTools(sessionName: string): unknown[] {
               ],
             };
           } else {
-            const entries = readConversationLog(session, Math.min(limit, 50));
+            const entries = await readConversationLog(session, Math.min(limit, 50));
             const formatted = entries
               .map(
                 (e) =>
@@ -198,7 +198,7 @@ export function createSessionTools(sessionName: string): unknown[] {
         return withSecurityCheck("sessions_spawn", sessionName, async () => {
           if (!setSessionContext) throw new Error("Session functions not initialized");
           const { name, purpose } = args;
-          setSessionContext(name, purpose);
+          await setSessionContext(name, purpose);
           return {
             content: [{ type: "text", text: `Session '${name}' created successfully with purpose: ${purpose}` }],
           };

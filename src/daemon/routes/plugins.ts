@@ -122,13 +122,14 @@ interface PluginConfigData {
 // ============================================================================
 
 // Create injectors for hot-loading plugins (same as daemon/index.ts)
-function createInjectors() {
+async function createInjectors() {
+  const sessions = await getSessions();
   return {
     inject: async (session: string, message: string, options?: PluginInjectOptions): Promise<string> => {
       const result = await inject(session, message, { silent: true, ...options });
       return result.response;
     },
-    getSessions: () => Object.keys(getSessions()),
+    getSessions: () => Object.keys(sessions),
   };
 }
 
@@ -210,7 +211,7 @@ async function handleInstall(c: Context) {
     await enablePlugin(plugin.name);
 
     // Hot-load the plugin immediately (no restart required)
-    const injectors = createInjectors();
+    const injectors = await createInjectors();
     await loadPlugin(plugin, injectors);
 
     // Run health check for any newly registered providers
@@ -327,7 +328,7 @@ pluginsRouter.post("/:name/enable", mutateRateLimit, async (c) => {
     await enablePlugin(name);
 
     // Hot-load the plugin
-    const injectors = createInjectors();
+    const injectors = await createInjectors();
     await loadPlugin(plugin, injectors);
 
     // Run health check for any newly registered providers
@@ -401,7 +402,7 @@ pluginsRouter.post("/:name/reload", mutateRateLimit, async (c) => {
     await unloadPlugin(name);
 
     // Hot-load with fresh code
-    const injectors = createInjectors();
+    const injectors = await createInjectors();
     await loadPlugin(plugin, injectors);
 
     // Run health check for any newly registered providers

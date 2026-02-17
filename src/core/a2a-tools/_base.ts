@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { logger } from "../../logger.js";
-import { MemoryIndexManager, parseTemporalFilter } from "../../memory/index.js";
+import { parseTemporalFilter } from "../../memory/index.js";
 import { GLOBAL_IDENTITY_DIR, SESSIONS_DIR, WOPR_HOME } from "../../paths.js";
 import {
   canIndexSession,
@@ -43,7 +43,6 @@ export {
   sep,
   z,
   logger,
-  MemoryIndexManager,
   parseTemporalFilter,
   GLOBAL_IDENTITY_DIR,
   SESSIONS_DIR,
@@ -106,20 +105,22 @@ export function setCachedServer(server: unknown): void {
 export let injectFn:
   | ((session: string, message: string, opts?: Record<string, unknown>) => Promise<{ response: string }>)
   | null = null;
-export let getSessions: (() => Record<string, string>) | null = null;
+export let getSessions: (() => Promise<Record<string, string>>) | null = null;
 export let readConversationLog:
   | ((
       session: string,
       limit: number,
-    ) => Array<{
-      ts: number;
-      from: string;
-      type: string;
-      content: string;
-      channel?: { id: string; type: string; name?: string };
-    }>)
+    ) => Promise<
+      Array<{
+        ts: number;
+        from: string;
+        type: string;
+        content: string;
+        channel?: { id: string; type: string; name?: string };
+      }>
+    >)
   | null = null;
-export let setSessionContext: ((name: string, purpose: string) => void) | null = null;
+export let setSessionContext: ((name: string, purpose: string) => Promise<void>) | null = null;
 
 export function setSessionFunctions(fns: {
   inject: typeof injectFn;

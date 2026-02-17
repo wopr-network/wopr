@@ -147,9 +147,9 @@ openaiRouter.post("/chat/completions", async (c) => {
 
   // Set up the ephemeral session
   if (systemPrompt) {
-    setSessionContext(sessionName, systemPrompt);
+    await setSessionContext(sessionName, systemPrompt);
   }
-  setSessionProvider(sessionName, providerConfig);
+  await setSessionProvider(sessionName, providerConfig);
 
   if (body.stream) {
     // ---- Streaming response (SSE) ----

@@ -210,7 +210,7 @@ const conversationHistoryProvider: ContextProvider = {
     try {
       // Read conversation log for this session
       const { readConversationLog } = await import("./sessions.js");
-      const allEntries = readConversationLog(session); // Get all entries
+      const allEntries = await readConversationLog(session); // Get all entries
 
       if (allEntries.length === 0) return null;
 
