@@ -43,12 +43,13 @@ const schemaVersionsTable = sqliteTable("_plugin_schema_versions", {
 function zodToSqliteColumn(
   name: string,
   zodType: z.ZodTypeAny,
+  primaryKey?: string,
 ): ReturnType<typeof text> | ReturnType<typeof integer> | ReturnType<typeof real> | ReturnType<typeof blob> {
   // Handle optional types
   const innerType = zodType instanceof z.ZodOptional ? zodType.unwrap() : zodType;
 
-  // Check for primary key
-  const isPrimary = name === "id";
+  // Check for primary key - use actual primaryKey field name from schema
+  const isPrimary = name === primaryKey;
 
   // Map Zod types to SQLite columns
   if (innerType instanceof z.ZodString) {
@@ -99,11 +100,55 @@ function generateTable(namespace: string, tableName: string, tableSchema: TableS
     ReturnType<typeof text> | ReturnType<typeof integer> | ReturnType<typeof real> | ReturnType<typeof blob>
   > = {};
   for (const [fieldName, zodType] of Object.entries(tableSchema.schema.shape)) {
-    columns[fieldName] = zodToSqliteColumn(fieldName, zodType);
+    columns[fieldName] = zodToSqliteColumn(fieldName, zodType, tableSchema.primaryKey);
   }
 
   // Create table without indexes first (simpler type)
   return sqliteTable(fullTableName, columns);
+}
+
+/**
+ * Generate CREATE TABLE SQL from table schema
+ */
+function generateCreateTableSQL(namespace: string, tableName: string, tableSchema: TableSchema): string {
+  const fullTableName = `${namespace}_${tableName}`;
+  const primaryKey = tableSchema.primaryKey;
+  const columns: string[] = [];
+
+  for (const [fieldName, zodType] of Object.entries(tableSchema.schema.shape)) {
+    const innerType = zodType instanceof z.ZodOptional ? zodType.unwrap() : zodType;
+    const isPrimary = fieldName === primaryKey;
+
+    let sqlType: string;
+    if (innerType instanceof z.ZodString) {
+      sqlType = "TEXT";
+    } else if (innerType instanceof z.ZodNumber) {
+      sqlType = innerType.isInt ? "INTEGER" : "REAL";
+    } else if (innerType instanceof z.ZodBoolean) {
+      sqlType = "INTEGER";
+    } else if (innerType instanceof z.ZodDate) {
+      sqlType = "INTEGER";
+    } else if (innerType instanceof z.ZodArray || innerType instanceof z.ZodObject) {
+      sqlType = "TEXT";
+    } else if (innerType instanceof z.ZodEnum || innerType instanceof z.ZodUnion) {
+      sqlType = "TEXT";
+    } else {
+      sqlType = "TEXT";
+    }
+
+    let colDef = `"${fieldName}" ${sqlType}`;
+    if (isPrimary) {
+      colDef += " PRIMARY KEY";
+    }
+    if (zodType instanceof z.ZodOptional) {
+      colDef += " NULL";
+    } else {
+      colDef += " NOT NULL";
+    }
+    columns.push(colDef);
+  }
+
+  return `CREATE TABLE IF NOT EXISTS "${fullTableName}" (${columns.join(", ")})`;
 }
 
 /**
@@ -112,8 +157,13 @@ function generateTable(namespace: string, tableName: string, tableSchema: TableS
 export class Storage implements StorageApi {
   readonly driver: "sqlite" | "postgres" = "sqlite";
   private db: BetterSQLite3Database;
+  private sqliteRaw: DatabaseType;
   private repositories = new Map<string, RepositoryEntry>();
   private dbPath: string;
+
+  getDb(): BetterSQLite3Database {
+    return this.db;
+  }
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath ?? join(WOPR_HOME, "wopr.sqlite");
@@ -124,9 +174,9 @@ export class Storage implements StorageApi {
       mkdirSync(dir, { recursive: true });
     }
 
-    // Initialize SQLite connection
-    const sqlite = new Database(this.dbPath);
-    this.db = drizzle(sqlite);
+    // Initialize SQLite connection - store both raw and Drizzle-wrapped
+    this.sqliteRaw = new Database(this.dbPath);
+    this.db = drizzle(this.sqliteRaw);
 
     // Initialize schema versions table
     this.initSchemaVersions();
@@ -138,9 +188,8 @@ export class Storage implements StorageApi {
    * Initialize schema versions tracking table
    */
   private initSchemaVersions(): void {
-    // This runs raw SQL since we're initializing before the registry system
-    const sqlite = (this.db as unknown as { _: { session: DatabaseType } })._.session;
-    sqlite.exec(`
+    // Use the raw SQLite handle for schema initialization
+    this.sqliteRaw.exec(`
       CREATE TABLE IF NOT EXISTS _plugin_schema_versions (
         namespace TEXT PRIMARY KEY,
         version INTEGER NOT NULL,
@@ -234,12 +283,13 @@ export class Storage implements StorageApi {
       const table = generateTable(schema.namespace, tableName, tableSchema);
       tables.set(tableName, table);
 
-      // Create repository
-      const repo = new DrizzleRepository(this.db, table, tableSchema.primaryKey, tableSchema.schema);
-      repositories.set(tableName, repo);
+      // Explicitly create the table in SQLite
+      const createTableSQL = generateCreateTableSQL(schema.namespace, tableName, tableSchema);
+      this.sqliteRaw.exec(createTableSQL);
 
-      // Note: Drizzle will create tables on first query
-      // For explicit table creation, we'd use drizzle-kit migrations
+      // Create repository
+      const repo = new DrizzleRepository(this.db, table, tableSchema.primaryKey, tableSchema.schema, this.sqliteRaw);
+      repositories.set(tableName, repo);
     }
 
     this.repositories.set(schema.namespace, {
@@ -272,19 +322,18 @@ export class Storage implements StorageApi {
   }
 
   async raw(sql: string, params?: unknown[]): Promise<unknown[]> {
-    // Use the underlying better-sqlite3 database for raw queries
-    const sqlite = (this.db as unknown as { _: { session: DatabaseType } })._.session;
-    const stmt = sqlite.prepare(sql);
+    // Use the raw better-sqlite3 database for raw queries
+    const stmt = this.sqliteRaw.prepare(sql);
     const result = params ? stmt.all(...params) : stmt.all();
     return Array.isArray(result) ? result : [result];
   }
 
   async transaction<R>(fn: (storage: StorageApi) => Promise<R>): Promise<R> {
-    return this.db.transaction(async (trx) => {
+    return this.sqliteRaw.transaction(() => {
       // Create a transaction-aware storage wrapper
-      const trxStorage = new TransactionStorage(trx as BetterSQLite3Database, this);
+      const trxStorage = new TransactionStorage(this.sqliteRaw, this);
       return fn(trxStorage);
-    });
+    })();
   }
 }
 
@@ -295,7 +344,7 @@ class TransactionStorage implements StorageApi {
   readonly driver: "sqlite" | "postgres" = "sqlite";
 
   constructor(
-    private trx: BetterSQLite3Database,
+    private sqliteRaw: DatabaseType,
     private parent: Storage,
   ) {}
 
@@ -319,7 +368,13 @@ class TransactionStorage implements StorageApi {
 
     const tableSchema = entry.schema.tables[tableName];
 
-    return new DrizzleRepository(this.trx, table, tableSchema.primaryKey, tableSchema.schema) as Repository<T>;
+    return new DrizzleRepository(
+      this.parent.getDb(),
+      table,
+      tableSchema.primaryKey,
+      tableSchema.schema,
+      this.sqliteRaw,
+    ) as Repository<T>;
   }
 
   isRegistered(namespace: string): boolean {
@@ -331,8 +386,7 @@ class TransactionStorage implements StorageApi {
   }
 
   async raw(sqlStr: string, params?: unknown[]): Promise<unknown[]> {
-    const sqlite = (this.trx as unknown as { _: { session: DatabaseType } })._.session;
-    const stmt = sqlite.prepare(sqlStr);
+    const stmt = this.sqliteRaw.prepare(sqlStr);
     const result = params ? stmt.all(...params) : stmt.all();
     return Array.isArray(result) ? result : [result];
   }

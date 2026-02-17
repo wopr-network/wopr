@@ -166,6 +166,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     private table: SQLiteTable,
     private primaryKey: string,
     private zodSchema: z.ZodObject<Record<string, z.ZodTypeAny>>,
+    private sqliteRaw?: unknown,
   ) {
     // Extract columns from table definition
     this.columns = (table as unknown as { _: { columns: Record<string, SQLiteColumn> } })._.columns;
@@ -257,10 +258,10 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
       .update(this.table)
       .set(validated as Record<string, unknown>)
       .where(and(...conditions))
-      .all();
+      .run();
 
     // better-sqlite3 RunResult has changes property
-    return Promise.resolve((result as unknown as { changes: number }).changes ?? 0);
+    return Promise.resolve(result.changes ?? 0);
   }
 
   async delete(id: string): Promise<boolean> {
@@ -304,17 +305,37 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
   }
 
   async raw(sqlStr: string, params?: unknown[]): Promise<unknown[]> {
-    // Use raw SQL with better-sqlite3
-    const result = this.db.run(
-      sql`${sql.raw(sqlStr)}${params ? sql.raw(`, ${params.map(() => "?").join(", ")}`) : sql.raw("")}`,
-    );
-    return Promise.resolve(Array.isArray(result) ? result : [result]);
+    // Use raw better-sqlite3 if provided
+    if (!this.sqliteRaw) {
+      throw new Error("Raw SQL requires sqliteRaw to be provided to the repository");
+    }
+
+    const db = this.sqliteRaw as {
+      prepare: (sql: string) => {
+        all: (...params: unknown[]) => unknown[];
+        run: (...params: unknown[]) => { changes: number };
+      };
+    };
+
+    // Check if it's a SELECT query (should return rows) or modification query
+    const isSelect = sqlStr.trim().toUpperCase().startsWith("SELECT");
+
+    if (isSelect) {
+      const stmt = db.prepare(sqlStr);
+      const result = stmt.all(...(params ?? []));
+      return Array.isArray(result) ? result : [result];
+    } else {
+      const stmt = db.prepare(sqlStr);
+      const result = stmt.run(...(params ?? []));
+      return [{ changes: result.changes }];
+    }
   }
 
   async transaction<R>(fn: (repo: Repository<T>) => Promise<R>): Promise<R> {
-    // For now, just run the function without transaction
-    // Better-sqlite3 transactions work differently and need more work
-    return fn(this);
+    // For now, just run without transaction to avoid complex type issues
+    // TODO: Properly implement transaction support with type-safe access to raw DB
+    const result = await fn(this);
+    return result;
   }
 
   /**

@@ -16,12 +16,14 @@ export type {
 // Re-export storage types for plugins
 export type {
   Filter,
+  FilterCondition,
   FilterOperator,
   OrderDirection,
   PluginSchema,
   QueryBuilder,
   Repository,
   StorageApi,
+  TableIndex,
   TableSchema,
 } from "./storage/api/plugin-storage.js";
 // Re-export provider types for plugins
