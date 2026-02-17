@@ -47,7 +47,7 @@ export async function getSessionsAsync(): Promise<Record<string, string>> {
 export async function saveSessionIdAsync(name: string, id: string): Promise<void> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const existing = await repo.findFirst({ name } as any);
+  const existing = await repo.findFirst({ name });
   const now = Date.now();
   if (existing) {
     // Update existing — preserve createdAt
@@ -69,7 +69,7 @@ export async function saveSessionIdAsync(name: string, id: string): Promise<void
 export async function deleteSessionIdAsync(name: string): Promise<void> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const existing = await repo.findFirst({ name } as any);
+  const existing = await repo.findFirst({ name });
   if (existing) {
     await repo.delete(existing.id);
   }
@@ -79,7 +79,7 @@ export async function deleteSessionIdAsync(name: string): Promise<void> {
 export async function getSessionCreatedAsync(name: string): Promise<number> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const existing = await repo.findFirst({ name } as any);
+  const existing = await repo.findFirst({ name });
   return existing?.createdAt ?? 0;
 }
 
@@ -87,7 +87,7 @@ export async function getSessionCreatedAsync(name: string): Promise<number> {
 export async function getSessionContextAsync(name: string): Promise<string | undefined> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const existing = await repo.findFirst({ name } as any);
+  const existing = await repo.findFirst({ name });
   return existing?.context ?? undefined;
 }
 
@@ -95,7 +95,7 @@ export async function getSessionContextAsync(name: string): Promise<string | und
 export async function setSessionContextAsync(name: string, context: string): Promise<void> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const existing = await repo.findFirst({ name } as any);
+  const existing = await repo.findFirst({ name });
   const now = Date.now();
   if (existing) {
     await repo.update(existing.id, { context, updatedAt: now });
@@ -117,7 +117,7 @@ export async function setSessionContextAsync(name: string, context: string): Pro
 export async function getSessionProviderAsync(name: string): Promise<ProviderConfig | undefined> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const existing = await repo.findFirst({ name } as any);
+  const existing = await repo.findFirst({ name });
   if (!existing?.providerConfig) return undefined;
   try {
     return JSON.parse(existing.providerConfig) as ProviderConfig;
@@ -130,7 +130,7 @@ export async function getSessionProviderAsync(name: string): Promise<ProviderCon
 export async function setSessionProviderAsync(name: string, provider: ProviderConfig): Promise<void> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const existing = await repo.findFirst({ name } as any);
+  const existing = await repo.findFirst({ name });
   const now = Date.now();
   const providerConfig = JSON.stringify(provider);
   const providerId = provider.name;
@@ -186,7 +186,7 @@ export async function appendMessageAsync(sessionName: string, entry: Conversatio
   await initSessionStorage();
   // Look up session id from name
   const repo = sessionsRepo();
-  const session = await repo.findFirst({ name: sessionName } as any);
+  const session = await repo.findFirst({ name: sessionName });
   if (!session) {
     logger.warn(`[session-repo] appendMessage: session "${sessionName}" not found, creating`);
     // Auto-create session record if not exists (matches current file-append behavior)
@@ -242,7 +242,7 @@ async function appendMessageToSession(sessionId: string, entry: ConversationEntr
 export async function readConversationLogAsync(sessionName: string, limit?: number): Promise<ConversationEntry[]> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const session = await repo.findFirst({ name: sessionName } as any);
+  const session = await repo.findFirst({ name: sessionName });
   if (!session) return [];
 
   const msgRepo = messagesRepo();
@@ -271,6 +271,6 @@ export async function readConversationLogAsync(sessionName: string, limit?: numb
 export async function getConversationSessionId(sessionName: string): Promise<string | null> {
   await initSessionStorage();
   const repo = sessionsRepo();
-  const session = await repo.findFirst({ name: sessionName } as any);
+  const session = await repo.findFirst({ name: sessionName });
   return session?.id ?? null;
 }

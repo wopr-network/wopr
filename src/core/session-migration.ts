@@ -6,6 +6,7 @@ import { logger } from "../logger.js";
 import { SESSIONS_DIR, SESSIONS_FILE } from "../paths.js";
 import type { Repository } from "../storage/api/plugin-storage.js";
 import { getStorage } from "../storage/index.js";
+import type { ConversationEntry } from "../types.js";
 import { initSessionStorage } from "./session-repository.js";
 import type { SessionMessageRecord, SessionRecord } from "./session-schema.js";
 
@@ -150,7 +151,7 @@ async function streamJsonlToMessages(
 
   for await (const line of rl) {
     if (!line.trim()) continue;
-    let entry: any;
+    let entry: ConversationEntry;
     try {
       entry = JSON.parse(line);
     } catch {
