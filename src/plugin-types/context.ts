@@ -5,6 +5,7 @@
  * this object during init() and use it to interact with the WOPR daemon.
  */
 
+import type { StorageApi } from "../storage/api/plugin-storage.js";
 import type { A2AServerConfig } from "./a2a.js";
 import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
 import type { ConfigSchema } from "./config.js";
@@ -245,4 +246,7 @@ export interface WOPRPluginContext {
   unregisterCapabilityProvider(capability: AdapterCapability, providerId: string): void;
   getCapabilityProviders(capability: AdapterCapability): ProviderOption[];
   hasCapability(capability: AdapterCapability): boolean;
+
+  // Storage API - plugin-extensible database storage
+  storage: StorageApi;
 }

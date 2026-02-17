@@ -13,11 +13,25 @@ export type {
   SecurityPolicy,
   TrustLevel,
 } from "./security/types.js";
+// Re-export storage types for plugins
+export type {
+  Filter,
+  FilterCondition,
+  FilterOperator,
+  OrderDirection,
+  PluginSchema,
+  QueryBuilder,
+  Repository,
+  StorageApi,
+  TableIndex,
+  TableSchema,
+} from "./storage/api/plugin-storage.js";
 // Re-export provider types for plugins
 export type { ModelProvider, ProviderResponse } from "./types/provider.js";
 
 // Import InjectionSource for use within this file
 import type { InjectionSource as _InjectionSource } from "./security/types.js";
+import type { StorageApi } from "./storage/api/plugin-storage.js";
 
 // Session types
 export interface Session {
@@ -880,6 +894,9 @@ export interface WOPRPluginContext {
 
   // Logging
   log: PluginLogger;
+
+  // Storage API - plugin-extensible database
+  storage: StorageApi;
 
   // Access to plugin directory
   getPluginDir(): string;

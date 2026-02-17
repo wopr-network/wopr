@@ -24,6 +24,7 @@ import { cancelInject as cancelSessionInject, logMessage as logMessageToSession 
 import { resolveIdentity, resolveUserProfile } from "../core/workspace.js";
 import { logger } from "../logger.js";
 import type { AdapterCapability, ProviderOption } from "../plugin-types/manifest.js";
+import { getStorage } from "../storage/index.js";
 import type { ModelProvider } from "../types/provider.js";
 import type {
   ChannelAdapter,
@@ -291,7 +292,7 @@ export function createPluginContext(
     },
 
     // A2A tools - plugins register MCP tools for agent-to-agent communication
-    registerA2AServer(config) {
+    registerA2AServer(config: import("../plugin-types/a2a.js").A2AServerConfig) {
       registerA2AServerImpl(config);
     },
 
@@ -317,5 +318,8 @@ export function createPluginContext(
     hasCapability(capability: AdapterCapability): boolean {
       return getCapabilityRegistry().hasProvider(capability);
     },
+
+    // Storage API - plugin-extensible database storage
+    storage: getStorage(),
   };
 }
