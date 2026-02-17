@@ -207,7 +207,7 @@ async function handleInstall(c: Context) {
   try {
     const plugin = await installPlugin(source);
     // Auto-enable plugin after installation
-    await await enablePlugin(plugin.name);
+    await enablePlugin(plugin.name);
 
     // Hot-load the plugin immediately (no restart required)
     const injectors = createInjectors();
