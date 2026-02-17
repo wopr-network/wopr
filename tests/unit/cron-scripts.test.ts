@@ -40,7 +40,7 @@ import {
   executeCronScript,
   executeCronScripts,
   resolveScriptTemplates,
-} from "../../src/core/cron.js";
+} from "../../plugins/wopr-plugin-cron/src/cron.js";
 import type { CronScript, CronScriptResult } from "../../src/types.js";
 
 const testDir = join(tmpdir(), "wopr-test-cron-scripts");

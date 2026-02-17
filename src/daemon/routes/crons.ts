@@ -4,9 +4,10 @@
 
 import { Hono } from "hono";
 import { config } from "../../core/config.js";
-import { addCron, createOnceJob, getCron, getCrons, removeCron } from "../../core/cron.js";
 import { inject } from "../../core/sessions.js";
 import type { CronJob } from "../../types.js";
+import { addCron, getCron, getCrons, removeCron } from "../../../plugins/wopr-plugin-cron/src/cron-repository.js";
+import { createOnceJob } from "../../../plugins/wopr-plugin-cron/src/cron.js";
 
 export const cronsRouter = new Hono();
 

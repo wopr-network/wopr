@@ -23,7 +23,6 @@ import {
   type PolicyCheckResult,
 } from "../../security/index.js";
 import { config as centralConfig } from "../config.js";
-import { addCron, createOnceJob, getCronHistory, getCrons, removeCron } from "../cron.js";
 import { eventBus } from "../events.js";
 
 // Re-export the SDK tool helper
@@ -54,11 +53,6 @@ export {
   isEnforcementEnabled,
   type PolicyCheckResult,
   centralConfig,
-  addCron,
-  createOnceJob,
-  getCronHistory,
-  getCrons,
-  removeCron,
   eventBus,
 };
 

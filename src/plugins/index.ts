@@ -30,6 +30,7 @@ export {
 export type { InstallResult } from "./installation.js";
 // --- Installation ---
 export {
+  addInstalledPlugin,
   disablePlugin,
   enablePlugin,
   getInstalledPlugins,

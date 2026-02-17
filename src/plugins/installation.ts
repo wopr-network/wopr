@@ -198,7 +198,7 @@ export async function getInstalledPlugins(): Promise<InstalledPlugin[]> {
   return getPluginRepo().findMany();
 }
 
-async function addInstalledPlugin(plugin: InstalledPlugin): Promise<void> {
+export async function addInstalledPlugin(plugin: InstalledPlugin): Promise<void> {
   await ensurePluginSchema();
   const repo = getPluginRepo();
   const existing = await repo.findById(plugin.name);
