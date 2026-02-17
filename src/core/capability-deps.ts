@@ -1,5 +1,8 @@
 import type { AdapterCapability } from "../plugin-types/manifest.js";
 
+/**
+ * Represents a capability dependency for a plugin.
+ */
 export interface CapabilityDependency {
   pluginName: string;
   capability: AdapterCapability;
@@ -88,6 +91,10 @@ export class CapabilityDependencyGraph {
 // Singleton
 let instance: CapabilityDependencyGraph | null = null;
 
+/**
+ * Get the singleton capability dependency graph instance.
+ * @returns The capability dependency graph instance
+ */
 export function getCapabilityDependencyGraph(): CapabilityDependencyGraph {
   if (!instance) {
     instance = new CapabilityDependencyGraph();
@@ -95,6 +102,9 @@ export function getCapabilityDependencyGraph(): CapabilityDependencyGraph {
   return instance;
 }
 
+/**
+ * Reset the capability dependency graph singleton (primarily for testing).
+ */
 export function resetCapabilityDependencyGraph(): void {
   instance = null;
 }

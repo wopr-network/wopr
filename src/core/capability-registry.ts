@@ -2,16 +2,20 @@ import { EventEmitter } from "node:events";
 import { logger } from "../logger.js";
 import type { AdapterCapability, ProviderOption } from "../plugin-types/manifest.js";
 
+/**
+ * Represents a capability entry in the registry.
+ */
 export interface CapabilityEntry {
   capability: AdapterCapability;
   providers: Map<string, ProviderOption>;
 }
 
 /**
- * Events emitted by the capability registry.
+ * Central registry for managing capability providers.
  *
- * "capability:providerRegistered"   -> { capability, provider }
- * "capability:providerUnregistered" -> { capability, providerId }
+ * Events emitted by the capability registry:
+ * - "capability:providerRegistered"   -> { capability, providerId, providerName }
+ * - "capability:providerUnregistered" -> { capability, providerId }
  */
 export class CapabilityRegistry extends EventEmitter {
   private capabilities = new Map<AdapterCapability, CapabilityEntry>();
@@ -118,6 +122,10 @@ export class CapabilityRegistry extends EventEmitter {
 // Singleton
 let instance: CapabilityRegistry | null = null;
 
+/**
+ * Get the singleton capability registry instance.
+ * @returns The capability registry instance
+ */
 export function getCapabilityRegistry(): CapabilityRegistry {
   if (!instance) {
     instance = new CapabilityRegistry();
@@ -125,6 +133,9 @@ export function getCapabilityRegistry(): CapabilityRegistry {
   return instance;
 }
 
+/**
+ * Reset the capability registry singleton (primarily for testing).
+ */
 export function resetCapabilityRegistry(): void {
   instance = null;
 }
