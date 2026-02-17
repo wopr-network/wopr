@@ -133,6 +133,56 @@ export interface SkillEntry {
 }
 
 // ============================================================================
+// Frontmatter Resolution Helpers
+// ============================================================================
+
+function resolveWoprMetadata(frontmatter: ParsedFrontmatter): SkillMetadata | undefined {
+  if (!frontmatter.metadata) return undefined;
+
+  if (typeof frontmatter.metadata === "string") {
+    try {
+      const parsed = JSON.parse(frontmatter.metadata) as { wopr?: SkillMetadata; clawdbot?: SkillMetadata };
+      return parsed.wopr || parsed.clawdbot;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return (
+    (frontmatter.metadata as { wopr?: SkillMetadata; clawdbot?: SkillMetadata }).wopr ||
+    (frontmatter.metadata as { clawdbot?: SkillMetadata }).clawdbot
+  );
+}
+
+function resolveSkillInvocationPolicy(_frontmatter: ParsedFrontmatter): {
+  disableModelInvocation?: boolean;
+  userInvocable?: boolean;
+} {
+  return {
+    disableModelInvocation: false,
+    userInvocable: true,
+  };
+}
+
+function resolveCommandDispatch(frontmatter: ParsedFrontmatter): SkillCommandDispatch | undefined {
+  const dispatch = frontmatter["command-dispatch"]?.trim().toLowerCase();
+  if (dispatch !== "tool") return undefined;
+
+  const toolName = frontmatter["command-tool"]?.trim();
+  if (!toolName) {
+    logger.warn(`Skill requested tool dispatch but did not provide command-tool`);
+    return undefined;
+  }
+
+  const argMode = frontmatter["command-arg-mode"]?.trim().toLowerCase();
+  return {
+    kind: "tool",
+    toolName,
+    argMode: !argMode || argMode === "raw" ? "raw" : "raw",
+  };
+}
+
+// ============================================================================
 // Skill Discovery
 // ============================================================================
 
