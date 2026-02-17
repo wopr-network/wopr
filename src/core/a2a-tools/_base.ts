@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { logger } from "../../logger.js";
-import { MemoryIndexManager, parseTemporalFilter } from "../../memory/index.js";
+import { parseTemporalFilter } from "../../memory/index.js";
 import { GLOBAL_IDENTITY_DIR, SESSIONS_DIR, WOPR_HOME } from "../../paths.js";
 import {
   canIndexSession,
@@ -43,7 +43,6 @@ export {
   sep,
   z,
   logger,
-  MemoryIndexManager,
   parseTemporalFilter,
   GLOBAL_IDENTITY_DIR,
   SESSIONS_DIR,

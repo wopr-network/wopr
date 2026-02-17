@@ -28,7 +28,7 @@ import { providerRegistry } from "../core/providers.js";
 import { inject } from "../core/sessions.js";
 import { logger as winstonLogger } from "../logger.js";
 import { LOG_FILE, PID_FILE } from "../paths.js";
-import { loadAllPlugins, registerPluginExtension, shutdownAllPlugins } from "../plugins.js";
+import { loadAllPlugins, shutdownAllPlugins } from "../plugins.js";
 import { ensureToken } from "./auth-token.js";
 import { HealthMonitor } from "./health.js";
 import { bearerAuth, requireAuth } from "./middleware/auth.js";
@@ -290,73 +290,17 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     },
   };
 
-  daemonLog(`[heap] before memory hooks: ${heapMB()}`);
-
-  // Initialize memory system hooks (session save on destroy)
-  try {
-    const { initMemoryHooks } = await import("../memory/index.js");
-    initMemoryHooks();
-    daemonLog("Memory system hooks initialized");
-  } catch (err) {
-    const msg = `Memory hooks initialization failed: ${err}`;
-    daemonLog(`Warning: ${msg}`);
-    startupWarnings.push(msg);
-  }
-
-  daemonLog(`[heap] after memory hooks: ${heapMB()}`);
-
-  // Expose memory SQLite to plugins — they handle their own columns
-  try {
-    const { WOPR_HOME } = await import("../paths.js");
-    const { join } = await import("node:path");
-    const { createRequire } = await import("node:module");
-    const _require = createRequire(import.meta.url);
-    const { DatabaseSync } = _require("node:sqlite");
-    const dbPath = join(WOPR_HOME, "memory", "index.sqlite");
-    registerPluginExtension("core", "memory:db", new DatabaseSync(dbPath));
-    daemonLog("Memory SQLite exposed to plugins as core.memory:db");
-  } catch (err) {
-    const msg = `Memory db extension setup failed: ${err}`;
-    daemonLog(`Warning: ${msg}`);
-    startupWarnings.push(msg);
-  }
-
   daemonLog(`[heap] before plugins: ${heapMB()}`);
+
+  // Memory system (indexing, FTS5, file watching, session hooks) delegated to memory-semantic plugin
+  daemonLog("Memory system delegated to memory-semantic plugin");
 
   // Load plugins (this is where providers register themselves)
   await loadAllPlugins(injectors);
 
   daemonLog(`[heap] after plugins: ${heapMB()}`);
 
-  // Run initial memory sync — emits memory:filesChanged so plugins (e.g. semantic) can index
-  // Only indexes global/session memory files, NOT session transcripts (those are huge and cause OOM)
-  try {
-    const { MemoryIndexManager } = await import("../memory/index.js");
-    const { GLOBAL_IDENTITY_DIR, WOPR_HOME, SESSIONS_DIR } = await import("../paths.js");
-    const { join } = await import("node:path");
-    const { config: centralConfig } = await import("../core/config.js");
-    interface ConfigWithMemory {
-      memory?: unknown;
-    }
-    const memCfg = (centralConfig.get() as unknown as ConfigWithMemory).memory || {};
-    const heap0 = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    daemonLog(`Memory sync starting (heap: ${heap0}MB)`);
-    const mgr = await MemoryIndexManager.create({
-      globalDir: GLOBAL_IDENTITY_DIR,
-      sessionDir: join(SESSIONS_DIR, "_boot"),
-      config: {
-        ...memCfg,
-        store: { path: join(WOPR_HOME, "memory", "index.sqlite") },
-      },
-    });
-    await mgr.sync();
-    const heap1 = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-    daemonLog(`Initial memory sync complete (heap: ${heap1}MB)`);
-  } catch (err) {
-    const msg = `Initial memory sync failed: ${err}`;
-    daemonLog(`Warning: ${msg}`);
-    startupWarnings.push(msg);
-  }
+  // Initial memory sync is handled by the memory-semantic plugin during init()
 
   // Check provider health after plugins have registered
   try {

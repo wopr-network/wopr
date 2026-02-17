@@ -178,10 +178,10 @@ export class Storage implements StorageApi {
     this.sqliteRaw = new Database(this.dbPath);
 
     // SQLite pragmas for production hardening
-    this.sqliteRaw.pragma('journal_mode = WAL');
-    this.sqliteRaw.pragma('busy_timeout = 5000');
-    this.sqliteRaw.pragma('foreign_keys = ON');
-    this.sqliteRaw.pragma('synchronous = NORMAL');
+    this.sqliteRaw.pragma("journal_mode = WAL");
+    this.sqliteRaw.pragma("busy_timeout = 5000");
+    this.sqliteRaw.pragma("foreign_keys = ON");
+    this.sqliteRaw.pragma("synchronous = NORMAL");
 
     this.db = drizzle(this.sqliteRaw);
 
@@ -299,12 +299,10 @@ export class Storage implements StorageApi {
         const fullTableName = `${schema.namespace}_${tableName}`;
         for (let i = 0; i < tableSchema.indexes.length; i++) {
           const idx = tableSchema.indexes[i];
-          const unique = idx.unique ? 'UNIQUE ' : '';
-          const indexName = `idx_${fullTableName}_${idx.fields.join('_')}`;
-          const columns = idx.fields.map(f => `"${f}"`).join(', ');
-          this.sqliteRaw.exec(
-            `CREATE ${unique}INDEX IF NOT EXISTS "${indexName}" ON "${fullTableName}" (${columns})`
-          );
+          const unique = idx.unique ? "UNIQUE " : "";
+          const indexName = `idx_${fullTableName}_${idx.fields.join("_")}`;
+          const columns = idx.fields.map((f) => `"${f}"`).join(", ");
+          this.sqliteRaw.exec(`CREATE ${unique}INDEX IF NOT EXISTS "${indexName}" ON "${fullTableName}" (${columns})`);
         }
       }
 
