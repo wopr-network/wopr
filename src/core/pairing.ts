@@ -306,6 +306,9 @@ export async function generatePairingCode(
     await store.createIdentity(identity);
   }
 
+  // Revoke any existing codes for this identity
+  await store.deleteCodesByIdentityId(identity.id);
+
   // Generate new code
   const code: PairingCode = {
     code: generateCode(),
