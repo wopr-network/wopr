@@ -84,7 +84,10 @@ docs(readme): Update installation instructions
 git clone https://github.com/wopr-network/wopr.git
 cd wopr
 
-# Install dependencies
+# Use the correct Node.js version (see .nvmrc)
+nvm use
+
+# Install dependencies (includes native modules like better-sqlite3)
 npm install
 
 # Build
@@ -96,6 +99,8 @@ npm test
 # Start daemon in dev mode
 npm run dev
 ```
+
+> **Note on native dependencies:** WOPR uses `better-sqlite3` (a native C++ addon) and `sqlite-vec` for storage. After cloning, after pulling changes that modify storage dependencies, or after switching Node.js versions, always run `npm install` to ensure native modules are compiled for your platform and Node version. If you see errors like `Cannot find package 'better-sqlite3'`, run `npm install` to fix it.
 
 ### Project Structure
 
