@@ -5,9 +5,12 @@
  * by combining global config, trust level defaults, and source-specific grants.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { logger } from "../logger.js";
+import { getStorage } from "../storage/index.js";
+import type { SecurityConfigRow, SecurityPluginRuleRow } from "./schema.js";
+import { securityConfigSchema, securityPluginRuleSchema } from "./schema.js";
+import type { SecurityPluginRule } from "./store.js";
+import { SecurityStore } from "./store.js";
 import {
   type Capability,
   DEFAULT_SANDBOX_BY_TRUST,
@@ -28,84 +31,106 @@ import {
 // Config Loading
 // ============================================================================
 
-let securityConfigPath: string | null = null;
-let cachedConfig: SecurityConfig | null = null;
+let securityStore: SecurityStore | null = null;
 
 /**
  * Initialize security system with config path
  */
-export function initSecurity(woprDir: string): void {
-  securityConfigPath = join(woprDir, "security.json");
-  cachedConfig = null;
+export async function initSecurity(woprDir: string): Promise<void> {
+  // Register security schema with storage
+  const storage = getStorage();
+  await storage.register({
+    namespace: "security",
+    version: 1,
+    tables: {
+      config: {
+        schema: securityConfigSchema,
+        primaryKey: "id",
+      },
+      plugin_rules: {
+        schema: securityPluginRuleSchema,
+        primaryKey: "id",
+        indexes: [{ fields: ["pluginName"] }],
+      },
+    },
+  });
+
+  // Create store
+  securityStore = new SecurityStore(
+    woprDir,
+    () => storage.getRepository<SecurityConfigRow>("security", "config"),
+    () => storage.getRepository<SecurityPluginRuleRow>("security", "plugin_rules"),
+  );
+
+  // Initialize (creates default config, migrates from JSON if needed)
+  await securityStore.init();
+
+  logger.info("[security] Security system initialized");
 }
 
 /**
- * Get security configuration
+ * Get security configuration (synchronous - uses cached value)
+ *
+ * IMPORTANT: This function is synchronous for backward compatibility.
+ * It returns the cached config from the last async load.
+ * If called before initSecurity(), returns DEFAULT_SECURITY_CONFIG.
  */
 export function getSecurityConfig(): SecurityConfig {
-  if (cachedConfig) return cachedConfig;
-
-  if (securityConfigPath && existsSync(securityConfigPath)) {
-    try {
-      const raw = readFileSync(securityConfigPath, "utf-8");
-      const loaded = JSON.parse(raw) as Partial<SecurityConfig>;
-      cachedConfig = mergeConfigs(DEFAULT_SECURITY_CONFIG, loaded);
-      return cachedConfig;
-    } catch (err) {
-      logger.warn(`[security] Failed to load security config: ${err}`);
-    }
+  if (!securityStore) {
+    // Not initialized yet - return default
+    // This is expected during early startup before initSecurity() is called
+    return DEFAULT_SECURITY_CONFIG;
   }
 
-  return DEFAULT_SECURITY_CONFIG;
+  // Access the store's cache directly (synchronous)
+  // The cache is populated during init() and updated on saveConfig()
+  return securityStore.configCache ?? DEFAULT_SECURITY_CONFIG;
+}
+
+/**
+ * Get security configuration (async version)
+ */
+export async function getSecurityConfigAsync(): Promise<SecurityConfig> {
+  if (!securityStore) {
+    logger.warn("[security] Security store not initialized, returning default config");
+    return DEFAULT_SECURITY_CONFIG;
+  }
+
+  return await securityStore.getConfig();
 }
 
 /**
  * Save security configuration
  */
-export function saveSecurityConfig(config: SecurityConfig): void {
-  if (!securityConfigPath) {
-    logger.warn("[security] Security not initialized, cannot save config");
+export async function saveSecurityConfig(config: SecurityConfig): Promise<void> {
+  if (!securityStore) {
+    logger.warn("[security] Security store not initialized, cannot save config");
     return;
   }
 
-  try {
-    writeFileSync(securityConfigPath, JSON.stringify(config, null, 2));
-    cachedConfig = config;
-    logger.info("[security] Security config saved");
-  } catch (err) {
-    logger.error(`[security] Failed to save security config: ${err}`);
-  }
+  await securityStore.saveConfig(config);
 }
 
 /**
- * Merge configs (deep merge with defaults)
+ * Register a security rule from a plugin
  */
-function mergeConfigs(defaults: SecurityConfig, overrides: Partial<SecurityConfig>): SecurityConfig {
-  return {
-    ...defaults,
-    ...overrides,
-    defaults: {
-      ...defaults.defaults,
-      ...(overrides.defaults ?? {}),
-    },
-    trustLevels: {
-      ...defaults.trustLevels,
-      ...(overrides.trustLevels ?? {}),
-    },
-    p2p: {
-      discoveryTrust: overrides.p2p?.discoveryTrust ?? defaults.p2p?.discoveryTrust ?? "untrusted",
-      autoAccept: overrides.p2p?.autoAccept ?? defaults.p2p?.autoAccept ?? false,
-      keyRotationGraceHours: overrides.p2p?.keyRotationGraceHours ?? defaults.p2p?.keyRotationGraceHours,
-      maxPayloadSize: overrides.p2p?.maxPayloadSize ?? defaults.p2p?.maxPayloadSize,
-    },
-    audit: {
-      enabled: overrides.audit?.enabled ?? defaults.audit?.enabled ?? false,
-      logSuccess: overrides.audit?.logSuccess ?? defaults.audit?.logSuccess,
-      logDenied: overrides.audit?.logDenied ?? defaults.audit?.logDenied,
-      logPath: overrides.audit?.logPath ?? defaults.audit?.logPath,
-    },
-    gateways: overrides.gateways || defaults.gateways,
-  };
+export async function registerSecurityRule(rule: Omit<SecurityPluginRule, "id" | "createdAt">): Promise<string> {
+  if (!securityStore) {
+    throw new Error("Security store not initialized");
+  }
+
+  return await securityStore.registerPluginRule(rule);
+}
+
+/**
+ * Remove all security rules registered by a plugin
+ */
+export async function removeSecurityRules(pluginName: string): Promise<number> {
+  if (!securityStore) {
+    throw new Error("Security store not initialized");
+  }
+
+  return await securityStore.removePluginRules(pluginName);
 }
 
 // ============================================================================

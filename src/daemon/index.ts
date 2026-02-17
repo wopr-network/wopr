@@ -181,6 +181,18 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await centralConfig.load();
   daemonLog("Configuration loaded from disk");
 
+  // Initialize security system (must be after config load, before plugins)
+  const { initSecurity } = await import("../security/index.js");
+  const { WOPR_HOME } = await import("../paths.js");
+  try {
+    await initSecurity(WOPR_HOME);
+    daemonLog("Security system initialized");
+  } catch (err) {
+    const msg = `Security initialization failed: ${err}`;
+    daemonLog(`Warning: ${msg}`);
+    startupWarnings.push(msg);
+  }
+
   // Ensure bearer token exists for API authentication
   ensureToken();
   daemonLog("Bearer token ready for API authentication");
