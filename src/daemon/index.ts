@@ -256,6 +256,14 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await migrateSandboxRegistryToSql();
   daemonLog("Sandbox storage initialized");
 
+  // Initialize registries storage and migrate from JSON
+  daemonLog("Initializing registries storage...");
+  const { initRegistriesStorage } = await import("../core/registries-repository.js");
+  const { migrateRegistriesToSql } = await import("../core/registries-migrate.js");
+  await initRegistriesStorage();
+  await migrateRegistriesToSql();
+  daemonLog("Registries storage initialized");
+
   // Ensure bearer token exists for API authentication
   ensureToken();
   daemonLog("Bearer token ready for API authentication");

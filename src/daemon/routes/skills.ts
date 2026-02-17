@@ -179,8 +179,8 @@ skillsRouter.post("/cache/clear", (c) => {
 });
 
 // Skill registries
-skillsRouter.get("/registries", (c) => {
-  const registries = getRegistries();
+skillsRouter.get("/registries", async (c) => {
+  const registries = await getRegistries();
   return c.json({ registries });
 });
 
@@ -192,13 +192,13 @@ skillsRouter.post("/registries", async (c) => {
     return c.json({ error: "name and url are required" }, 400);
   }
 
-  addRegistry(name, url);
+  await addRegistry(name, url);
   return c.json({ added: true, name, url }, 201);
 });
 
-skillsRouter.delete("/registries/:name", (c) => {
+skillsRouter.delete("/registries/:name", async (c) => {
   const name = c.req.param("name");
-  const removed = removeRegistry(name);
+  const removed = await removeRegistry(name);
 
   if (!removed) {
     return c.json({ error: "Registry not found" }, 404);
