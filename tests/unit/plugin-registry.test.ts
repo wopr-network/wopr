@@ -10,7 +10,7 @@
  * - discoverVoicePlugins (categorized voice plugin discovery)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -43,8 +43,8 @@ vi.mock("../../src/plugins/state.js", async () => {
   };
 });
 
-// Mock installation
-const mockGetInstalledPlugins = vi.fn(() => []);
+// Mock installation (async in WOP-547)
+const mockGetInstalledPlugins = vi.fn(async () => []);
 vi.mock("../../src/plugins/installation.js", () => ({
   getInstalledPlugins: (...args: any[]) => mockGetInstalledPlugins(...args),
 }));
@@ -70,12 +70,24 @@ import {
   discoverVoicePlugins,
 } from "../../src/plugins/registry.js";
 
-beforeEach(() => {
+beforeEach(async () => {
   mkdirSync(TEST_DIR, { recursive: true });
-  mockGetInstalledPlugins.mockReturnValue([]);
+
+  // Initialize storage for plugin schema (WOP-547)
+  const { getStorage } = await import("../../src/storage/index.js");
+  getStorage(join(TEST_DIR, "wopr.sqlite"));
+
+  const { ensurePluginSchema } = await import("../../src/plugins/plugin-storage.js");
+  await ensurePluginSchema();
+
+  mockGetInstalledPlugins.mockResolvedValue([]);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  const { resetStorage } = await import("../../src/storage/index.js");
+  const { resetPluginSchemaState } = await import("../../src/plugins/plugin-storage.js");
+  await resetStorage();
+  resetPluginSchemaState();
   rmSync(TEST_DIR, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
@@ -85,18 +97,16 @@ afterEach(() => {
 // ============================================================================
 
 describe("getPluginRegistries", () => {
-  it("should return empty array when registries file does not exist", () => {
-    const registries = getPluginRegistries();
+  it("should return empty array when registries file does not exist", async () => {
+    const registries = await getPluginRegistries();
     expect(registries).toEqual([]);
   });
 
-  it("should return parsed registries from file", () => {
-    const entries = [
-      { url: "https://registry.example.com", name: "example", enabled: true, lastSync: 0 },
-    ];
-    writeFileSync(join(TEST_DIR, "plugin-registries.json"), JSON.stringify(entries));
+  it("should return parsed registries from file", async () => {
+    // Use addRegistry to set up data instead of writing to file
+    await addRegistry("https://registry.example.com", "example");
 
-    const registries = getPluginRegistries();
+    const registries = await getPluginRegistries();
     expect(registries).toHaveLength(1);
     expect(registries[0].url).toBe("https://registry.example.com");
     expect(registries[0].name).toBe("example");
@@ -109,31 +119,31 @@ describe("getPluginRegistries", () => {
 // ============================================================================
 
 describe("addRegistry", () => {
-  it("should add a new registry entry and persist it", () => {
-    const entry = addRegistry("https://registry.example.com", "my-registry");
+  it("should add a new registry entry and persist it", async () => {
+    const entry = await addRegistry("https://registry.example.com", "my-registry");
 
     expect(entry.url).toBe("https://registry.example.com");
     expect(entry.name).toBe("my-registry");
     expect(entry.enabled).toBe(true);
     expect(entry.lastSync).toBe(0);
 
-    // Verify persisted
-    const saved = JSON.parse(readFileSync(join(TEST_DIR, "plugin-registries.json"), "utf-8"));
+    // Verify persisted by loading again
+    const saved = await getPluginRegistries();
     expect(saved).toHaveLength(1);
     expect(saved[0].url).toBe("https://registry.example.com");
   });
 
-  it("should use hostname as name when name not provided", () => {
-    const entry = addRegistry("https://plugins.wopr.dev/registry");
+  it("should use hostname as name when name not provided", async () => {
+    const entry = await addRegistry("https://plugins.wopr.dev/registry");
 
     expect(entry.name).toBe("plugins.wopr.dev");
   });
 
-  it("should append to existing registries", () => {
-    addRegistry("https://first.example.com", "first");
-    addRegistry("https://second.example.com", "second");
+  it("should append to existing registries", async () => {
+    await addRegistry("https://first.example.com", "first");
+    await addRegistry("https://second.example.com", "second");
 
-    const registries = getPluginRegistries();
+    const registries = await getPluginRegistries();
     expect(registries).toHaveLength(2);
     expect(registries[0].name).toBe("first");
     expect(registries[1].name).toBe("second");
@@ -145,31 +155,31 @@ describe("addRegistry", () => {
 // ============================================================================
 
 describe("removeRegistry", () => {
-  it("should remove a registry by URL and return true", () => {
-    addRegistry("https://remove-me.example.com", "to-remove");
-    addRegistry("https://keep-me.example.com", "to-keep");
+  it("should remove a registry by URL and return true", async () => {
+    await addRegistry("https://remove-me.example.com", "to-remove");
+    await addRegistry("https://keep-me.example.com", "to-keep");
 
-    const removed = removeRegistry("https://remove-me.example.com");
+    const removed = await removeRegistry("https://remove-me.example.com");
     expect(removed).toBe(true);
 
-    const registries = getPluginRegistries();
+    const registries = await getPluginRegistries();
     expect(registries).toHaveLength(1);
     expect(registries[0].name).toBe("to-keep");
   });
 
-  it("should return false when URL not found", () => {
-    addRegistry("https://existing.example.com", "existing");
+  it("should return false when URL not found", async () => {
+    await addRegistry("https://existing.example.com", "existing");
 
-    const removed = removeRegistry("https://nonexistent.example.com");
+    const removed = await removeRegistry("https://nonexistent.example.com");
     expect(removed).toBe(false);
 
     // Original still intact
-    const registries = getPluginRegistries();
+    const registries = await getPluginRegistries();
     expect(registries).toHaveLength(1);
   });
 
-  it("should return false when no registries exist", () => {
-    const removed = removeRegistry("https://any.example.com");
+  it("should return false when no registries exist", async () => {
+    const removed = await removeRegistry("https://any.example.com");
     expect(removed).toBe(false);
   });
 });
@@ -179,15 +189,16 @@ describe("removeRegistry", () => {
 // ============================================================================
 
 describe("listRegistries", () => {
-  it("should return empty array when none registered", () => {
-    expect(listRegistries()).toEqual([]);
+  it("should return empty array when none registered", async () => {
+    const list = await listRegistries();
+    expect(list).toEqual([]);
   });
 
-  it("should return all registered registries", () => {
-    addRegistry("https://a.example.com", "a");
-    addRegistry("https://b.example.com", "b");
+  it("should return all registered registries", async () => {
+    await addRegistry("https://a.example.com", "a");
+    await addRegistry("https://b.example.com", "b");
 
-    const list = listRegistries();
+    const list = await listRegistries();
     expect(list).toHaveLength(2);
   });
 });
@@ -198,7 +209,7 @@ describe("listRegistries", () => {
 
 describe("searchPlugins", () => {
   it("should return installed plugins matching query", async () => {
-    mockGetInstalledPlugins.mockReturnValue([
+    mockGetInstalledPlugins.mockResolvedValue([
       {
         name: "wopr-plugin-discord",
         version: "1.0.0",
@@ -227,7 +238,7 @@ describe("searchPlugins", () => {
   });
 
   it("should return empty results when no plugins match", async () => {
-    mockGetInstalledPlugins.mockReturnValue([
+    mockGetInstalledPlugins.mockResolvedValue([
       {
         name: "wopr-plugin-discord",
         version: "1.0.0",
@@ -244,7 +255,7 @@ describe("searchPlugins", () => {
   });
 
   it("should deduplicate results by name", async () => {
-    mockGetInstalledPlugins.mockReturnValue([
+    mockGetInstalledPlugins.mockResolvedValue([
       {
         name: "wopr-plugin-test",
         version: "1.0.0",
@@ -261,7 +272,7 @@ describe("searchPlugins", () => {
   });
 
   it("should return all installed when query is empty", async () => {
-    mockGetInstalledPlugins.mockReturnValue([
+    mockGetInstalledPlugins.mockResolvedValue([
       {
         name: "plugin-a",
         version: "1.0.0",
@@ -304,7 +315,7 @@ describe("discoverVoicePlugins", () => {
   });
 
   it("should categorize voice plugins correctly", async () => {
-    mockGetInstalledPlugins.mockReturnValue([
+    mockGetInstalledPlugins.mockResolvedValue([
       {
         name: "wopr-plugin-voice-stt-whisper",
         version: "1.0.0",
