@@ -29,8 +29,8 @@ import {
 
 const VALID_TRUST_LEVELS: TrustLevel[] = ["owner", "trusted", "semi-trusted", "untrusted"];
 
-function isOwner(ctx: ChannelCommandContext): boolean {
-  return resolveTrustLevel(ctx.channelType, ctx.sender) === "owner";
+async function isOwner(ctx: ChannelCommandContext): Promise<boolean> {
+  return (await resolveTrustLevel(ctx.channelType, ctx.sender)) === "owner";
 }
 
 /**
@@ -72,7 +72,7 @@ async function handlePairCommand(ctx: ChannelCommandContext): Promise<void> {
 }
 
 async function handleGenerate(ctx: ChannelCommandContext): Promise<void> {
-  if (!isOwner(ctx)) {
+  if (!(await isOwner(ctx))) {
     await ctx.reply("Permission denied. Only owners can generate pairing codes.");
     return;
   }
@@ -90,7 +90,7 @@ async function handleGenerate(ctx: ChannelCommandContext): Promise<void> {
   }
 
   try {
-    const code = generatePairingCode(name, trustLevel);
+    const code = await generatePairingCode(name, trustLevel);
     const expiresIn = Math.round((code.expiresAt - Date.now()) / 1000 / 60);
     await ctx.reply(
       `Pairing code for "${name}" (trust: ${trustLevel}):\n` +
@@ -111,7 +111,7 @@ async function handleVerify(ctx: ChannelCommandContext): Promise<void> {
     return;
   }
 
-  const result = verifyPairingCode(code, ctx.channelType, ctx.sender);
+  const result = await verifyPairingCode(code, ctx.channelType, ctx.sender);
   if (!result) {
     await ctx.reply("Invalid or expired pairing code.");
     return;
@@ -125,12 +125,12 @@ async function handleVerify(ctx: ChannelCommandContext): Promise<void> {
 }
 
 async function handleList(ctx: ChannelCommandContext): Promise<void> {
-  if (!isOwner(ctx)) {
+  if (!(await isOwner(ctx))) {
     await ctx.reply("Permission denied. Only owners can list identities.");
     return;
   }
 
-  const identities = listIdentities();
+  const identities = await listIdentities();
   if (identities.length === 0) {
     await ctx.reply("No paired identities.");
     return;
@@ -145,7 +145,7 @@ async function handleList(ctx: ChannelCommandContext): Promise<void> {
 }
 
 async function handleRevoke(ctx: ChannelCommandContext): Promise<void> {
-  if (!isOwner(ctx)) {
+  if (!(await isOwner(ctx))) {
     await ctx.reply("Permission denied. Only owners can revoke identities.");
     return;
   }
@@ -156,18 +156,18 @@ async function handleRevoke(ctx: ChannelCommandContext): Promise<void> {
     return;
   }
 
-  const identity = getIdentityByName(name);
+  const identity = await getIdentityByName(name);
   if (!identity) {
     await ctx.reply(`Identity not found: ${name}`);
     return;
   }
 
-  removeIdentity(identity.id);
+  await removeIdentity(identity.id);
   await ctx.reply(`Revoked identity "${name}" and all linked platforms.`);
 }
 
 async function handleWhois(ctx: ChannelCommandContext): Promise<void> {
-  const identity = findIdentityBySender(ctx.channelType, ctx.sender);
+  const identity = await findIdentityBySender(ctx.channelType, ctx.sender);
   if (!identity) {
     await ctx.reply("You are not paired. Ask an admin to generate a pairing code for you.");
     return;
@@ -180,12 +180,12 @@ async function handleWhois(ctx: ChannelCommandContext): Promise<void> {
 }
 
 async function handleCodes(ctx: ChannelCommandContext): Promise<void> {
-  if (!isOwner(ctx)) {
+  if (!(await isOwner(ctx))) {
     await ctx.reply("Permission denied. Only owners can list pairing codes.");
     return;
   }
 
-  const codes = listPendingCodes();
+  const codes = await listPendingCodes();
   if (codes.length === 0) {
     await ctx.reply("No pending pairing codes.");
     return;

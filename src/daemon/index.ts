@@ -24,6 +24,7 @@ import {
   shouldRunCron,
 } from "../core/cron.js";
 import { migrateCronsToSql } from "../core/cron-migrate.js";
+import { initPairing } from "../core/pairing.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
 import { inject } from "../core/sessions.js";
@@ -208,6 +209,11 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await migrateSkillsToSQL();
   daemonLog("Skills storage initialized");
 
+  // Initialize pairing storage and migrate from JSON
+  daemonLog("Initializing pairing storage...");
+  await initPairing();
+  daemonLog("Pairing storage initialized");
+
   // Ensure bearer token exists for API authentication
   ensureToken();
   daemonLog("Bearer token ready for API authentication");
@@ -387,7 +393,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const cronTick = async () => {
     const now = new Date();
     const nowTs = now.getTime();
-    let crons = await getCrons();
+    const crons = await getCrons();
     const toRemove: string[] = [];
 
     for (const cron of crons) {
