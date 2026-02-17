@@ -44,6 +44,7 @@ import { instancesRouter } from "./routes/instances.js";
 import { marketplaceRouter } from "./routes/marketplace.js";
 import { observabilityRouter } from "./routes/observability.js";
 import { openaiRouter } from "./routes/openai.js";
+import { capabilitiesRouter } from "./routes/capabilities.js";
 import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
 import { restartRouter } from "./routes/restart.js";
@@ -130,6 +131,8 @@ export function createApp(healthMonitor?: HealthMonitor) {
   app.route("/api/marketplace", marketplaceRouter);
   // Capability health (WOP-501)
   app.route("/api/capability-health", capabilityHealthRouter);
+  // Capability activation (WOP-504)
+  app.route("/api/capabilities", capabilitiesRouter);
   // Instance CRUD (WOP-202)
   app.route("/instances", instancesRouter);
 

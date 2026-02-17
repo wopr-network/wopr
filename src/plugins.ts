@@ -60,3 +60,6 @@ export {
   removeRegistry,
   searchPlugins,
 } from "./plugins/registry.js";
+
+// Capability catalog (WOP-504)
+export { getCapabilityCatalogEntry, listCapabilityCatalog } from "./core/capability-catalog.js";
