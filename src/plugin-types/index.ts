@@ -92,3 +92,17 @@ export type {
 } from "./manifest.js";
 // Core plugin types
 export type { InstalledPlugin, PluginCommand, PluginRegistryEntry, WOPRPlugin } from "./plugin.js";
+
+// Storage API types
+export type {
+  Filter,
+  FilterCondition,
+  FilterOperator,
+  OrderDirection,
+  PluginSchema,
+  QueryBuilder,
+  Repository,
+  StorageApi,
+  TableIndex,
+  TableSchema,
+} from "../storage/api/plugin-storage.js";
