@@ -11,7 +11,7 @@
  * The raw key is never persisted — only a scrypt hash is stored.
  */
 
-import type { AuthStore, ApiKeyScope, ApiKeyInfo, ValidatedKeyUser } from "../auth/auth-store.js";
+import type { ApiKeyInfo, ApiKeyScope, AuthStore, ValidatedKeyUser } from "../auth/auth-store.js";
 import { KeyLimitError } from "../auth/auth-store.js";
 
 // Re-export types for backward compatibility

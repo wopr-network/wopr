@@ -5,11 +5,11 @@
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { logger } from "../logger.js";
-import { WOPR_HOME, AUTH_FILE } from "../paths.js";
-import type { AuthStore } from "./auth-store.js";
 import type { AuthState } from "../auth.js";
 import { isEncryptedData } from "../auth.js";
+import { logger } from "../logger.js";
+import { AUTH_FILE, WOPR_HOME } from "../paths.js";
+import type { AuthStore } from "./auth-store.js";
 
 const _require = createRequire(import.meta.url);
 const { DatabaseSync } = _require("node:sqlite");
@@ -30,19 +30,14 @@ export async function migrateAuthJson(authStore: AuthStore): Promise<void> {
 
   try {
     const raw = readFileSync(AUTH_FILE, "utf-8");
-    
+
     // Check if this is a valid JSON (could be encrypted or plaintext JSON)
     let authData: AuthState | null = null;
-    
+
     if (isEncryptedData(raw)) {
       // Store the encrypted blob directly - we don't decrypt during migration
       // The decryption key (WOPR_CREDENTIAL_KEY) is used at read time
-      await authStore.setCredential(
-        "wopr-auth-state",
-        "wopr",
-        raw,
-        "aes-256-gcm",
-      );
+      await authStore.setCredential("wopr-auth-state", "wopr", raw, "aes-256-gcm");
       logger.info("[auth-migrate] Stored encrypted auth state");
     } else {
       // Parse plaintext JSON
@@ -50,11 +45,7 @@ export async function migrateAuthJson(authStore: AuthStore): Promise<void> {
         authData = JSON.parse(raw);
         if (authData) {
           // Store the JSON as-is (will be read by loadAuth())
-          await authStore.setCredential(
-            "wopr-auth-state",
-            "wopr",
-            JSON.stringify(authData),
-          );
+          await authStore.setCredential("wopr-auth-state", "wopr", JSON.stringify(authData));
           logger.info(`[auth-migrate] Migrated auth state: type=${authData.type}`);
         }
       } catch (parseErr) {
@@ -92,9 +83,9 @@ export async function migrateAuthSqlite(authStore: AuthStore): Promise<void> {
     db = new DatabaseSync(AUTH_SQLITE_PATH, { readOnly: true });
 
     // Check if api_keys table exists
-    const tables = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='api_keys'"
-    ).all() as Array<{ name: string }>;
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='api_keys'").all() as Array<{
+      name: string;
+    }>;
 
     if (tables.length === 0) {
       logger.info("[auth-migrate] No api_keys table in auth.sqlite, skipping");
@@ -105,7 +96,7 @@ export async function migrateAuthSqlite(authStore: AuthStore): Promise<void> {
     // Fetch all API keys
     const stmt = db.prepare(
       `SELECT id, user_id, name, key_hash, key_prefix, scope, last_used_at, created_at, expires_at
-       FROM api_keys ORDER BY created_at ASC`
+       FROM api_keys ORDER BY created_at ASC`,
     );
     const rows = stmt.all() as Array<{
       id: string;
@@ -123,7 +114,7 @@ export async function migrateAuthSqlite(authStore: AuthStore): Promise<void> {
 
     // Copy each row to the new storage
     for (const row of rows) {
-      await authStore["apiKeyRepo"]!.insert({
+      await authStore.importApiKeyRecord({
         id: row.id,
         userId: row.user_id,
         name: row.name,

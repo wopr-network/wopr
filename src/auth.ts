@@ -14,9 +14,9 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync }
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { AuthStore } from "./auth/auth-store.js";
 import { providerRegistry } from "./core/providers.js";
 import { AUTH_FILE } from "./paths.js";
-import { AuthStore } from "./auth/auth-store.js";
 
 // Claude Code credentials location
 const CLAUDE_CODE_CREDENTIALS = join(homedir(), ".claude", ".credentials.json");
@@ -321,9 +321,9 @@ export function loadAuth(): AuthState | null {
   let woprAuth: AuthState | null = null;
 
   // Try storage first (if initialized)
-  if (authStore && authStore.configCache.has("wopr-auth-state")) {
+  if (authStore?.configCache.has("wopr-auth-state")) {
     try {
-      const raw = authStore.configCache.get("wopr-auth-state")!;
+      const raw = authStore.configCache.get("wopr-auth-state") ?? "";
       const credKey = process.env.WOPR_CREDENTIAL_KEY;
 
       if (isEncryptedData(raw)) {
@@ -508,7 +508,12 @@ export function getBetaHeaders(): string {
 }
 
 // Save OAuth tokens after successful auth flow
-export async function saveOAuthTokens(accessToken: string, refreshToken: string, expiresIn: number, email?: string): Promise<void> {
+export async function saveOAuthTokens(
+  accessToken: string,
+  refreshToken: string,
+  expiresIn: number,
+  email?: string,
+): Promise<void> {
   const auth: AuthState = {
     type: "oauth",
     accessToken,

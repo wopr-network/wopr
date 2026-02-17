@@ -49,10 +49,7 @@ export const authPluginSchema: PluginSchema = {
     auth_credentials: {
       schema: authCredentialSchema,
       primaryKey: "id",
-      indexes: [
-        { fields: ["provider"] },
-        { fields: ["updatedAt"] },
-      ],
+      indexes: [{ fields: ["provider"] }, { fields: ["updatedAt"] }],
     },
     auth_api_keys: {
       schema: authApiKeySchema,

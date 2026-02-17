@@ -7,10 +7,10 @@
  */
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { logger } from "../logger.js";
 import type { Repository } from "../storage/api/plugin-storage.js";
 import { getStorage } from "../storage/index.js";
-import { logger } from "../logger.js";
-import type { AuthCredentialRecord, AuthApiKeyRecord } from "./auth-schema.js";
+import type { AuthApiKeyRecord, AuthCredentialRecord } from "./auth-schema.js";
 import { authPluginSchema } from "./auth-schema.js";
 
 const KEY_PREFIX = "wopr_";
@@ -94,7 +94,7 @@ export class AuthStore {
    */
   async getCredential(id: string): Promise<AuthCredentialRecord | null> {
     this.ensureInitialized();
-    return await this.credRepo!.findById(id);
+    return (await this.credRepo?.findById(id)) ?? null;
   }
 
   /**
@@ -104,15 +104,10 @@ export class AuthStore {
    * @param encryptedValue - The encrypted credential value
    * @param encryptionMethod - Optional encryption method ("aes-256-gcm")
    */
-  async setCredential(
-    id: string,
-    provider: string,
-    encryptedValue: string,
-    encryptionMethod?: string,
-  ): Promise<void> {
+  async setCredential(id: string, provider: string, encryptedValue: string, encryptionMethod?: string): Promise<void> {
     this.ensureInitialized();
     const now = Date.now();
-    const existing = await this.credRepo!.findById(id);
+    const existing = await this.credRepo?.findById(id);
 
     const record: AuthCredentialRecord = {
       id,
@@ -124,9 +119,9 @@ export class AuthStore {
     };
 
     if (existing) {
-      await this.credRepo!.update(id, record);
+      await this.credRepo?.update(id, record);
     } else {
-      await this.credRepo!.insert(record);
+      await this.credRepo?.insert(record);
     }
 
     // Update cache
@@ -139,7 +134,7 @@ export class AuthStore {
    */
   async removeCredential(id: string): Promise<boolean> {
     this.ensureInitialized();
-    const deleted = await this.credRepo!.delete(id);
+    const deleted = (await this.credRepo?.delete(id)) ?? false;
     if (deleted) {
       this.configCache.delete(id);
       logger.info(`[auth-store] Credential removed: id=${id}`);
@@ -152,7 +147,7 @@ export class AuthStore {
    */
   async listCredentials(): Promise<Array<Omit<AuthCredentialRecord, "encryptedValue">>> {
     this.ensureInitialized();
-    const creds = await this.credRepo!.findMany();
+    const creds = (await this.credRepo?.findMany()) ?? [];
     return creds.map(({ encryptedValue, ...rest }) => rest);
   }
 
@@ -194,7 +189,9 @@ export class AuthStore {
     this.ensureInitialized();
 
     // Enforce per-user key limit
-    const userKeys = await this.apiKeyRepo!.findMany({ userId });
+    const repo = this.apiKeyRepo;
+    if (!repo) throw new Error("Auth store not initialized");
+    const userKeys = await repo.findMany({ userId });
     if (userKeys.length >= MAX_KEYS_PER_USER) {
       throw new KeyLimitError(`User has reached the maximum of ${MAX_KEYS_PER_USER} API keys`);
     }
@@ -218,7 +215,7 @@ export class AuthStore {
       expiresAt: expiresAt ?? undefined,
     };
 
-    await this.apiKeyRepo!.insert(record);
+    await repo.insert(record);
     logger.info(`[auth-store] API key created: id=${id} user=${userId} scope=${scope} name="${name}"`);
 
     return {
@@ -246,7 +243,9 @@ export class AuthStore {
     const now = Date.now();
 
     // Find candidates by prefix
-    const candidates = await this.apiKeyRepo!.findMany({ keyPrefix: prefix });
+    const repo = this.apiKeyRepo;
+    if (!repo) return null;
+    const candidates = await repo.findMany({ keyPrefix: prefix });
 
     for (const row of candidates) {
       // Skip expired keys
@@ -256,7 +255,7 @@ export class AuthStore {
 
       if (this.verifyKey(rawKey, row.keyHash)) {
         // Update last_used_at
-        await this.apiKeyRepo!.update(row.id, { lastUsedAt: now });
+        await repo.update(row.id, { lastUsedAt: now });
 
         return {
           id: row.userId || "unknown",
@@ -275,11 +274,13 @@ export class AuthStore {
    */
   async revokeApiKey(keyId: string, userId: string): Promise<boolean> {
     this.ensureInitialized();
-    const key = await this.apiKeyRepo!.findById(keyId);
+    const repo = this.apiKeyRepo;
+    if (!repo) return false;
+    const key = await repo.findById(keyId);
     if (!key || key.userId !== userId) {
       return false;
     }
-    const deleted = await this.apiKeyRepo!.delete(keyId);
+    const deleted = await repo.delete(keyId);
     if (deleted) {
       logger.info(`[auth-store] API key revoked: id=${keyId} user=${userId}`);
     }
@@ -291,7 +292,9 @@ export class AuthStore {
    */
   async listApiKeys(userId: string): Promise<ApiKeyInfo[]> {
     this.ensureInitialized();
-    const keys = await this.apiKeyRepo!.findMany({ userId });
+    const repo = this.apiKeyRepo;
+    if (!repo) return [];
+    const keys = await repo.findMany({ userId });
     return keys.map((k) => ({
       id: k.id,
       name: k.name,
@@ -301,6 +304,15 @@ export class AuthStore {
       createdAt: k.createdAt,
       expiresAt: k.expiresAt ?? null,
     }));
+  }
+
+  /**
+   * Import a raw API key record (for migration from legacy auth.sqlite)
+   */
+  async importApiKeyRecord(record: AuthApiKeyRecord): Promise<void> {
+    const repo = this.apiKeyRepo;
+    if (!repo) throw new Error("Auth store not initialized");
+    await repo.insert(record);
   }
 
   /**
