@@ -6,7 +6,6 @@
  */
 
 import { logger } from "../logger.js";
-import type { Repository } from "../storage/api/plugin-storage.js";
 import { getStorage } from "../storage/index.js";
 import type { SecurityConfigRow, SecurityPluginRuleRow } from "./schema.js";
 import { securityConfigSchema, securityPluginRuleSchema } from "./schema.js";
@@ -85,8 +84,7 @@ export function getSecurityConfig(): SecurityConfig {
 
   // Access the store's cache directly (synchronous)
   // The cache is populated during init() and updated on saveConfig()
-  const cached = (securityStore as { configCache: SecurityConfig | null }).configCache;
-  return cached ?? DEFAULT_SECURITY_CONFIG;
+  return securityStore.configCache ?? DEFAULT_SECURITY_CONFIG;
 }
 
 /**

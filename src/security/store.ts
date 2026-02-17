@@ -11,7 +11,6 @@ import { logger } from "../logger.js";
 import type { Repository } from "../storage/api/plugin-storage.js";
 import type { SecurityConfig } from "./types.js";
 import { DEFAULT_SECURITY_CONFIG } from "./types.js";
-import { securityConfigSchema, securityPluginRuleSchema } from "./schema.js";
 import type { SecurityConfigRow, SecurityPluginRuleRow } from "./schema.js";
 
 /**
@@ -64,6 +63,9 @@ export class SecurityStore {
       });
       logger.info("[security] Initialized default security config");
     }
+
+    // Prime the cache so synchronous getSecurityConfig() works immediately
+    await this.getConfig();
   }
 
   /**
