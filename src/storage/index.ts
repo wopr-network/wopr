@@ -347,6 +347,16 @@ export class Storage implements StorageApi {
     return Array.isArray(result) ? result : [result];
   }
 
+  /**
+   * Execute a statement that doesn't return rows (INSERT, UPDATE, DELETE).
+   * Returns { changes, lastInsertRowid } from better-sqlite3.
+   */
+  async run(sql: string, params?: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }> {
+    const stmt = this.sqliteRaw.prepare(sql);
+    const result = params ? stmt.run(...params) : stmt.run();
+    return result;
+  }
+
   async transaction<R>(fn: (storage: StorageApi) => Promise<R>): Promise<R> {
     // Use manual BEGIN/COMMIT/ROLLBACK to support async callbacks.
     // better-sqlite3's .transaction() wrapper is synchronous and cannot
