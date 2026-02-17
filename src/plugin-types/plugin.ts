@@ -36,6 +36,14 @@ export interface WOPRPlugin {
   init?(ctx: WOPRPluginContext): Promise<void>;
   shutdown?(): Promise<void>;
 
+  /** Hot-load lifecycle hooks */
+  /** Called when the plugin is activated at runtime (after init, or on hot-enable). */
+  onActivate?(ctx: WOPRPluginContext): Promise<void>;
+  /** Called when the plugin is about to be deactivated. Return a Promise that resolves when ready to unload. */
+  onDeactivate?(): Promise<void>;
+  /** Called when the plugin enters drain mode. Plugin should stop accepting new work and complete in-flight work. Return a Promise that resolves when drained. */
+  onDrain?(): Promise<void>;
+
   /** CLI extensions */
   commands?: PluginCommand[];
 }

@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getCapabilityDependencyGraph } from "../core/capability-deps.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
+import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
 import { logger } from "../logger.js";
 import type {
   InstallMethod as ManifestInstallMethod,
@@ -26,7 +27,7 @@ import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContex
 import type { InstallMethod, VoicePluginRequirements } from "../voice/types.js";
 import { createPluginContext } from "./context-factory.js";
 import { getInstalledPlugins } from "./installation.js";
-import { configSchemas, loadedPlugins, pluginManifests } from "./state.js";
+import { configSchemas, loadedPlugins, pluginManifests, pluginStates } from "./state.js";
 
 /** Options for loading plugins */
 export interface LoadPluginOptions {
@@ -192,6 +193,15 @@ export async function loadPlugin(
     await plugin.init(context);
   }
 
+  // ── Step 5: Set active state and call onActivate ──
+  if (!options.skipInit) {
+    pluginStates.set(installed.name, "active");
+    if (plugin.onActivate) {
+      await plugin.onActivate(context);
+    }
+    await emitPluginActivated(installed.name, plugin.version || installed.version);
+  }
+
   return plugin;
 }
 
@@ -238,22 +248,90 @@ export function getAllPluginManifests(): Map<string, PluginManifest> {
   return pluginManifests;
 }
 
-export async function unloadPlugin(name: string): Promise<void> {
+export interface UnloadPluginOptions {
+  /** Drain timeout in ms. Default: read from manifest lifecycle.shutdownTimeoutMs, or 30_000 */
+  drainTimeoutMs?: number;
+  /** Skip drain entirely (force unload). Default: false */
+  force?: boolean;
+}
+
+export async function unloadPlugin(name: string, options: UnloadPluginOptions = {}): Promise<void> {
   const loaded = loadedPlugins.get(name);
   if (!loaded) return;
 
-  // Shutdown if needed
-  if (loaded.plugin.shutdown) {
-    await loaded.plugin.shutdown();
-  }
-
-  // Clean up registrations
-  if (loaded.plugin.commands) {
-    // Commands are registered per-plugin, no global registry to clean
-  }
-
-  // Deregister provided capabilities
   const manifest = pluginManifests.get(name);
+  const drainBehavior = manifest?.lifecycle?.shutdownBehavior ?? "graceful";
+  const defaultTimeout = manifest?.lifecycle?.shutdownTimeoutMs ?? 30_000;
+  const drainTimeoutMs = options.drainTimeoutMs ?? defaultTimeout;
+  const force = options.force ?? false;
+
+  // ── Step 1: Drain (if plugin supports it and not force) ──
+  if (!force && (drainBehavior === "drain" || loaded.plugin.onDrain)) {
+    pluginStates.set(name, "draining");
+    await emitPluginDraining(name, drainTimeoutMs);
+
+    const drainStart = Date.now();
+    const abortController = new AbortController();
+    let timedOut = false;
+
+    if (loaded.plugin.onDrain) {
+      let timeoutId: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          loaded.plugin.onDrain().then(() => {
+            // Success: clear timeout to prevent mutation
+            if (timeoutId) clearTimeout(timeoutId);
+          }),
+          new Promise<void>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              timedOut = true;
+              abortController.abort();
+              reject(new Error(`Drain timeout after ${drainTimeoutMs}ms`));
+            }, drainTimeoutMs);
+          }),
+        ]);
+      } catch (err) {
+        logger.warn(`[plugins] ${name}: drain ${timedOut ? "timed out" : "failed"}: ${err}`);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    }
+
+    const durationMs = Date.now() - drainStart;
+    await emitPluginDrained(name, durationMs, timedOut);
+  }
+
+  // ── Step 2: Deactivate ──
+  pluginStates.set(name, "deactivating");
+
+  if (loaded.plugin.onDeactivate) {
+    try {
+      await Promise.race([
+        loaded.plugin.onDeactivate(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`onDeactivate timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
+        ),
+      ]);
+    } catch (err) {
+      logger.error(`[plugins] ${name}: onDeactivate failed: ${err}`);
+    }
+  }
+
+  // ── Step 3: Shutdown (existing behavior) ──
+  if (loaded.plugin.shutdown) {
+    try {
+      await Promise.race([
+        loaded.plugin.shutdown(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`shutdown timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
+        ),
+      ]);
+    } catch (err) {
+      logger.error(`[plugins] ${name}: shutdown failed: ${err}`);
+    }
+  }
+
+  // ── Step 4: Cleanup registrations (existing behavior) ──
   if (manifest?.provides?.capabilities?.length) {
     const registry = getCapabilityRegistry();
     for (const entry of manifest.provides.capabilities) {
@@ -262,16 +340,84 @@ export async function unloadPlugin(name: string): Promise<void> {
     logger.info(`[plugins] ${name}: deregistered ${manifest.provides.capabilities.length} capability provider(s)`);
   }
 
-  // Unregister from capability dependency graph
   getCapabilityDependencyGraph().unregisterPlugin(name);
 
+  // ── Step 5: Emit deactivated, clean up state ──
+  const version = loaded.plugin.version || manifest?.version || "unknown";
+  const wasDrained = !force && (drainBehavior === "drain" || !!loaded.plugin.onDrain);
+  await emitPluginDeactivated(name, version, wasDrained);
+
+  pluginStates.set(name, "inactive");
   loadedPlugins.delete(name);
   pluginManifests.delete(name);
   configSchemas.delete(name);
+  pluginStates.delete(name);
 }
 
 export function getLoadedPlugin(name: string): { plugin: WOPRPlugin; context: WOPRPluginContext } | undefined {
   return loadedPlugins.get(name);
+}
+
+/** Get the runtime state of a plugin */
+export function getPluginState(name: string): import("./state.js").PluginRuntimeState | undefined {
+  return pluginStates.get(name);
+}
+
+/** Check if a plugin is currently draining */
+export function isPluginDraining(name: string): boolean {
+  return pluginStates.get(name) === "draining";
+}
+
+export interface ProviderSwitchOptions {
+  fromPlugin: string;
+  toPlugin: string;
+  drainTimeoutMs?: number;
+}
+
+/**
+ * Switch a capability provider by hot-unloading the old plugin and hot-loading the new one.
+ * This is a convenience wrapper around unloadPlugin + loadPlugin.
+ */
+export async function switchProvider(
+  options: ProviderSwitchOptions,
+  injectors: {
+    inject: (session: string, message: string, opts?: PluginInjectOptions) => Promise<string>;
+    getSessions: () => string[];
+  },
+): Promise<void> {
+  const { fromPlugin, toPlugin, drainTimeoutMs } = options;
+
+  // Store reference to old plugin for rollback
+  const oldPluginRef = loadedPlugins.get(fromPlugin);
+
+  // 1. Drain and unload old plugin
+  await unloadPlugin(fromPlugin, { drainTimeoutMs });
+
+  // 2. Find and load new plugin
+  const installed = await getInstalledPlugins();
+  const target = installed.find((p) => p.name === toPlugin);
+  if (!target) {
+    throw new Error(`Plugin ${toPlugin} is not installed`);
+  }
+
+  try {
+    await loadPlugin(target, injectors);
+  } catch (err) {
+    // Rollback: reload the old plugin if new plugin fails
+    logger.error(`[plugins] Failed to load ${toPlugin}, rolling back to ${fromPlugin}: ${err}`);
+    if (oldPluginRef) {
+      const oldInstalled = installed.find((p) => p.name === fromPlugin);
+      if (oldInstalled) {
+        try {
+          await loadPlugin(oldInstalled, injectors);
+          logger.info(`[plugins] Rollback successful: ${fromPlugin} reloaded`);
+        } catch (rollbackErr) {
+          logger.error(`[plugins] Rollback failed for ${fromPlugin}: ${rollbackErr}`);
+        }
+      }
+    }
+    throw err;
+  }
 }
 
 export async function loadAllPlugins(

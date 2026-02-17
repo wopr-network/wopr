@@ -36,15 +36,18 @@ export {
   removePlugin,
   uninstallPlugin,
 } from "./plugins/installation.js";
-export type { LoadPluginOptions } from "./plugins/loading.js";
+export type { LoadPluginOptions, ProviderSwitchOptions, UnloadPluginOptions } from "./plugins/loading.js";
 // Loading
 export {
   getAllPluginManifests,
   getLoadedPlugin,
+  getPluginState,
+  isPluginDraining,
   loadAllPlugins,
   loadPlugin,
   readPluginManifest,
   shutdownAllPlugins,
+  switchProvider,
   unloadPlugin,
 } from "./plugins/loading.js";
 export type { DiscoveredPlugin } from "./plugins/registry.js";
