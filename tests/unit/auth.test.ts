@@ -26,6 +26,13 @@ vi.mock("../../src/core/providers.js", () => ({
   },
 }));
 
+// Mock auth-store to prevent transitive storage import (WOP-547)
+vi.mock("../../src/auth/auth-store.js", () => ({
+  AuthStore: class {
+    async init() {}
+  },
+}));
+
 // Set up filesystem mock before importing auth module
 const mockFs = createMockFs();
 
@@ -310,16 +317,16 @@ describe("Authentication Module", () => {
   // Save & Clear Auth
   // ========================================================================
   describe("saveAuth / clearAuth", () => {
-    it("should save auth state to AUTH_FILE", () => {
-      saveAuth(AUTH_FIXTURES.validApiKeyAuth);
+    it("should save auth state to AUTH_FILE", async () => {
+      await saveAuth(AUTH_FIXTURES.validApiKeyAuth);
       const saved = JSON.parse(mockFs.get("/mock/wopr/auth.json")!);
       expect(saved.type).toBe("api_key");
       expect(saved.apiKey).toBe("sk-ant-test-key-123");
     });
 
-    it("should clear auth by writing empty object", () => {
+    it("should clear auth by writing empty object", async () => {
       mockFs.set("/mock/wopr/auth.json", JSON.stringify(AUTH_FIXTURES.validApiKeyAuth));
-      clearAuth();
+      await clearAuth();
       expect(mockFs.get("/mock/wopr/auth.json")).toBe("{}");
     });
   });
@@ -369,9 +376,9 @@ describe("Authentication Module", () => {
   });
 
   describe("saveOAuthTokens", () => {
-    it("should save OAuth tokens with computed expiresAt", () => {
+    it("should save OAuth tokens with computed expiresAt", async () => {
       const before = Date.now();
-      saveOAuthTokens("access-tok", "refresh-tok", 3600, "user@example.com");
+      await saveOAuthTokens("access-tok", "refresh-tok", 3600, "user@example.com");
       const after = Date.now();
 
       const saved = JSON.parse(mockFs.get("/mock/wopr/auth.json")!);
@@ -385,8 +392,8 @@ describe("Authentication Module", () => {
   });
 
   describe("saveApiKey", () => {
-    it("should save API key auth state", () => {
-      saveApiKey("sk-ant-my-key");
+    it("should save API key auth state", async () => {
+      await saveApiKey("sk-ant-my-key");
       const saved = JSON.parse(mockFs.get("/mock/wopr/auth.json")!);
       expect(saved.type).toBe("api_key");
       expect(saved.apiKey).toBe("sk-ant-my-key");
@@ -513,9 +520,9 @@ describe("Authentication Module", () => {
   });
 
   describe("saveAuth with encryption", () => {
-    it("should encrypt auth.json when WOPR_CREDENTIAL_KEY is set", () => {
+    it("should encrypt auth.json when WOPR_CREDENTIAL_KEY is set", async () => {
       process.env.WOPR_CREDENTIAL_KEY = "my-secret-key";
-      saveAuth(AUTH_FIXTURES.validApiKeyAuth);
+      await saveAuth(AUTH_FIXTURES.validApiKeyAuth);
 
       const raw = mockFs.get("/mock/wopr/auth.json")!;
       expect(raw.startsWith("wopr:enc:")).toBe(true);
@@ -523,8 +530,8 @@ describe("Authentication Module", () => {
       expect(raw).not.toContain("sk-ant-test-key-123");
     });
 
-    it("should save plaintext when WOPR_CREDENTIAL_KEY is not set", () => {
-      saveAuth(AUTH_FIXTURES.validApiKeyAuth);
+    it("should save plaintext when WOPR_CREDENTIAL_KEY is not set", async () => {
+      await saveAuth(AUTH_FIXTURES.validApiKeyAuth);
       const raw = mockFs.get("/mock/wopr/auth.json")!;
       expect(raw.startsWith("{")).toBe(true);
       const parsed = JSON.parse(raw);
