@@ -2,11 +2,44 @@
  * `wopr cron` commands - scheduled injection management.
  */
 import { readFileSync } from "node:fs";
-import { parseTimeSpec } from "../../plugins/wopr-plugin-cron/src/cron.js";
 import { logger } from "../logger.js";
 import type { CronScript } from "../types.js";
 import { help } from "./help.js";
 import { client, requireDaemon } from "./shared.js";
+
+/** Parse a human-friendly time spec into epoch ms. Supports: "now", "+Ns/m/h/d", epoch, "HH:MM", ISO dates. */
+function parseTimeSpec(spec: string): number {
+  const now = Date.now();
+  if (spec === "now") return now;
+
+  if (spec.startsWith("+")) {
+    const match = spec.match(/^\+(\d+)([smhd])$/);
+    if (match) {
+      const val = parseInt(match[1], 10);
+      const unit = match[2] as "s" | "m" | "h" | "d";
+      const mult = { s: 1000, m: 60000, h: 3600000, d: 86400000 }[unit];
+      return now + val * mult;
+    }
+  }
+
+  if (/^\d{10,13}$/.test(spec)) {
+    const ts = parseInt(spec, 10);
+    return ts < 1e12 ? ts * 1000 : ts;
+  }
+
+  if (/^\d{1,2}:\d{2}$/.test(spec)) {
+    const [h, m] = spec.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    if (d.getTime() < now) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+
+  const parsed = Date.parse(spec);
+  if (!Number.isNaN(parsed)) return parsed;
+
+  throw new Error(`Invalid time spec: ${spec}`);
+}
 
 export async function cronCommand(subcommand: string | undefined, args: string[]): Promise<void> {
   await requireDaemon();

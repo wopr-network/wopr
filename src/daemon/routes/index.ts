@@ -4,7 +4,6 @@
 
 export { authRouter } from "./auth.js";
 export { canvasRouter } from "./canvas.js";
-export { cronsRouter } from "./crons.js";
 export { createHealthzRouter } from "./health.js";
 export { hooksRouter } from "./hooks.js";
 export { instancePluginsRouter } from "./instance-plugins.js";
