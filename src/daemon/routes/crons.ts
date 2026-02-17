@@ -11,15 +11,15 @@ import type { CronJob } from "../../types.js";
 export const cronsRouter = new Hono();
 
 // List all crons
-cronsRouter.get("/", (c) => {
-  const crons = getCrons();
+cronsRouter.get("/", async (c) => {
+  const crons = await getCrons();
   return c.json({ crons });
 });
 
 // Get specific cron
-cronsRouter.get("/:name", (c) => {
+cronsRouter.get("/:name", async (c) => {
   const name = c.req.param("name");
-  const cron = getCron(name);
+  const cron = await getCron(name);
 
   if (!cron) {
     return c.json({ error: "Cron not found" }, 404);
@@ -70,7 +70,7 @@ cronsRouter.post("/", async (c) => {
     once: once || undefined,
   };
 
-  addCron(job);
+  await addCron(job);
 
   // Optionally run immediately
   if (runNow) {
@@ -91,7 +91,7 @@ cronsRouter.post("/once", async (c) => {
 
   try {
     const job = createOnceJob(time, session, message);
-    addCron(job);
+    await addCron(job);
 
     return c.json(
       {
@@ -125,9 +125,9 @@ cronsRouter.post("/now", async (c) => {
 });
 
 // Delete cron
-cronsRouter.delete("/:name", (c) => {
+cronsRouter.delete("/:name", async (c) => {
   const name = c.req.param("name");
-  const removed = removeCron(name);
+  const removed = await removeCron(name);
 
   if (!removed) {
     return c.json({ error: "Cron not found" }, 404);

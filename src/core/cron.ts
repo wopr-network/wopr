@@ -1,44 +1,27 @@
 /**
- * Cron job management
+ * Cron job management - pure functions and script execution
+ *
+ * Storage functions (CRUD) moved to cron-repository.ts
+ * Re-exported here for backwards compatibility
  */
 
 import { exec } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
-import { CRON_HISTORY_FILE, CRONS_FILE } from "../paths.js";
-import type { CronHistoryEntry, CronJob, CronScript, CronScriptResult } from "../types.js";
+import type { CronJob, CronScript, CronScriptResult } from "../types.js";
 
 const execAsync = promisify(exec);
 
-const MAX_HISTORY_ENTRIES = 1000; // Keep last 1000 entries
-
-export function getCrons(): CronJob[] {
-  return existsSync(CRONS_FILE) ? JSON.parse(readFileSync(CRONS_FILE, "utf-8")) : [];
-}
-
-export function saveCrons(crons: CronJob[]): void {
-  writeFileSync(CRONS_FILE, JSON.stringify(crons, null, 2));
-}
-
-export function addCron(job: CronJob): void {
-  const crons = getCrons();
-  // Remove existing job with same name
-  const filtered = crons.filter((c) => c.name !== job.name);
-  filtered.push(job);
-  saveCrons(filtered);
-}
-
-export function removeCron(name: string): boolean {
-  const crons = getCrons();
-  const filtered = crons.filter((c) => c.name !== name);
-  if (filtered.length === crons.length) return false;
-  saveCrons(filtered);
-  return true;
-}
-
-export function getCron(name: string): CronJob | undefined {
-  return getCrons().find((c) => c.name === name);
-}
+// Re-export storage functions from repository
+export {
+  addCron,
+  addCronRun,
+  clearCronHistory,
+  getCron,
+  getCronHistory,
+  getCrons,
+  initCronStorage,
+  removeCron,
+} from "./cron-repository.js";
 
 export function parseCronSchedule(schedule: string): {
   minute: number[];
@@ -144,92 +127,7 @@ export function createOnceJob(time: string, session: string, message: string): C
   };
 }
 
-// Cron history functions
-export function getCronHistory(options?: {
-  name?: string;
-  session?: string;
-  limit?: number;
-  offset?: number;
-  since?: number;
-  successOnly?: boolean;
-  failedOnly?: boolean;
-}): { entries: CronHistoryEntry[]; total: number; hasMore: boolean } {
-  if (!existsSync(CRON_HISTORY_FILE)) return { entries: [], total: 0, hasMore: false };
-
-  let history: CronHistoryEntry[] = JSON.parse(readFileSync(CRON_HISTORY_FILE, "utf-8"));
-
-  // Filter by name
-  if (options?.name) {
-    history = history.filter((h) => h.name === options.name);
-  }
-
-  // Filter by session
-  if (options?.session) {
-    history = history.filter((h) => h.session === options.session);
-  }
-
-  // Filter by time
-  if (options?.since) {
-    const since = options.since;
-    history = history.filter((h) => h.timestamp >= since);
-  }
-
-  // Filter by success/failure
-  if (options?.successOnly) {
-    history = history.filter((h) => h.success);
-  } else if (options?.failedOnly) {
-    history = history.filter((h) => !h.success);
-  }
-
-  // Sort by timestamp descending (most recent first)
-  history.sort((a, b) => b.timestamp - a.timestamp);
-
-  const total = history.length;
-  const offset = options?.offset ?? 0;
-  const limit = options?.limit ?? 50;
-
-  // Apply pagination
-  const entries = history.slice(offset, offset + limit);
-  const hasMore = offset + entries.length < total;
-
-  return { entries, total, hasMore };
-}
-
-export function addCronHistory(entry: CronHistoryEntry): void {
-  let history: CronHistoryEntry[] = [];
-
-  if (existsSync(CRON_HISTORY_FILE)) {
-    history = JSON.parse(readFileSync(CRON_HISTORY_FILE, "utf-8"));
-  }
-
-  history.push(entry);
-
-  // Trim to max entries (keep most recent)
-  if (history.length > MAX_HISTORY_ENTRIES) {
-    history.sort((a, b) => b.timestamp - a.timestamp);
-    history = history.slice(0, MAX_HISTORY_ENTRIES);
-  }
-
-  writeFileSync(CRON_HISTORY_FILE, JSON.stringify(history, null, 2));
-}
-
-export function clearCronHistory(options?: { name?: string; session?: string }): number {
-  if (!existsSync(CRON_HISTORY_FILE)) return 0;
-
-  let history: CronHistoryEntry[] = JSON.parse(readFileSync(CRON_HISTORY_FILE, "utf-8"));
-  const originalLength = history.length;
-
-  if (options?.name) {
-    history = history.filter((h) => h.name !== options.name);
-  } else if (options?.session) {
-    history = history.filter((h) => h.session !== options.session);
-  } else {
-    history = [];
-  }
-
-  writeFileSync(CRON_HISTORY_FILE, JSON.stringify(history, null, 2));
-  return originalLength - history.length;
-}
+// Script execution functions below (pure logic, no storage)
 
 const DEFAULT_SCRIPT_TIMEOUT = 30000;
 const MAX_SCRIPT_OUTPUT = 50000; // 50KB max per script output

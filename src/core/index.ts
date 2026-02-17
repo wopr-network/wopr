@@ -3,6 +3,8 @@
  */
 
 export * from "./cron.js";
+export * from "./cron-schema.js";
+export * from "./cron-repository.js";
 export * from "./events.js";
 export * from "./pairing.js";
 export * from "./pairing-commands.js";
