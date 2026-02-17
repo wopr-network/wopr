@@ -16,13 +16,14 @@ import { setCanvasPublish } from "../core/canvas.js";
 import { config as centralConfig } from "../core/config.js";
 // Core imports for daemon functionality
 import {
-  addCronHistory,
+  addCronRun,
   executeCronScripts,
   getCrons,
+  initCronStorage,
   resolveScriptTemplates,
-  saveCrons,
   shouldRunCron,
 } from "../core/cron.js";
+import { migrateCronsToSql } from "../core/cron-migrate.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
 import { inject } from "../core/sessions.js";
@@ -192,6 +193,12 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     daemonLog(`Warning: ${msg}`);
     startupWarnings.push(msg);
   }
+
+  // Initialize cron storage and migrate from JSON
+  daemonLog("Initializing cron storage...");
+  await initCronStorage();
+  await migrateCronsToSql();
+  daemonLog("Cron storage initialized");
 
   // Ensure bearer token exists for API authentication
   ensureToken();
@@ -372,7 +379,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const cronTick = async () => {
     const now = new Date();
     const nowTs = now.getTime();
-    let crons = getCrons();
+    let crons = await getCrons();
     const toRemove: string[] = [];
 
     for (const cron of crons) {
@@ -429,11 +436,11 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
           daemonLog(`Completed: ${cron.name} (${durationMs}ms)`);
 
           // Log success to history
-          addCronHistory({
-            name: cron.name,
+          await addCronRun({
+            cronName: cron.name,
             session: cron.session,
-            timestamp: startTime,
-            success: true,
+            startedAt: startTime,
+            status: "success",
             durationMs,
             message: resolvedMessage,
             scriptResults,
@@ -449,11 +456,11 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
           daemonLog(`Error: ${cron.name} - ${errorMsg}`);
 
           // Log failure to history
-          addCronHistory({
-            name: cron.name,
+          await addCronRun({
+            cronName: cron.name,
             session: cron.session,
-            timestamp: startTime,
-            success: false,
+            startedAt: startTime,
+            status: "failure",
             durationMs,
             error: errorMsg,
             message: cron.message,
@@ -465,10 +472,10 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     }
 
     if (toRemove.length > 0) {
-      // Re-read to get any jobs added during execution (avoids race condition)
-      crons = getCrons();
-      crons = crons.filter((c) => !toRemove.includes(c.name));
-      saveCrons(crons);
+      // Remove one-time jobs
+      for (const name of toRemove) {
+        await (await import("../core/cron.js")).removeCron(name);
+      }
     }
   };
 

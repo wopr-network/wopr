@@ -67,7 +67,7 @@ export function createCronTools(sessionName: string): unknown[] {
                 );
             }
           }
-          addCron({ name, schedule, session, message, scripts: scripts || undefined });
+          await addCron({ name, schedule, session, message, scripts: scripts || undefined });
           const scriptInfo = scripts?.length ? ` (${scripts.length} script(s))` : "";
           return {
             content: [{ type: "text", text: `Cron job '${name}' scheduled: ${schedule} -> ${session}${scriptInfo}` }],
@@ -108,7 +108,7 @@ export function createCronTools(sessionName: string): unknown[] {
           }
           try {
             const job = createOnceJob(time, session, message);
-            addCron(job);
+            await addCron(job);
             return {
               content: [
                 { type: "text", text: `One-time job scheduled for ${new Date(job.runAt ?? Date.now()).toISOString()}` },
@@ -125,7 +125,7 @@ export function createCronTools(sessionName: string): unknown[] {
 
   tools.push(
     tool("cron_list", "List all scheduled cron jobs.", {}, async () => {
-      const crons = getCrons();
+      const crons = await getCrons();
       if (crons.length === 0) return { content: [{ type: "text", text: "No cron jobs scheduled." }] };
       const formatted = crons
         .map((c) => {
@@ -146,7 +146,7 @@ export function createCronTools(sessionName: string): unknown[] {
         logger.info(`[a2a-mcp] cron_cancel: ${sessionName} cancelling '${args.name}'`);
         try {
           return await withSecurityCheck("cron_cancel", sessionName, async () => {
-            const removed = removeCron(args.name);
+            const removed = await removeCron(args.name);
             logger.info(`[a2a-mcp] cron_cancel: '${args.name}' removed=${removed}`);
             if (!removed)
               return { content: [{ type: "text", text: `Cron job '${args.name}' not found` }], isError: true };
@@ -183,7 +183,7 @@ export function createCronTools(sessionName: string): unknown[] {
         successOnly?: boolean;
         failedOnly?: boolean;
       }) => {
-        const result = getCronHistory({
+        const result = await getCronHistory({
           name: args.name,
           session: args.session,
           limit: args.limit,
@@ -195,9 +195,9 @@ export function createCronTools(sessionName: string): unknown[] {
         if (result.total === 0) return { content: [{ type: "text", text: "No cron history found matching filters." }] };
         const lines: string[] = [`Cron History (showing ${result.entries.length} of ${result.total} entries):`, ""];
         for (const entry of result.entries) {
-          const date = new Date(entry.timestamp).toISOString();
-          lines.push(`[${date}] ${entry.name} -> ${entry.session}`);
-          lines.push(`  Status: ${entry.success ? "SUCCESS" : "FAILED"} | Duration: ${entry.durationMs}ms`);
+          const date = new Date(entry.startedAt).toISOString();
+          lines.push(`[${date}] ${entry.cronName} -> ${entry.session}`);
+          lines.push(`  Status: ${entry.status.toUpperCase()} | Duration: ${entry.durationMs}ms`);
           if (entry.error) lines.push(`  Error: ${entry.error}`);
           lines.push(`  Message: ${entry.message}`, "");
         }
