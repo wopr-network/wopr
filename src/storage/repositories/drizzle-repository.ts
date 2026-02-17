@@ -337,16 +337,15 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     }
   }
 
-  // Using Repository with different type params to avoid explicit any
-  async transaction<R>(
-    fn: (repo: Repository<Record<string, unknown>, keyof Record<string, unknown>, unknown>) => Promise<R>,
-  ): Promise<R> {
+  // Simplified transaction - uses same repository, no actual transaction
+  async transaction<R>(fn: (repo: Repository<T>) => Promise<R>): Promise<R> {
     // For now, just run without transaction to avoid complex type issues
     // TODO: Properly implement transaction support with type-safe access to raw DB
-    const result = await fn(this);
+    const result = await fn(this as unknown as Repository<T>);
     return result;
   }
 
+  /**
   /**
    * Build Drizzle conditions from filter object
    */
