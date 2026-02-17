@@ -16,7 +16,9 @@ export async function migrateRegistriesToSql(): Promise<void> {
     }
     const backupPath = `${REGISTRIES_FILE}.backup.${Date.now()}`;
     renameSync(REGISTRIES_FILE, backupPath);
-    logger.info(`[registries-migrate] Migrated ${registries.length} registries from ${REGISTRIES_FILE} (backup: ${backupPath})`);
+    logger.info(
+      `[registries-migrate] Migrated ${registries.length} registries from ${REGISTRIES_FILE} (backup: ${backupPath})`,
+    );
   } catch (err) {
     logger.error(`[registries-migrate] Failed to migrate: ${err}`);
     throw err;

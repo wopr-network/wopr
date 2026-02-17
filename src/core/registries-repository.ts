@@ -1,6 +1,6 @@
+import { logger } from "../logger.js";
 import type { Repository } from "../storage/api/plugin-storage.js";
 import { getStorage } from "../storage/index.js";
-import { logger } from "../logger.js";
 import type { RegistryRecord } from "./registries-schema.js";
 import { registriesPluginSchema } from "./registries-schema.js";
 
