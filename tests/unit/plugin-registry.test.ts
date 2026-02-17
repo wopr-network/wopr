@@ -71,6 +71,10 @@ import {
 } from "../../src/plugins/registry.js";
 
 beforeEach(async () => {
+  // Reset storage singleton to prevent state pollution
+  const { resetStorage } = await import("../../src/storage/index.js");
+  resetStorage();
+
   mkdirSync(TEST_DIR, { recursive: true });
 
   // Initialize storage for plugin schema (WOP-547)

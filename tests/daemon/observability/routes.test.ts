@@ -18,11 +18,11 @@ describe("observability API routes", () => {
     vi.resetModules(); // Force fresh module loading to reset metricsStore
     mkdirSync(testDir, { recursive: true });
 
-    // Initialize storage before creating the app
+    // Explicitly initialize storage singleton before creating the app
     const { getStorage } = await import("../../../src/storage/index.js");
     const storage = getStorage(join(testDir, "wopr.sqlite"));
 
-    // Register metrics schema
+    // Register metrics schema with initialized storage
     const { metricsPluginSchema } = await import("../../../src/daemon/observability/metrics.js");
     await storage.register(metricsPluginSchema);
 

@@ -433,6 +433,12 @@ class TransactionStorage implements StorageApi {
     return Array.isArray(result) ? result : [result];
   }
 
+  async run(sql: string, params?: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }> {
+    const stmt = this.sqliteRaw.prepare(sql);
+    const result = params ? stmt.run(...params) : stmt.run();
+    return result;
+  }
+
   async transaction<R>(_fn: (storage: StorageApi) => Promise<R>): Promise<R> {
     throw new Error("Nested transactions not supported");
   }
