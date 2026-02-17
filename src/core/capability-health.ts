@@ -62,13 +62,24 @@ async function runProbeWithTimeout(
   timeoutMs: number,
 ): Promise<{ healthy: boolean; responseTimeMs: number; error?: string }> {
   const start = Date.now();
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
   try {
     const result = await Promise.race([
       probe(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Probe timed out")), timeoutMs)),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error("Probe timed out")), timeoutMs);
+      }),
     ]);
+    // Clean up timeout if probe resolved first
+    if (timeoutHandle !== null) {
+      clearTimeout(timeoutHandle);
+    }
     return { healthy: result, responseTimeMs: Date.now() - start };
   } catch (err) {
+    // Clean up timeout if probe rejected
+    if (timeoutHandle !== null) {
+      clearTimeout(timeoutHandle);
+    }
     return {
       healthy: false,
       responseTimeMs: Date.now() - start,
@@ -84,6 +95,7 @@ export class CapabilityHealthProber extends EventEmitter {
   private probes = new Map<string, HealthProbeFn>(); // "capability:providerId" -> probe fn
   private healthState = new Map<string, CapabilityProviderHealth>(); // "capability:providerId" -> state
   private checkAborted = false; // abort flag for graceful shutdown
+  private checkInFlight = false; // guard against overlapping checks
 
   constructor(config: CapabilityHealthProberConfig = {}) {
     super();
@@ -142,102 +154,141 @@ export class CapabilityHealthProber extends EventEmitter {
 
   /** Run all probes and return snapshot */
   async check(): Promise<CapabilityHealthSnapshot> {
-    // Reset abort flag at start of new check
-    this.checkAborted = false;
-    const registry = getCapabilityRegistry();
-    const capabilityList = registry.listCapabilities();
-    const now = new Date().toISOString();
-
-    // Collect all probe tasks
-    const probeTasks: Array<{
-      capability: AdapterCapability;
-      providerId: string;
-      providerName: string;
-      key: string;
-      probe?: HealthProbeFn;
-    }> = [];
-
-    for (const { capability } of capabilityList) {
-      const providers = registry.getProviders(capability);
-      for (const provider of providers) {
-        const key = `${capability}:${provider.id}`;
-        const probe = this.probes.get(key);
-        probeTasks.push({
-          capability,
-          providerId: provider.id,
-          providerName: provider.name,
-          key,
-          probe,
-        });
-      }
+    // Guard against overlapping checks
+    if (this.checkInFlight) {
+      logger.debug("[capability-health] Check already in flight, skipping");
+      return this.getSnapshot();
     }
+    this.checkInFlight = true;
+    try {
+      // Reset abort flag at start of new check
+      this.checkAborted = false;
+      const registry = getCapabilityRegistry();
+      const capabilityList = registry.listCapabilities();
+      const now = new Date().toISOString();
 
-    // Run all probes concurrently with Promise.allSettled
-    const probeResults = await Promise.allSettled(
-      probeTasks.map(async (task) => {
-        // Early exit if check was aborted
-        if (this.checkAborted) {
-          return { ...task, healthy: false, error: "Check aborted", responseTimeMs: 0 };
+      // Collect all probe tasks
+      const probeTasks: Array<{
+        capability: AdapterCapability;
+        providerId: string;
+        providerName: string;
+        key: string;
+        probe?: HealthProbeFn;
+      }> = [];
+
+      for (const { capability } of capabilityList) {
+        const providers = registry.getProviders(capability);
+        for (const provider of providers) {
+          const key = `${capability}:${provider.id}`;
+          const probe = this.probes.get(key);
+          probeTasks.push({
+            capability,
+            providerId: provider.id,
+            providerName: provider.name,
+            key,
+            probe,
+          });
         }
-        if (!task.probe) {
-          // No probe registered — optimistic default (healthy)
-          return { ...task, healthy: true, responseTimeMs: 0 };
-        }
-        const result = await runProbeWithTimeout(task.probe, this.probeTimeoutMs);
-        return { ...task, ...result };
-      }),
-    );
+      }
 
-    // Update health state and detect transitions
-    for (let i = 0; i < probeTasks.length; i++) {
-      const task = probeTasks[i];
-      const result = probeResults[i];
-      const probeData =
-        result.status === "fulfilled"
-          ? result.value
-          : { ...task, healthy: false, error: "Probe task rejected", responseTimeMs: 0 };
+      // Run all probes concurrently with Promise.allSettled
+      const probeResults = await Promise.allSettled(
+        probeTasks.map(async (task) => {
+          // Early exit if check was aborted
+          if (this.checkAborted) {
+            return { ...task, healthy: false, error: "Check aborted", responseTimeMs: 0 };
+          }
+          if (!task.probe) {
+            // No probe registered — optimistic default (healthy)
+            return { ...task, healthy: true, responseTimeMs: 0 };
+          }
+          const result = await runProbeWithTimeout(task.probe, this.probeTimeoutMs);
+          return { ...task, ...result };
+        }),
+      );
 
-      const previousState = this.healthState.get(task.key);
-      const previousHealthy = previousState?.healthy ?? null; // null means first check
+      // Update health state and detect transitions
+      for (let i = 0; i < probeTasks.length; i++) {
+        const task = probeTasks[i];
+        const result = probeResults[i];
+        const probeData =
+          result.status === "fulfilled"
+            ? result.value
+            : { ...task, healthy: false, error: "Probe task rejected", responseTimeMs: 0 };
 
-      const newState: CapabilityProviderHealth = {
-        capability: task.capability,
-        providerId: task.providerId,
-        providerName: task.providerName,
-        healthy: probeData.healthy,
-        lastCheck: now,
-        lastHealthy: probeData.healthy ? now : (previousState?.lastHealthy ?? null),
-        error: probeData.error,
-        responseTimeMs: probeData.responseTimeMs,
-        consecutiveFailures: probeData.healthy ? 0 : (previousState?.consecutiveFailures ?? 0) + 1,
-      };
+        const previousState = this.healthState.get(task.key);
+        const previousHealthy = previousState?.healthy ?? null; // null means first check
 
-      this.healthState.set(task.key, newState);
-
-      // Emit status change event (skip first check)
-      if (previousHealthy !== null && previousHealthy !== probeData.healthy) {
-        const event = {
+        const newState: CapabilityProviderHealth = {
           capability: task.capability,
           providerId: task.providerId,
           providerName: task.providerName,
-          previousHealthy,
-          currentHealthy: probeData.healthy,
+          healthy: probeData.healthy,
+          lastCheck: now,
+          lastHealthy: probeData.healthy ? now : (previousState?.lastHealthy ?? null),
           error: probeData.error,
+          responseTimeMs: probeData.responseTimeMs,
+          consecutiveFailures: probeData.healthy ? 0 : (previousState?.consecutiveFailures ?? 0) + 1,
         };
-        this.emit("providerStatusChange", event);
 
-        // Also emit to the core event bus for plugins
-        await eventBus.emitCustom(
-          "capability:providerHealthChange",
-          {
-            ...event,
-          },
-          "core",
-        );
+        this.healthState.set(task.key, newState);
+
+        // Emit status change event (skip first check)
+        if (previousHealthy !== null && previousHealthy !== probeData.healthy) {
+          const event = {
+            capability: task.capability,
+            providerId: task.providerId,
+            providerName: task.providerName,
+            previousHealthy,
+            currentHealthy: probeData.healthy,
+            error: probeData.error,
+          };
+          this.emit("providerStatusChange", event);
+        }
       }
-    }
 
-    return this.getSnapshot();
+      // Emit all event bus notifications in parallel (after all state updates)
+      const eventBusEmissions = probeTasks
+        .map((task, i) => {
+          const result = probeResults[i];
+          const probeData =
+            result.status === "fulfilled"
+              ? result.value
+              : { ...task, healthy: false, error: "Probe task rejected", responseTimeMs: 0 };
+
+          const previousState = this.healthState.get(task.key);
+          const previousHealthy = previousState?.healthy ?? null;
+
+          if (previousHealthy !== null && previousHealthy !== probeData.healthy) {
+            return eventBus
+              .emitCustom(
+                "capability:providerHealthChange",
+                {
+                  capability: task.capability,
+                  providerId: task.providerId,
+                  providerName: task.providerName,
+                  previousHealthy,
+                  currentHealthy: probeData.healthy,
+                  error: probeData.error,
+                },
+                "core",
+              )
+              .catch((err) => {
+                logger.error(
+                  `[capability-health] Event bus emission failed for ${task.key}: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              });
+          }
+          return null;
+        })
+        .filter((p): p is Promise<void> => p !== null);
+
+      await Promise.all(eventBusEmissions);
+
+      return this.getSnapshot();
+    } finally {
+      this.checkInFlight = false;
+    }
   }
 
   /** Get current health state without running probes */
@@ -311,9 +362,9 @@ export class CapabilityHealthProber extends EventEmitter {
 // Singleton
 let instance: CapabilityHealthProber | null = null;
 
-export function getCapabilityHealthProber(): CapabilityHealthProber {
+export function getCapabilityHealthProber(config?: CapabilityHealthProberConfig): CapabilityHealthProber {
   if (!instance) {
-    instance = new CapabilityHealthProber();
+    instance = new CapabilityHealthProber(config);
   }
   return instance;
 }
