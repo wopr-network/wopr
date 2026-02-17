@@ -43,8 +43,7 @@ export async function updateRegistrySQL(entry: {
 }): Promise<void> {
   await initSandboxStorage();
   const repo = sandboxRepo();
-  // biome-ignore lint/suspicious/noExplicitAny: Repository findFirst requires generic filter type
-  const existing = await repo.findFirst({ id: entry.containerName } as any);
+  const existing = await repo.findById(entry.containerName);
 
   const record: SandboxRegistryRecord = {
     id: entry.containerName,
@@ -59,7 +58,13 @@ export async function updateRegistrySQL(entry: {
   if (existing) {
     await repo.update(entry.containerName, record);
   } else {
-    await repo.insert(record);
+    try {
+      await repo.insert(record);
+    } catch (err) {
+      // Handle duplicate key conflict - entry was inserted between findById and insert
+      // Retry as an update instead
+      await repo.update(entry.containerName, record);
+    }
   }
 }
 
@@ -69,11 +74,7 @@ export async function updateRegistrySQL(entry: {
 export async function removeRegistryEntrySQL(containerName: string): Promise<void> {
   await initSandboxStorage();
   const repo = sandboxRepo();
-  // biome-ignore lint/suspicious/noExplicitAny: Repository findFirst requires generic filter type
-  const existing = await repo.findFirst({ id: containerName } as any);
-  if (existing) {
-    await repo.delete(containerName);
-  }
+  await repo.delete(containerName);
 }
 
 /**
@@ -82,8 +83,7 @@ export async function removeRegistryEntrySQL(containerName: string): Promise<voi
 export async function findRegistryEntrySQL(containerName: string): Promise<SandboxRegistryRecord | undefined> {
   await initSandboxStorage();
   const repo = sandboxRepo();
-  // biome-ignore lint/suspicious/noExplicitAny: Repository findFirst requires generic filter type
-  const entry = await repo.findFirst({ id: containerName } as any);
+  const entry = await repo.findById(containerName);
   return entry ?? undefined;
 }
 
