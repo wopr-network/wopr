@@ -48,12 +48,24 @@ beforeEach(async () => {
   vi.resetModules();
   // Create fresh test directory
   mkdirSync(TEST_WOPR_HOME, { recursive: true });
+
+  // Initialize pairing storage (required for pairing module)
+  const { initPairing } = await import("../../src/core/pairing-store.js");
+  await initPairing();
   pairing = await import("../../src/core/pairing.js");
   pairingCommands = await import("../../src/core/pairing-commands.js");
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Reset storage
+  const resetStorageFn = async () => {
+    const { resetStorage } = await import("../../src/storage/index.js");
+    const { resetPairingStoreState } = await import("../../src/core/pairing-store.js");
+    resetStorage();
+    resetPairingStoreState();
+  };
+  resetStorageFn();
   // Clean up test directory
   if (existsSync(TEST_WOPR_HOME)) {
     rmSync(TEST_WOPR_HOME, { recursive: true, force: true });

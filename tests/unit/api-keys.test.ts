@@ -17,14 +17,22 @@ vi.mock("../../src/paths.js", () => ({
 import { mkdirSync, rmSync } from "node:fs";
 
 describe("API Key Management (WOP-209)", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mkdirSync(TEST_DB_DIR, { recursive: true });
+
+    // Initialize auth storage (required for api-keys module)
+    const { AuthStore } = await import("../../src/auth/auth-store.js");
+    const { setAuthStore } = await import("../../src/daemon/api-keys.js");
+
+    const authStore = new AuthStore();
+    await authStore.init();
+    setAuthStore(authStore);
   });
 
   afterEach(async () => {
-    // Close DB and clean up
-    const { closeApiKeysDb } = await import("../../src/daemon/api-keys.js");
-    closeApiKeysDb();
+    // Reset storage and clean up
+    const { resetStorage } = await import("../../src/storage/index.js");
+    resetStorage();
     rmSync(TEST_DB_DIR, { recursive: true, force: true });
     vi.resetModules();
   });
@@ -35,7 +43,7 @@ describe("API Key Management (WOP-209)", () => {
   describe("generateApiKey", () => {
     it("should generate a key with wopr_ prefix", async () => {
       const { generateApiKey } = await import("../../src/daemon/api-keys.js");
-      const { rawKey, keyInfo } = generateApiKey("user-1", "My Key");
+      const { rawKey, keyInfo } = await generateApiKey("user-1", "My Key");
 
       expect(rawKey).toMatch(/^wopr_[a-f0-9]{48}$/);
       expect(keyInfo.name).toBe("My Key");
@@ -49,8 +57,8 @@ describe("API Key Management (WOP-209)", () => {
 
     it("should generate unique keys each time", async () => {
       const { generateApiKey } = await import("../../src/daemon/api-keys.js");
-      const k1 = generateApiKey("user-1", "Key 1");
-      const k2 = generateApiKey("user-1", "Key 2");
+      const k1 = await generateApiKey("user-1", "Key 1");
+      const k2 = await generateApiKey("user-1", "Key 2");
 
       expect(k1.rawKey).not.toBe(k2.rawKey);
       expect(k1.keyInfo.id).not.toBe(k2.keyInfo.id);
@@ -58,20 +66,20 @@ describe("API Key Management (WOP-209)", () => {
 
     it("should support custom scope", async () => {
       const { generateApiKey } = await import("../../src/daemon/api-keys.js");
-      const { keyInfo } = generateApiKey("user-1", "Read Only", "read-only");
+      const { keyInfo } = await generateApiKey("user-1", "Read Only", "read-only");
       expect(keyInfo.scope).toBe("read-only");
     });
 
     it("should support instance scope", async () => {
       const { generateApiKey } = await import("../../src/daemon/api-keys.js");
-      const { keyInfo } = generateApiKey("user-1", "Instance Key", "instance:abc123");
+      const { keyInfo } = await generateApiKey("user-1", "Instance Key", "instance:abc123");
       expect(keyInfo.scope).toBe("instance:abc123");
     });
 
     it("should support expiresAt", async () => {
       const { generateApiKey } = await import("../../src/daemon/api-keys.js");
       const future = Date.now() + 86400000;
-      const { keyInfo } = generateApiKey("user-1", "Expiring", "full", future);
+      const { keyInfo } = await generateApiKey("user-1", "Expiring", "full", future);
       expect(keyInfo.expiresAt).toBe(future);
     });
   });
@@ -79,9 +87,9 @@ describe("API Key Management (WOP-209)", () => {
   describe("validateApiKey", () => {
     it("should validate a correct key", async () => {
       const { generateApiKey, validateApiKey } = await import("../../src/daemon/api-keys.js");
-      const { rawKey } = generateApiKey("user-1", "Test Key");
+      const { rawKey } = await generateApiKey("user-1", "Test Key");
 
-      const result = validateApiKey(rawKey);
+      const result = await validateApiKey(rawKey);
       expect(result).not.toBeNull();
       expect(result!.id).toBe("user-1");
       expect(result!.scope).toBe("full");
@@ -89,15 +97,15 @@ describe("API Key Management (WOP-209)", () => {
 
     it("should reject an invalid key", async () => {
       const { generateApiKey, validateApiKey } = await import("../../src/daemon/api-keys.js");
-      generateApiKey("user-1", "Test Key");
+      await generateApiKey("user-1", "Test Key");
 
-      const result = validateApiKey("wopr_" + "0".repeat(48));
+      const result = await validateApiKey("wopr_" + "0".repeat(48));
       expect(result).toBeNull();
     });
 
     it("should reject a key without wopr_ prefix", async () => {
       const { validateApiKey } = await import("../../src/daemon/api-keys.js");
-      const result = validateApiKey("invalid_key_here");
+      const result = await validateApiKey("invalid_key_here");
       expect(result).toBeNull();
     });
 
@@ -105,32 +113,29 @@ describe("API Key Management (WOP-209)", () => {
       const { generateApiKey, validateApiKey } = await import("../../src/daemon/api-keys.js");
       const pastTime = Date.now() - 1000;
       // Manually create with past expiry by generating then updating
-      const { rawKey, keyInfo } = generateApiKey("user-1", "Expired", "full", pastTime + 5000);
+      const { rawKey, keyInfo } = await generateApiKey("user-1", "Expired", "full", pastTime + 5000);
 
       // Manually update expires_at to the past via direct DB access
-      const { createRequire } = await import("node:module");
-      const _require = createRequire(import.meta.url);
-      const { DatabaseSync } = _require("node:sqlite");
-      const { join } = await import("node:path");
-      const db = new DatabaseSync(join(TEST_DB_DIR, "auth.sqlite"));
-      db.prepare("UPDATE api_keys SET expires_at = ? WHERE id = ?").run(pastTime, keyInfo.id);
-      db.close();
+      const { getStorage } = await import("../../src/storage/index.js");
+      const storage = getStorage();
+      const repo = storage.getRepository("auth", "auth_api_keys");
+      await repo.update(keyInfo.id, { expiresAt: pastTime });
 
-      const result = validateApiKey(rawKey);
+      const result = await validateApiKey(rawKey);
       expect(result).toBeNull();
     });
 
     it("should update last_used_at on successful validation", async () => {
       const { generateApiKey, validateApiKey, listApiKeys } = await import("../../src/daemon/api-keys.js");
-      const { rawKey } = generateApiKey("user-1", "Test Key");
+      const { rawKey } = await generateApiKey("user-1", "Test Key");
 
       // Initially null
-      let keys = listApiKeys("user-1");
+      let keys = await listApiKeys("user-1");
       expect(keys[0].lastUsedAt).toBeNull();
 
       // After validation, should be updated
-      validateApiKey(rawKey);
-      keys = listApiKeys("user-1");
+      await validateApiKey(rawKey);
+      keys = await listApiKeys("user-1");
       expect(keys[0].lastUsedAt).toBeGreaterThan(0);
     });
   });
@@ -138,11 +143,11 @@ describe("API Key Management (WOP-209)", () => {
   describe("listApiKeys", () => {
     it("should list keys for a user", async () => {
       const { generateApiKey, listApiKeys } = await import("../../src/daemon/api-keys.js");
-      generateApiKey("user-1", "Key A");
-      generateApiKey("user-1", "Key B");
-      generateApiKey("user-2", "Other User Key");
+      await generateApiKey("user-1", "Key A");
+      await generateApiKey("user-1", "Key B");
+      await generateApiKey("user-2", "Other User Key");
 
-      const keys = listApiKeys("user-1");
+      const keys = await listApiKeys("user-1");
       expect(keys).toHaveLength(2);
       expect(keys.map((k) => k.name)).toContain("Key A");
       expect(keys.map((k) => k.name)).toContain("Key B");
@@ -150,15 +155,15 @@ describe("API Key Management (WOP-209)", () => {
 
     it("should return empty array for user with no keys", async () => {
       const { listApiKeys } = await import("../../src/daemon/api-keys.js");
-      const keys = listApiKeys("nonexistent-user");
+      const keys = await listApiKeys("nonexistent-user");
       expect(keys).toHaveLength(0);
     });
 
     it("should not expose key hashes", async () => {
       const { generateApiKey, listApiKeys } = await import("../../src/daemon/api-keys.js");
-      generateApiKey("user-1", "Key A");
+      await generateApiKey("user-1", "Key A");
 
-      const keys = listApiKeys("user-1");
+      const keys = await listApiKeys("user-1");
       const keyObj = keys[0] as Record<string, unknown>;
       expect(keyObj).not.toHaveProperty("key_hash");
       expect(keyObj).not.toHaveProperty("keyHash");
@@ -168,44 +173,44 @@ describe("API Key Management (WOP-209)", () => {
   describe("revokeApiKey", () => {
     it("should revoke a key", async () => {
       const { generateApiKey, revokeApiKey, listApiKeys } = await import("../../src/daemon/api-keys.js");
-      const { keyInfo } = generateApiKey("user-1", "To Revoke");
+      const { keyInfo } = await generateApiKey("user-1", "To Revoke");
 
-      const deleted = revokeApiKey(keyInfo.id, "user-1");
+      const deleted = await revokeApiKey(keyInfo.id, "user-1");
       expect(deleted).toBe(true);
 
-      const keys = listApiKeys("user-1");
+      const keys = await listApiKeys("user-1");
       expect(keys).toHaveLength(0);
     });
 
     it("should not revoke another user's key", async () => {
       const { generateApiKey, revokeApiKey, listApiKeys } = await import("../../src/daemon/api-keys.js");
-      const { keyInfo } = generateApiKey("user-1", "User 1 Key");
+      const { keyInfo } = await generateApiKey("user-1", "User 1 Key");
 
-      const deleted = revokeApiKey(keyInfo.id, "user-2");
+      const deleted = await revokeApiKey(keyInfo.id, "user-2");
       expect(deleted).toBe(false);
 
       // Key should still exist
-      const keys = listApiKeys("user-1");
+      const keys = await listApiKeys("user-1");
       expect(keys).toHaveLength(1);
     });
 
     it("should return false for nonexistent key", async () => {
       const { revokeApiKey } = await import("../../src/daemon/api-keys.js");
-      const deleted = revokeApiKey("nonexistent-id", "user-1");
+      const deleted = await revokeApiKey("nonexistent-id", "user-1");
       expect(deleted).toBe(false);
     });
 
     it("should invalidate the key after revocation", async () => {
       const { generateApiKey, revokeApiKey, validateApiKey } = await import("../../src/daemon/api-keys.js");
-      const { rawKey, keyInfo } = generateApiKey("user-1", "To Revoke");
+      const { rawKey, keyInfo } = await generateApiKey("user-1", "To Revoke");
 
       // Key works before revocation
-      expect(validateApiKey(rawKey)).not.toBeNull();
+      expect(await validateApiKey(rawKey)).not.toBeNull();
 
-      revokeApiKey(keyInfo.id, "user-1");
+      await revokeApiKey(keyInfo.id, "user-1");
 
       // Key no longer works
-      expect(validateApiKey(rawKey)).toBeNull();
+      expect(await validateApiKey(rawKey)).toBeNull();
     });
   });
 
@@ -292,8 +297,8 @@ describe("API Key Management (WOP-209)", () => {
       const { generateApiKey } = await import("../../src/daemon/api-keys.js");
 
       // Pre-create some keys
-      generateApiKey("test-user-1", "Key A");
-      generateApiKey("test-user-1", "Key B");
+      await generateApiKey("test-user-1", "Key A");
+      await generateApiKey("test-user-1", "Key B");
 
       const app = new Hono();
       app.use("*", async (c, next) => {
@@ -314,7 +319,7 @@ describe("API Key Management (WOP-209)", () => {
       const { apiKeysRouter } = await import("../../src/daemon/routes/api-keys.js");
       const { generateApiKey } = await import("../../src/daemon/api-keys.js");
 
-      const { keyInfo } = generateApiKey("test-user-1", "To Delete");
+      const { keyInfo } = await generateApiKey("test-user-1", "To Delete");
 
       const app = new Hono();
       app.use("*", async (c, next) => {
@@ -382,18 +387,18 @@ describe("API Key Management (WOP-209)", () => {
       const { generateApiKey, validateApiKey, revokeApiKey } = await import("../../src/daemon/api-keys.js");
 
       // Create old key
-      const old = generateApiKey("user-1", "Old Key");
-      expect(validateApiKey(old.rawKey)).not.toBeNull();
+      const old = await generateApiKey("user-1", "Old Key");
+      expect(await validateApiKey(old.rawKey)).not.toBeNull();
 
       // Create new key (both valid simultaneously)
-      const fresh = generateApiKey("user-1", "New Key");
-      expect(validateApiKey(fresh.rawKey)).not.toBeNull();
-      expect(validateApiKey(old.rawKey)).not.toBeNull();
+      const fresh = await generateApiKey("user-1", "New Key");
+      expect(await validateApiKey(fresh.rawKey)).not.toBeNull();
+      expect(await validateApiKey(old.rawKey)).not.toBeNull();
 
       // Revoke old key
-      revokeApiKey(old.keyInfo.id, "user-1");
-      expect(validateApiKey(old.rawKey)).toBeNull();
-      expect(validateApiKey(fresh.rawKey)).not.toBeNull();
+      await revokeApiKey(old.keyInfo.id, "user-1");
+      expect(await validateApiKey(old.rawKey)).toBeNull();
+      expect(await validateApiKey(fresh.rawKey)).not.toBeNull();
     });
   });
 });
