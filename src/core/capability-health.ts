@@ -83,6 +83,7 @@ export class CapabilityHealthProber extends EventEmitter {
   private timer: ReturnType<typeof setInterval> | null = null;
   private probes = new Map<string, HealthProbeFn>(); // "capability:providerId" -> probe fn
   private healthState = new Map<string, CapabilityProviderHealth>(); // "capability:providerId" -> state
+  private checkAborted = false; // abort flag for graceful shutdown
 
   constructor(config: CapabilityHealthProberConfig = {}) {
     super();
@@ -101,6 +102,7 @@ export class CapabilityHealthProber extends EventEmitter {
   unregisterProbe(capability: AdapterCapability, providerId: string): void {
     const key = `${capability}:${providerId}`;
     this.probes.delete(key);
+    // Clean up health state to prevent unbounded map growth
     this.healthState.delete(key);
     logger.debug(`[capability-health] Unregistered probe for ${key}`);
   }
@@ -111,24 +113,37 @@ export class CapabilityHealthProber extends EventEmitter {
     this.timer = setInterval(() => {
       this.check().catch((err) => {
         logger.error(`[capability-health] Periodic check failed: ${err instanceof Error ? err.message : String(err)}`);
+        // Emit health error event so listeners are aware
+        this.emit("healthCheckError", { error: err instanceof Error ? err.message : String(err) });
       });
     }, this.intervalMs);
     // Run an initial check immediately
     this.check().catch((err) => {
       logger.error(`[capability-health] Initial check failed: ${err instanceof Error ? err.message : String(err)}`);
+      // Emit health error event so listeners are aware
+      this.emit("healthCheckError", { error: err instanceof Error ? err.message : String(err) });
     });
   }
 
   /** Stop periodic probing */
   stop(): void {
+    // Signal any running checks to abort
+    this.checkAborted = true;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
     }
   }
 
+  /** Check if periodic probing is currently running */
+  isRunning(): boolean {
+    return this.timer !== null;
+  }
+
   /** Run all probes and return snapshot */
   async check(): Promise<CapabilityHealthSnapshot> {
+    // Reset abort flag at start of new check
+    this.checkAborted = false;
     const registry = getCapabilityRegistry();
     const capabilityList = registry.listCapabilities();
     const now = new Date().toISOString();
@@ -160,6 +175,10 @@ export class CapabilityHealthProber extends EventEmitter {
     // Run all probes concurrently with Promise.allSettled
     const probeResults = await Promise.allSettled(
       probeTasks.map(async (task) => {
+        // Early exit if check was aborted
+        if (this.checkAborted) {
+          return { ...task, healthy: false, error: "Check aborted", responseTimeMs: 0 };
+        }
         if (!task.probe) {
           // No probe registered — optimistic default (healthy)
           return { ...task, healthy: true, responseTimeMs: 0 };

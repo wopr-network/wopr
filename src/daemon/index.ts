@@ -437,23 +437,29 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   // Wire up capability health alerting via WebSocket
   capabilityProber.on("providerStatusChange", (event) => {
-    const { capability, providerId, providerName, currentHealthy, error } = event;
-    const wsEvent = {
-      type: "capability:health",
-      capability,
-      providerId,
-      providerName,
-      healthy: currentHealthy,
-      error: error || undefined,
-      ts: Date.now(),
-    };
-    publishToTopic("capability:health", wsEvent);
-    if (!currentHealthy) {
-      winstonLogger.warn(
-        `[capability-health] Provider ${providerId} (${capability}) is unhealthy: ${error || "health check failed"}`,
+    try {
+      const { capability, providerId, providerName, currentHealthy, error } = event;
+      const wsEvent = {
+        type: "capability:health",
+        capability,
+        providerId,
+        providerName,
+        healthy: currentHealthy,
+        error: error || undefined,
+        ts: Date.now(),
+      };
+      publishToTopic("capability:health", wsEvent);
+      if (!currentHealthy) {
+        winstonLogger.warn(
+          `[capability-health] Provider ${providerId} (${capability}) is unhealthy: ${error || "health check failed"}`,
+        );
+      } else {
+        winstonLogger.info(`[capability-health] Provider ${providerId} (${capability}) recovered`);
+      }
+    } catch (err) {
+      winstonLogger.error(
+        `[capability-health] Failed to publish health change event: ${err instanceof Error ? err.message : String(err)}`,
       );
-    } else {
-      winstonLogger.info(`[capability-health] Provider ${providerId} (${capability}) recovered`);
     }
   });
 

@@ -6,6 +6,7 @@
 
 import { Hono } from "hono";
 import { getCapabilityHealthProber } from "../../core/capability-health.js";
+import { getCapabilityRegistry } from "../../core/capability-registry.js";
 
 export const capabilityHealthRouter = new Hono();
 
@@ -28,6 +29,12 @@ capabilityHealthRouter.post("/check", async (c) => {
 // GET /:capability — health for a specific capability
 capabilityHealthRouter.get("/:capability", (c) => {
   const capability = c.req.param("capability");
+  // Validate capability type against registry
+  const registry = getCapabilityRegistry();
+  const knownCapabilities = registry.listCapabilities().map((cap) => cap.capability);
+  if (!knownCapabilities.includes(capability)) {
+    return c.json({ error: "Unknown capability type" }, 404);
+  }
   const prober = getCapabilityHealthProber();
   const health = prober.getCapabilityHealth(capability);
   if (!health) {
@@ -40,6 +47,12 @@ capabilityHealthRouter.get("/:capability", (c) => {
 capabilityHealthRouter.get("/:capability/:providerId", (c) => {
   const capability = c.req.param("capability");
   const providerId = c.req.param("providerId");
+  // Validate capability type against registry
+  const registry = getCapabilityRegistry();
+  const knownCapabilities = registry.listCapabilities().map((cap) => cap.capability);
+  if (!knownCapabilities.includes(capability)) {
+    return c.json({ error: "Unknown capability type" }, 404);
+  }
   const prober = getCapabilityHealthProber();
   const health = prober.getProviderHealth(capability, providerId);
   if (!health) {

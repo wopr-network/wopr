@@ -342,10 +342,20 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
   }
 
   // Deregister health probes for provided capabilities
+  // Note: Check if prober has a running check before unregistering to avoid race conditions
   if (manifest?.provides?.capabilities?.length) {
     const prober = getCapabilityHealthProber();
+    // Stop the prober temporarily to ensure no probes are running
+    const wasRunning = prober.isRunning();
+    if (wasRunning) {
+      prober.stop();
+    }
     for (const entry of manifest.provides.capabilities) {
       prober.unregisterProbe(entry.type, entry.id);
+    }
+    // Restart if it was running before
+    if (wasRunning) {
+      prober.start();
     }
   }
 

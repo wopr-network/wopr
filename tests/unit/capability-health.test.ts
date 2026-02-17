@@ -113,6 +113,7 @@ describe("CapabilityHealthProber", () => {
   });
 
   it("handles probe timeout", async () => {
+    vi.useFakeTimers();
     vi.mocked(registry.listCapabilities).mockReturnValue([{ capability: "tts", providerCount: 1 }]);
     vi.mocked(registry.getProviders).mockReturnValue([{ id: "chatterbox", name: "Chatterbox TTS" }]);
 
@@ -121,10 +122,15 @@ describe("CapabilityHealthProber", () => {
     );
     prober.registerProbe("tts", "chatterbox", mockProbe);
 
-    const snapshot = await prober.check();
+    const checkPromise = prober.check();
+    // Advance past the probe timeout (1000ms)
+    await vi.advanceTimersByTimeAsync(1500);
+    const snapshot = await checkPromise;
 
     expect(snapshot.capabilities[0].providers[0].healthy).toBe(false);
     expect(snapshot.capabilities[0].providers[0].error).toBe("Probe timed out");
+
+    vi.useRealTimers();
   });
 
   it("tracks consecutiveFailures", async () => {
