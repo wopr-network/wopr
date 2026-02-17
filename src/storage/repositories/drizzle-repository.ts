@@ -31,6 +31,7 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
     private table: SQLiteTable,
     private columns: Record<string, SQLiteColumn>,
     private jsonColumns: Set<string> = new Set(),
+    private booleanColumns: Set<string> = new Set(),
   ) {}
 
   where<K extends keyof T>(field: K, opOrValue: FilterOperator | T[K], value?: unknown): QueryBuilder<T> {
@@ -144,8 +145,8 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
     // Execute synchronously, wrap in Promise for async interface
     const rows = query.all() as T[];
 
-    // Deserialize JSON columns
-    if (this.jsonColumns.size === 0) return Promise.resolve(rows);
+    // Deserialize JSON columns and boolean columns
+    if (this.jsonColumns.size === 0 && this.booleanColumns.size === 0) return Promise.resolve(rows);
     return Promise.resolve(
       rows.map((row) => {
         const r = { ...(row as Record<string, unknown>) };
@@ -156,6 +157,11 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
             } catch {
               /* leave as-is */
             }
+          }
+        }
+        for (const col of this.booleanColumns) {
+          if (col in r && typeof r[col] === "number") {
+            r[col] = r[col] !== 0;
           }
         }
         return r as T;
@@ -189,6 +195,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
 {
   private columns: Record<string, SQLiteColumn>;
   private jsonColumns: Set<string>;
+  private booleanColumns: Set<string>;
 
   constructor(
     private db: DrizzleDB,
@@ -220,18 +227,29 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
 
     // Identify columns that store JSON (arrays/objects stored as TEXT)
     this.jsonColumns = new Set<string>();
+    // Identify boolean columns (stored as INTEGER 0/1 in SQLite)
+    this.booleanColumns = new Set<string>();
     for (const [fieldName, zodType] of Object.entries(zodSchema.shape)) {
       const inner = zodType instanceof z.ZodOptional ? zodType.unwrap() : zodType;
       if (inner instanceof z.ZodArray || inner instanceof z.ZodObject) {
         this.jsonColumns.add(fieldName);
       }
+      if (inner instanceof z.ZodBoolean) {
+        this.booleanColumns.add(fieldName);
+      }
     }
   }
 
-  /** Serialize JSON columns to strings before writing to SQLite */
+  /** Serialize values for SQLite: coerce booleans to 0/1, JSON columns to strings */
   private serializeJson(data: Record<string, unknown>): Record<string, unknown> {
-    if (this.jsonColumns.size === 0) return data;
     const result = { ...data };
+    // SQLite cannot bind booleans — coerce to 0/1
+    for (const key of Object.keys(result)) {
+      if (typeof result[key] === "boolean") {
+        result[key] = result[key] ? 1 : 0;
+      }
+    }
+    if (this.jsonColumns.size === 0) return result;
     for (const col of this.jsonColumns) {
       if (col in result && result[col] !== null && result[col] !== undefined) {
         if (typeof result[col] !== "string") {
@@ -242,9 +260,9 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     return result;
   }
 
-  /** Deserialize JSON columns from strings after reading from SQLite */
+  /** Deserialize values from SQLite: JSON strings to objects, integers to booleans */
   private deserializeJson<R>(row: R): R {
-    if (this.jsonColumns.size === 0) return row;
+    if (this.jsonColumns.size === 0 && this.booleanColumns.size === 0) return row;
     const result = { ...(row as Record<string, unknown>) };
     for (const col of this.jsonColumns) {
       if (col in result && typeof result[col] === "string") {
@@ -253,6 +271,12 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
         } catch {
           // Leave as string if not valid JSON
         }
+      }
+    }
+    // Coerce SQLite INTEGER 0/1 back to boolean
+    for (const col of this.booleanColumns) {
+      if (col in result && typeof result[col] === "number") {
+        result[col] = result[col] !== 0;
       }
     }
     return result as R;
@@ -386,7 +410,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
   }
 
   query(): QueryBuilder<T> {
-    return new QueryBuilderImpl(this.db, this.table, this.columns, this.jsonColumns);
+    return new QueryBuilderImpl(this.db, this.table, this.columns, this.jsonColumns, this.booleanColumns);
   }
 
   async raw(sqlStr: string, params?: unknown[]): Promise<unknown[]> {
