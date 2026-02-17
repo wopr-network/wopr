@@ -51,7 +51,10 @@ export {
   shutdownAllPlugins,
   unloadPlugin,
 } from "./loading.js";
-
+// --- Migration ---
+export { migratePluginJsonToSql } from "./migrate-json.js";
+// --- Plugin Storage ---
+export { ensurePluginSchema, getPluginRepo, getRegistryRepo } from "./plugin-storage.js";
 export type { DiscoveredPlugin } from "./registry.js";
 // --- Registry & Discovery ---
 export {
@@ -62,7 +65,6 @@ export {
   removeRegistry,
   searchPlugins,
 } from "./registry.js";
-
 // --- State (public accessors only) ---
 export {
   channelAdapters,

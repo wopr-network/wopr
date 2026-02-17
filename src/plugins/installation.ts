@@ -6,11 +6,12 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { logger } from "../logger.js";
 import type { InstalledPlugin } from "../types.js";
-import { PLUGINS_DIR, PLUGINS_FILE } from "./state.js";
+import { ensurePluginSchema, getPluginRepo } from "./plugin-storage.js";
+import { PLUGINS_DIR } from "./state.js";
 
 export interface InstallResult {
   name: string;
@@ -75,7 +76,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
       installedAt: Date.now(),
     };
 
-    addInstalledPlugin(installed);
+    await addInstalledPlugin(installed);
     return installed;
   } else if (source.startsWith("./") || source.startsWith("/") || source.startsWith("~/")) {
     // Local path
@@ -112,7 +113,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
       installedAt: Date.now(),
     };
 
-    addInstalledPlugin(installed);
+    await addInstalledPlugin(installed);
     return installed;
   } else {
     // npm package - normalize to wopr-plugin-<name> format (accept wopr-<name> too)
@@ -140,18 +141,19 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
       installedAt: Date.now(),
     };
 
-    addInstalledPlugin(installed);
+    await addInstalledPlugin(installed);
     return installed;
   }
 }
 
-export function removePlugin(name: string): boolean {
+export async function removePlugin(name: string): Promise<boolean> {
   return uninstallPlugin(name);
 }
 
-export function uninstallPlugin(name: string): boolean {
-  const installed = getInstalledPlugins();
-  const plugin = installed.find((p) => p.name === name);
+export async function uninstallPlugin(name: string): Promise<boolean> {
+  await ensurePluginSchema();
+  const repo = getPluginRepo();
+  const plugin = await repo.findById(name);
   if (!plugin) return false;
 
   // Remove files (only if under PLUGINS_DIR to prevent path traversal).
@@ -163,49 +165,46 @@ export function uninstallPlugin(name: string): boolean {
     rmSync(normalizedPath, { recursive: true, force: true });
   }
 
-  // Remove from registry
-  const remaining = installed.filter((p) => p.name !== name);
-  writeFileSync(PLUGINS_FILE, JSON.stringify(remaining, null, 2));
+  // Remove from database
+  await repo.delete(name);
 
   return true;
 }
 
-export function enablePlugin(name: string): boolean {
-  const installed = getInstalledPlugins();
-  const plugin = installed.find((p) => p.name === name);
+export async function enablePlugin(name: string): Promise<boolean> {
+  await ensurePluginSchema();
+  const repo = getPluginRepo();
+  const plugin = await repo.findById(name);
   if (!plugin) return false;
-
-  plugin.enabled = true;
-  writeFileSync(PLUGINS_FILE, JSON.stringify(installed, null, 2));
+  await repo.update(name, { enabled: true });
   return true;
 }
 
-export function disablePlugin(name: string): boolean {
-  const installed = getInstalledPlugins();
-  const plugin = installed.find((p) => p.name === name);
+export async function disablePlugin(name: string): Promise<boolean> {
+  await ensurePluginSchema();
+  const repo = getPluginRepo();
+  const plugin = await repo.findById(name);
   if (!plugin) return false;
-
-  plugin.enabled = false;
-  writeFileSync(PLUGINS_FILE, JSON.stringify(installed, null, 2));
+  await repo.update(name, { enabled: false });
   return true;
 }
 
-export function listPlugins(): InstalledPlugin[] {
+export async function listPlugins(): Promise<InstalledPlugin[]> {
   return getInstalledPlugins();
 }
 
-export function getInstalledPlugins(): InstalledPlugin[] {
-  if (!existsSync(PLUGINS_FILE)) return [];
-  return JSON.parse(readFileSync(PLUGINS_FILE, "utf-8"));
+export async function getInstalledPlugins(): Promise<InstalledPlugin[]> {
+  await ensurePluginSchema();
+  return getPluginRepo().findMany();
 }
 
-function addInstalledPlugin(plugin: InstalledPlugin): void {
-  const installed = getInstalledPlugins();
-  const existing = installed.findIndex((p) => p.name === plugin.name);
-  if (existing >= 0) {
-    installed[existing] = plugin;
+async function addInstalledPlugin(plugin: InstalledPlugin): Promise<void> {
+  await ensurePluginSchema();
+  const repo = getPluginRepo();
+  const existing = await repo.findById(plugin.name);
+  if (existing) {
+    await repo.update(plugin.name, plugin as never);
   } else {
-    installed.push(plugin);
+    await repo.insert(plugin as never);
   }
-  writeFileSync(PLUGINS_FILE, JSON.stringify(installed, null, 2));
 }

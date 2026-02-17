@@ -6,10 +6,9 @@
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { PluginRegistryEntry } from "../types.js";
 import { getInstalledPlugins } from "./installation.js";
-import { REGISTRIES_FILE } from "./state.js";
+import { ensurePluginSchema, getRegistryRepo } from "./plugin-storage.js";
 
 export interface DiscoveredPlugin {
   name: string;
@@ -30,33 +29,29 @@ export { configSchemas } from "./state.js";
 // Plugin Registries
 // ============================================================================
 
-export function getPluginRegistries(): PluginRegistryEntry[] {
-  if (!existsSync(REGISTRIES_FILE)) return [];
-  return JSON.parse(readFileSync(REGISTRIES_FILE, "utf-8"));
+export async function getPluginRegistries(): Promise<PluginRegistryEntry[]> {
+  await ensurePluginSchema();
+  return getRegistryRepo().findMany();
 }
 
-export function addRegistry(url: string, name?: string): PluginRegistryEntry {
-  const registries = getPluginRegistries();
+export async function addRegistry(url: string, name?: string): Promise<PluginRegistryEntry> {
+  await ensurePluginSchema();
   const entry: PluginRegistryEntry = {
     url,
     name: name || new URL(url).hostname,
     enabled: true,
     lastSync: 0,
   };
-  registries.push(entry);
-  writeFileSync(REGISTRIES_FILE, JSON.stringify(registries, null, 2));
+  await getRegistryRepo().insert(entry as never);
   return entry;
 }
 
-export function removeRegistry(url: string): boolean {
-  const registries = getPluginRegistries();
-  const filtered = registries.filter((r) => r.url !== url);
-  if (filtered.length === registries.length) return false;
-  writeFileSync(REGISTRIES_FILE, JSON.stringify(filtered, null, 2));
-  return true;
+export async function removeRegistry(url: string): Promise<boolean> {
+  await ensurePluginSchema();
+  return getRegistryRepo().delete(url);
 }
 
-export function listRegistries(): PluginRegistryEntry[] {
+export async function listRegistries(): Promise<PluginRegistryEntry[]> {
   return getPluginRegistries();
 }
 
@@ -72,7 +67,7 @@ export async function searchPlugins(query: string): Promise<DiscoveredPlugin[]> 
   const seen = new Set<string>();
 
   // 1. Check installed plugins first
-  const installed = getInstalledPlugins();
+  const installed = await getInstalledPlugins();
   for (const p of installed) {
     if (!query || p.name.includes(query)) {
       if (!seen.has(p.name)) {

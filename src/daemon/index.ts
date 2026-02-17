@@ -292,6 +292,10 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   daemonLog(`[heap] before plugins: ${heapMB()}`);
 
+  // Migrate plugins.json and plugin-registries.json to SQL (one-time, idempotent)
+  const { migratePluginJsonToSql } = await import("../plugins/migrate-json.js");
+  await migratePluginJsonToSql();
+
   // Memory system (indexing, FTS5, file watching, session hooks) delegated to memory-semantic plugin
   daemonLog("Memory system delegated to memory-semantic plugin");
 

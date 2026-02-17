@@ -70,8 +70,8 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
           break;
         case "$contains":
           // SQLite specific: Only works for JSON arrays of strings
-          // Uses LIKE '%"value"%' which won't work for numbers in arrays
-          this.conditions.push(sql`${column} LIKE ${`%"${value}"%`}`);
+          // Parameterized via SQL concatenation to prevent injection
+          this.conditions.push(sql`${column} LIKE '%"' || ${String(value)} || '"%'`);
           break;
         case "$startsWith":
           this.conditions.push(like(column, `${value}%`));

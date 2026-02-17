@@ -140,8 +140,8 @@ instancePluginsRouter.use("/*", async (c, next) => {
 });
 
 // GET /api/instances/:id/plugins — List installed plugins
-instancePluginsRouter.get("/", (c) => {
-  const plugins = listPlugins();
+instancePluginsRouter.get("/", async (c) => {
+  const plugins = await listPlugins();
   const runtimeManifests = getAllPluginManifests();
   return c.json({
     plugins: plugins.map((p: PluginEntry) => {
@@ -186,7 +186,7 @@ instancePluginsRouter.post("/", async (c) => {
 
   try {
     const plugin = await installPlugin(source);
-    enablePlugin(plugin.name);
+    await enablePlugin(plugin.name);
 
     const injectors = await createInjectors();
     await loadPlugin(plugin, injectors);
@@ -240,14 +240,14 @@ instancePluginsRouter.post("/:name/enable", async (c) => {
     return c.json({ error: nameErr }, 400);
   }
 
-  const plugins = listPlugins();
+  const plugins = await listPlugins();
   const plugin = plugins.find((p: PluginEntry) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);
   }
 
   try {
-    enablePlugin(name);
+    await enablePlugin(name);
     const injectors = await createInjectors();
     await loadPlugin(plugin, injectors);
     await providerRegistry.checkHealth();
@@ -269,7 +269,7 @@ instancePluginsRouter.post("/:name/disable", async (c) => {
 
   try {
     await unloadPlugin(name);
-    disablePlugin(name);
+    await disablePlugin(name);
     return c.json({ disabled: true, unloaded: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -282,7 +282,7 @@ instancePluginsRouter.post("/:name/disable", async (c) => {
 instancePluginsRouter.get("/:name/config", async (c) => {
   const name = c.req.param("name");
 
-  const plugins = listPlugins();
+  const plugins = await listPlugins();
   const plugin = plugins.find((p: PluginEntry) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);
@@ -309,7 +309,7 @@ instancePluginsRouter.get("/:name/config", async (c) => {
 instancePluginsRouter.put("/:name/config", async (c) => {
   const name = c.req.param("name");
 
-  const plugins = listPlugins();
+  const plugins = await listPlugins();
   const plugin = plugins.find((p: PluginEntry) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);

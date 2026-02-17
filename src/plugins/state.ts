@@ -21,7 +21,9 @@ import type {
 
 export const WOPR_HOME = process.env.WOPR_HOME || join(homedir(), "wopr");
 export const PLUGINS_DIR = join(WOPR_HOME, "plugins");
+/** @deprecated Used only by migrate-json.ts for one-time migration */
 export const PLUGINS_FILE = join(WOPR_HOME, "plugins.json");
+/** @deprecated Used only by migrate-json.ts for one-time migration */
 export const REGISTRIES_FILE = join(WOPR_HOME, "plugin-registries.json");
 
 /** Loaded plugins (runtime) */

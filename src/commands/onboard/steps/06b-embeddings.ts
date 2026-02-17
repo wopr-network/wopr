@@ -30,7 +30,7 @@ async function getOllamaModels(baseUrl: string): Promise<string[]> {
 
 export const embeddingsStep: OnboardStep = async (_ctx: OnboardContext) => {
   // Only show if the semantic memory plugin is installed
-  const installed = getInstalledPlugins();
+  const installed = await getInstalledPlugins();
   const hasSemanticPlugin = installed.some((p) => p.name === SEMANTIC_PLUGIN_NAME || p.name === "memory-semantic");
 
   if (!hasSemanticPlugin) {

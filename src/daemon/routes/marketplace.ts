@@ -45,7 +45,7 @@ marketplaceRouter.get("/", async (c) => {
   const limit = Math.min(Number(c.req.query("limit")) || 50, 200);
 
   // 1. Collect installed plugins with their manifests
-  const installed = listPlugins();
+  const installed = await listPlugins();
   const runtimeManifests = getAllPluginManifests();
 
   interface MarketplaceEntry {
@@ -133,7 +133,7 @@ marketplaceRouter.get("/", async (c) => {
 marketplaceRouter.get("/:name", async (c) => {
   const name = c.req.param("name");
 
-  const installed = listPlugins();
+  const installed = await listPlugins();
   interface PluginEntry {
     name: string;
     version: string;
@@ -213,10 +213,10 @@ marketplaceRouter.get("/:name", async (c) => {
  * dynamic configuration forms in the dashboard without fetching the
  * full manifest.
  */
-marketplaceRouter.get("/:name/schema", (c) => {
+marketplaceRouter.get("/:name/schema", async (c) => {
   const name = c.req.param("name");
 
-  const installed = listPlugins();
+  const installed = await listPlugins();
   interface PluginEntry {
     name: string;
     version: string;

@@ -6,7 +6,7 @@ export async function tryPluginCommand(command: string, args: string[]): Promise
   if (!command) return false;
 
   const { getInstalledPlugins, loadPlugin, getLoadedPlugin } = await import("../plugins.js");
-  const installed = getInstalledPlugins().filter((p) => p.enabled);
+  const installed = (await getInstalledPlugins()).filter((p) => p.enabled);
 
   // First, load ALL enabled plugins to ensure providers/extensions are registered
   // This is necessary because provider plugins (TTS, STT) register during init
