@@ -162,13 +162,15 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
 /**
  * Drizzle implementation of Repository interface
  */
-export class DrizzleRepository<T extends Record<string, unknown>> implements Repository<T> {
+export class DrizzleRepository<T extends Record<string, unknown>, PK extends keyof T = "id", PKType = T[PK]>
+  implements Repository<T, PK, PKType>
+{
   private columns: Record<string, SQLiteColumn>;
 
   constructor(
     private db: DrizzleDB,
     private table: SQLiteTable,
-    private primaryKey: string,
+    private primaryKey: PK,
     private zodSchema: z.ZodObject<Record<string, z.ZodTypeAny>>,
     private sqliteRaw?: unknown,
   ) {
@@ -176,7 +178,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     this.columns = (table as unknown as { _: { columns: Record<string, SQLiteColumn> } })._.columns;
   }
 
-  async insert(data: Omit<T, "id"> & Partial<Pick<T, "id">>): Promise<T> {
+  async insert(data: Omit<T, PK> & Partial<Pick<T, PK>>): Promise<T> {
     // Validate with Zod
     const validated = this.zodSchema.parse(data) as T;
 
@@ -186,7 +188,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     return Promise.resolve(result[0] as T);
   }
 
-  async insertMany(data: Array<Omit<T, "id"> & Partial<Pick<T, "id">>>): Promise<T[]> {
+  async insertMany(data: Array<Omit<T, PK> & Partial<Pick<T, PK>>>): Promise<T[]> {
     // Validate all
     const validated = data.map((d) => this.zodSchema.parse(d)) as T[];
 
@@ -195,9 +197,9 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     return Promise.resolve(result as T[]);
   }
 
-  async findById(id: string): Promise<T | null> {
-    const pkColumn = this.columns[this.primaryKey];
-    if (!pkColumn) throw new Error(`Primary key column not found: ${this.primaryKey}`);
+  async findById(id: PKType): Promise<T | null> {
+    const pkColumn = this.columns[this.primaryKey as string];
+    if (!pkColumn) throw new Error(`Primary key column not found: ${String(this.primaryKey)}`);
 
     const result = this.db.select().from(this.table).where(eq(pkColumn, id)).limit(1).all();
 
@@ -229,9 +231,9 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     return Promise.resolve(query.all() as T[]);
   }
 
-  async update(id: string, data: Partial<T>): Promise<T> {
-    const pkColumn = this.columns[this.primaryKey];
-    if (!pkColumn) throw new Error(`Primary key column not found: ${this.primaryKey}`);
+  async update(id: PKType, data: Partial<T>): Promise<T> {
+    const pkColumn = this.columns[this.primaryKey as string];
+    if (!pkColumn) throw new Error(`Primary key column not found: ${String(this.primaryKey)}`);
 
     // Partial validation - only validate provided fields
     const partialSchema = this.zodSchema.partial();
@@ -268,9 +270,9 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     return Promise.resolve(result.changes ?? 0);
   }
 
-  async delete(id: string): Promise<boolean> {
-    const pkColumn = this.columns[this.primaryKey];
-    if (!pkColumn) throw new Error(`Primary key column not found: ${this.primaryKey}`);
+  async delete(id: PKType): Promise<boolean> {
+    const pkColumn = this.columns[this.primaryKey as string];
+    if (!pkColumn) throw new Error(`Primary key column not found: ${String(this.primaryKey)}`);
 
     const result = this.db.delete(this.table).where(eq(pkColumn, id)).run();
     return Promise.resolve(result.changes > 0);
@@ -299,7 +301,7 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     return Promise.resolve(result[0]?.count ?? 0);
   }
 
-  async exists(id: string): Promise<boolean> {
+  async exists(id: PKType): Promise<boolean> {
     const count = await this.count({ [this.primaryKey]: id } as Filter<T>);
     return count > 0;
   }
@@ -335,7 +337,10 @@ export class DrizzleRepository<T extends Record<string, unknown>> implements Rep
     }
   }
 
-  async transaction<R>(fn: (repo: Repository<T>) => Promise<R>): Promise<R> {
+  // Using Repository with different type params to avoid explicit any
+  async transaction<R>(
+    fn: (repo: Repository<Record<string, unknown>, keyof Record<string, unknown>, unknown>) => Promise<R>,
+  ): Promise<R> {
     // For now, just run without transaction to avoid complex type issues
     // TODO: Properly implement transaction support with type-safe access to raw DB
     const result = await fn(this);

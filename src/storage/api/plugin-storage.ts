@@ -78,23 +78,27 @@ export interface QueryBuilder<T> {
  *
  * This is the ONLY interface plugins see for storage.
  * No Drizzle types, no SQL, no database-specific concepts.
+ *
+ * @typeParam T - The record type (Zod schema)
+ * @typeParam PK - The primary key field name (defaults to "id")
+ * @typeParam PKType - The primary key value type (defaults to string)
  */
-export interface Repository<T extends Record<string, unknown>> {
+export interface Repository<T extends Record<string, unknown>, PK extends keyof T = "id", PKType = T[PK]> {
   /**
    * Insert a new record
-   * If id not provided, one will be generated
+   * If pk not provided, one will be generated
    */
-  insert(data: Omit<T, "id"> & Partial<Pick<T, "id">>): Promise<T>;
+  insert(data: Omit<T, PK> & Partial<Pick<T, PK>>): Promise<T>;
 
   /**
    * Insert multiple records
    */
-  insertMany(data: Array<Omit<T, "id"> & Partial<Pick<T, "id">>>): Promise<T[]>;
+  insertMany(data: Array<Omit<T, PK> & Partial<Pick<T, PK>>>): Promise<T[]>;
 
   /**
    * Find by primary key
    */
-  findById(id: string): Promise<T | null>;
+  findById(id: PKType): Promise<T | null>;
 
   /**
    * Find first matching record
@@ -109,7 +113,7 @@ export interface Repository<T extends Record<string, unknown>> {
   /**
    * Update a record by ID
    */
-  update(id: string, data: Partial<T>): Promise<T>;
+  update(id: PKType, data: Partial<T>): Promise<T>;
 
   /**
    * Update all matching records
@@ -119,7 +123,7 @@ export interface Repository<T extends Record<string, unknown>> {
   /**
    * Delete by ID
    */
-  delete(id: string): Promise<boolean>;
+  delete(id: PKType): Promise<boolean>;
 
   /**
    * Delete all matching records
@@ -134,7 +138,7 @@ export interface Repository<T extends Record<string, unknown>> {
   /**
    * Check if record exists
    */
-  exists(id: string): Promise<boolean>;
+  exists(id: PKType): Promise<boolean>;
 
   /**
    * Start a query builder
