@@ -36,6 +36,7 @@ import type {
   PluginInjectOptions,
   UiComponentExtension,
   WebUiExtension,
+  WOPRPluginContext,
 } from "../types.js";
 import { getVoiceRegistry } from "../voice/index.js";
 import type { STTProvider, TTSProvider } from "../voice/types.js";
@@ -65,7 +66,7 @@ export function createPluginContext(
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
     getSessions: () => string[];
   },
-) {
+): WOPRPluginContext {
   const pluginName = plugin.name;
 
   return {

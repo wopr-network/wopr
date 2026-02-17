@@ -156,10 +156,10 @@ function generateCreateTableSQL(namespace: string, tableName: string, tableSchem
  */
 export class Storage implements StorageApi {
   readonly driver: "sqlite" | "postgres" = "sqlite";
+  readonly dbPath: string;
   private db: BetterSQLite3Database;
   private sqliteRaw: DatabaseType;
   private repositories = new Map<string, RepositoryEntry>();
-  private dbPath: string;
 
   getDb(): BetterSQLite3Database {
     return this.db;
@@ -405,6 +405,10 @@ let storageInstance: Storage | null = null;
 export function getStorage(dbPath?: string): Storage {
   if (!storageInstance) {
     storageInstance = new Storage(dbPath);
+  } else if (dbPath && storageInstance.dbPath !== dbPath) {
+    logger.warn(
+      `[storage] Storage singleton already initialized with path ${storageInstance.dbPath}. Ignoring request for ${dbPath}. Call resetStorage() first.`,
+    );
   }
   return storageInstance;
 }

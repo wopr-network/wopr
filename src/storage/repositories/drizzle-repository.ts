@@ -68,7 +68,8 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
           this.conditions.push(notInArray(column, value as unknown[]));
           break;
         case "$contains":
-          // JSON array contains - SQLite specific
+          // SQLite specific: Only works for JSON arrays of strings
+          // Uses LIKE '%"value"%' which won't work for numbers in arrays
           this.conditions.push(sql`${column} LIKE ${`%"${value}"%`}`);
           break;
         case "$startsWith":
@@ -78,7 +79,8 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
           this.conditions.push(like(column, `%${value}`));
           break;
         case "$regex":
-          // SQLite doesn't support regex natively, use LIKE approximation
+          // SQLite doesn't support regex natively, falls back to LIKE substring match
+          // This is NOT a true regex - users expecting regex will be surprised
           this.conditions.push(like(column, `%${value}%`));
           break;
         default:
@@ -104,7 +106,9 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
   }
 
   select<K extends keyof T>(..._fields: K[]): QueryBuilder<Pick<T, K>> {
-    // For now, select all fields. Can be optimized later to only select specified fields.
+    // Note: This only narrows the TypeScript return type.
+    // Does NOT actually project fields in the SQL query - always selects all columns.
+    // TODO: Implement actual field projection for performance optimization.
     return this as unknown as QueryBuilder<Pick<T, K>>;
   }
 
