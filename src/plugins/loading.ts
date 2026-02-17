@@ -287,7 +287,7 @@ export async function loadAllPlugins(
     logger.info(`[plugins] Auto-install enabled`);
   }
 
-  const installed = getInstalledPlugins();
+  const installed = await getInstalledPlugins();
   logger.info(`[plugins] Found ${installed.length} installed plugins`);
 
   for (const p of installed) {

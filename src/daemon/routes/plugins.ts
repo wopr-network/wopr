@@ -133,8 +133,8 @@ function createInjectors() {
 }
 
 // List installed plugins (with manifest metadata)
-pluginsRouter.get("/", (c) => {
-  const plugins = listPlugins();
+pluginsRouter.get("/", async (c) => {
+  const plugins = await listPlugins();
   const runtimeManifests = getAllPluginManifests();
 
   return c.json({
@@ -175,13 +175,13 @@ pluginsRouter.get("/available", async (c) => {
 });
 
 // List plugin-provided Web UI extensions
-pluginsRouter.get("/ui", (c) => {
+pluginsRouter.get("/ui", async (c) => {
   const extensions = getWebUiExtensions();
   return c.json({ extensions });
 });
 
 // List plugin-provided UI components
-pluginsRouter.get("/components", (c) => {
+pluginsRouter.get("/components", async (c) => {
   const components = getUiComponents();
   return c.json({ components });
 });
@@ -207,7 +207,7 @@ async function handleInstall(c: Context) {
   try {
     const plugin = await installPlugin(source);
     // Auto-enable plugin after installation
-    enablePlugin(plugin.name);
+    await await enablePlugin(plugin.name);
 
     // Hot-load the plugin immediately (no restart required)
     const injectors = createInjectors();
@@ -318,13 +318,13 @@ pluginsRouter.post("/:name/enable", mutateRateLimit, async (c) => {
   }
 
   try {
-    const plugins = listPlugins();
+    const plugins = await listPlugins();
     const plugin = plugins.find((p: PluginEntry) => p.name === name);
     if (!plugin) {
       return c.json({ error: "Plugin not found" }, 404);
     }
 
-    enablePlugin(name);
+    await enablePlugin(name);
 
     // Hot-load the plugin
     const injectors = createInjectors();
@@ -361,7 +361,7 @@ pluginsRouter.post("/:name/disable", mutateRateLimit, async (c) => {
     // Hot-unload the plugin first
     await unloadPlugin(name);
 
-    disablePlugin(name);
+    await disablePlugin(name);
     return c.json({ disabled: true, unloaded: true });
   } catch (err) {
     if (err instanceof PluginRouteError) {
@@ -387,7 +387,7 @@ pluginsRouter.post("/:name/reload", mutateRateLimit, async (c) => {
   }
 
   try {
-    const plugins = listPlugins();
+    const plugins = await listPlugins();
     const plugin = plugins.find((p: PluginEntry) => p.name === name);
     if (!plugin) {
       return c.json({ error: "Plugin not found" }, 404);
@@ -422,7 +422,7 @@ pluginsRouter.post("/:name/reload", mutateRateLimit, async (c) => {
 pluginsRouter.get("/:name/config", async (c) => {
   const name = c.req.param("name");
 
-  const plugins = listPlugins();
+  const plugins = await listPlugins();
   const plugin = plugins.find((p: { name: string }) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);
@@ -450,7 +450,7 @@ pluginsRouter.get("/:name/config", async (c) => {
 pluginsRouter.put("/:name/config", mutateRateLimit, async (c) => {
   const name = c.req.param("name");
 
-  const plugins = listPlugins();
+  const plugins = await listPlugins();
   const plugin = plugins.find((p: { name: string }) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);
@@ -496,10 +496,10 @@ pluginsRouter.put("/:name/config", mutateRateLimit, async (c) => {
 });
 
 // Plugin health/status
-pluginsRouter.get("/:name/health", (c) => {
+pluginsRouter.get("/:name/health", async (c) => {
   const name = c.req.param("name");
 
-  const plugins = listPlugins();
+  const plugins = await listPlugins();
   const plugin = plugins.find((p: { name: string }) => p.name === name);
   if (!plugin) {
     return c.json({ error: "Plugin not found" }, 404);
@@ -540,8 +540,8 @@ pluginsRouter.get("/search", async (c) => {
 });
 
 // Plugin registries
-pluginsRouter.get("/registries", (c) => {
-  const registries = listRegistries();
+pluginsRouter.get("/registries", async (c) => {
+  const registries = await listRegistries();
   return c.json({ registries });
 });
 
@@ -553,13 +553,13 @@ pluginsRouter.post("/registries", async (c) => {
     return c.json({ error: "name and url are required" }, 400);
   }
 
-  addRegistry(name, url);
+  await addRegistry(name, url);
   return c.json({ added: true, name, url }, 201);
 });
 
-pluginsRouter.delete("/registries/:name", (c) => {
+pluginsRouter.delete("/registries/:name", async (c) => {
   const name = c.req.param("name");
-  removeRegistry(name);
+  await removeRegistry(name);
   return c.json({ removed: true });
 });
 

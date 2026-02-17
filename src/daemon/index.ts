@@ -323,6 +323,10 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   daemonLog(`[heap] before plugins: ${heapMB()}`);
 
+  // Migrate plugins.json and plugin-registries.json to SQL (one-time, idempotent)
+  const { migratePluginJsonToSql } = await import("../plugins/migrate-json.js");
+  await migratePluginJsonToSql();
+
   // Load plugins (this is where providers register themselves)
   await loadAllPlugins(injectors);
 
