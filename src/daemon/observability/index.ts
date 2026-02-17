@@ -24,6 +24,7 @@ export {
 export {
   type InstanceMetricsSummary,
   type MetricRecord,
+  metricsPluginSchema,
   MetricsStore,
   type MetricsSummary,
 } from "./metrics.js";
