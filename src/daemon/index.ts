@@ -6,7 +6,7 @@
  */
 
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { Hono } from "hono";
@@ -35,7 +35,6 @@ import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
 import { canvasRouter } from "./routes/canvas.js";
 import { configRouter } from "./routes/config.js";
-import { cronsRouter } from "./routes/crons.js";
 import { createHealthzRouter } from "./routes/health.js";
 import { hooksRouter } from "./routes/hooks.js";
 import { instancePluginsRouter } from "./routes/instance-plugins.js";
@@ -115,7 +114,6 @@ export function createApp(healthMonitor?: HealthMonitor) {
   app.route("/canvas", canvasRouter);
   app.route("/config", configRouter);
   app.route("/sessions", sessionsRouter);
-  app.route("/crons", cronsRouter);
   app.route("/plugins", pluginsRouter);
   app.route("/hooks", hooksRouter);
   app.route("/providers", providersRouter);
@@ -212,8 +210,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     daemonLog(`Warning: ${msg}`);
     startupWarnings.push(msg);
   }
-
-  // Cron storage is now initialized by wopr-plugin-cron
 
   // Initialize pairing storage and migrate from JSON
   daemonLog("Initializing pairing storage...");
@@ -360,36 +356,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // Memory system (indexing, FTS5, file watching, session hooks) delegated to memory-semantic plugin
   daemonLog("Memory system delegated to memory-semantic plugin");
 
-  // Auto-register bundled plugins before loading
-  daemonLog("Auto-registering bundled plugins...");
-  const { addInstalledPlugin, getInstalledPlugins } = await import("../plugins/installation.js");
-  const installed = await getInstalledPlugins();
-  const bundled = [
-    {
-      name: "wopr-plugin-cron",
-      path: join(import.meta.dirname, "../../plugins/wopr-plugin-cron"),
-      version: "1.0.0",
-    },
-    {
-      name: "wopr-plugin-skills",
-      path: join(import.meta.dirname, "../../plugins/wopr-plugin-skills"),
-      version: "1.0.0",
-    },
-  ];
-  for (const bp of bundled) {
-    if (!installed.find((p) => p.name === bp.name)) {
-      await addInstalledPlugin({
-        name: bp.name,
-        version: bp.version,
-        source: "bundled",
-        path: bp.path,
-        enabled: true,
-        installedAt: Date.now(),
-      });
-      daemonLog(`Registered bundled plugin: ${bp.name}`);
-    }
-  }
-
   // Load plugins (this is where providers register themselves)
   await loadAllPlugins(injectors);
 
@@ -401,6 +367,12 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   if (maybeSkillsRouter) {
     app.route("/skills", maybeSkillsRouter as Hono);
     daemonLog("Skills REST routes mounted from plugin");
+  }
+
+  const maybeCronsRouter = getPluginExtension("crons:router");
+  if (maybeCronsRouter) {
+    app.route("/crons", maybeCronsRouter as Hono);
+    daemonLog("Crons REST routes mounted from plugin");
   }
 
   // Initial memory sync is handled by the memory-semantic plugin during init()
@@ -453,8 +425,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     winstonLogger.info(`[daemon] Health status: ${previous} -> ${current}`);
   });
   daemonLog("Health monitor started");
-
-  // Cron scheduler is now handled by wopr-plugin-cron
 
   // WebSocket heartbeat interval (WOP-204)
   const heartbeatInterval = setInterval(() => {
