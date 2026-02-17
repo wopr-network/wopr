@@ -774,12 +774,12 @@ export function removeSkill(name: string): void {
   }
   rmSync(targetDir, { recursive: true, force: true });
 
-  // Clean up orphaned state entry
-  const state = readSkillsState();
-  if (name in state) {
-    delete state[name];
-    writeSkillsState(state);
-  }
+  // Clean up orphaned state entry (async cleanup - import to avoid circular dependency)
+  import("./skills-repository.js").then(({ removeSkillState }) => {
+    removeSkillState(name).catch((err: Error) => {
+      logger.warn(`Failed to remove skill state for "${name}":`, err);
+    });
+  });
 }
 
 export function installSkillFromGitHub(owner: string, repo: string, skillPath: string, name?: string): Skill {
@@ -876,85 +876,21 @@ export function clearSkillCache(): void {
 }
 
 // ============================================================================
-// Skill State Management (Enable / Disable)
+// Skill State Management (Enable / Disable) - Re-export async API
 // ============================================================================
 
-const SKILLS_STATE_FILE = join(WOPR_HOME, "skills-state.json");
-
-interface SkillsState {
-  [skillName: string]: { enabled: boolean };
-}
-
-function readSkillsState(): SkillsState {
-  if (!existsSync(SKILLS_STATE_FILE)) return {};
-  try {
-    const raw = JSON.parse(readFileSync(SKILLS_STATE_FILE, "utf-8"));
-    // Sanitize against prototype pollution
-    const state: SkillsState = Object.create(null);
-    for (const key of Object.keys(raw)) {
-      if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
-      state[key] = raw[key];
-    }
-    return state;
-  } catch {
-    return {};
-  }
-}
-
-function writeSkillsState(state: SkillsState): void {
-  const dir = dirname(SKILLS_STATE_FILE);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  const tmpFile = `${SKILLS_STATE_FILE}.tmp`;
-  writeFileSync(tmpFile, JSON.stringify(state, null, 2));
-  renameSync(tmpFile, SKILLS_STATE_FILE);
-}
-
-/**
- * Returns whether a skill is enabled. Skills are enabled by default.
- */
-export function isSkillEnabled(name: string): boolean {
-  const state = readSkillsState();
-  return state[name]?.enabled !== false;
-}
-
-/**
- * Returns the enabled/disabled state for all skills at once.
- * Use this instead of calling isSkillEnabled() in a loop to avoid
- * repeated file reads.
- */
-export function readAllSkillStates(): Record<string, { enabled: boolean }> {
-  return readSkillsState();
-}
-
-/**
- * Enable a skill by name. Returns false if the skill is not installed.
- */
-export function enableSkill(name: string): boolean {
-  const { skills } = discoverSkills();
-  const skill = skills.find((s) => s.name === name);
-  if (!skill) return false;
-
-  const state = readSkillsState();
-  state[name] = { enabled: true };
-  writeSkillsState(state);
-  return true;
-}
-
-/**
- * Disable a skill by name. Returns false if the skill is not installed.
- */
-export function disableSkill(name: string): boolean {
-  const { skills } = discoverSkills();
-  const skill = skills.find((s) => s.name === name);
-  if (!skill) return false;
-
-  const state = readSkillsState();
-  state[name] = { enabled: false };
-  writeSkillsState(state);
-  return true;
-}
+// Re-export async API from skills-repository
+export {
+  initSkillsStorage,
+  getSkillState,
+  getAllSkillStates,
+  isSkillEnabledAsync,
+  readAllSkillStatesAsync,
+  enableSkillAsync,
+  disableSkillAsync,
+  recordSkillUsage,
+  removeSkillState,
+} from "./skills-repository.js";
 
 /**
  * Get a single skill by name, or null if not found.
