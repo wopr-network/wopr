@@ -11,23 +11,39 @@ vi.mock("../../src/paths.js", () => ({
   WOPR_HOME: testDir,
 }));
 
-import { observabilityRouter } from "../../../src/daemon/routes/observability.js";
-import { _resetLogsForTesting, healthMonitor, recordLog } from "../../../src/daemon/observability/index.js";
-import { resetStorage } from "../../../src/storage/index.js";
-
 describe("observability API routes", () => {
   let app: Hono;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules(); // Force fresh module loading to reset metricsStore
     mkdirSync(testDir, { recursive: true });
+
+    // Initialize storage before creating the app
+    const { getStorage } = await import("../../../src/storage/index.js");
+    const storage = getStorage(join(testDir, "wopr.sqlite"));
+
+    // Register metrics schema
+    const { metricsPluginSchema } = await import("../../../src/daemon/observability/metrics.js");
+    await storage.register(metricsPluginSchema);
+
+    // Import router AFTER storage is initialized
+    const { observabilityRouter } = await import("../../../src/daemon/routes/observability.js");
+    const { _resetLogsForTesting, healthMonitor, recordLog: recordLogFunc } = await import("../../../src/daemon/observability/index.js");
+
     app = new Hono();
     app.route("/observability", observabilityRouter);
+
+    // Make these available to tests
+    (globalThis as any)._testHealthMonitor = healthMonitor;
+    (globalThis as any)._testRecordLog = recordLogFunc;
+    (globalThis as any)._testResetLogs = _resetLogsForTesting;
   });
 
   afterEach(async () => {
+    const { resetStorage } = await import("../../../src/storage/index.js");
     await resetStorage();
-    healthMonitor._resetForTesting();
-    _resetLogsForTesting();
+    (globalThis as any)._testHealthMonitor?._resetForTesting();
+    (globalThis as any)._testResetLogs?.();
     rmSync(testDir, { recursive: true, force: true });
   });
 
@@ -94,7 +110,7 @@ describe("observability API routes", () => {
 
   describe("GET /observability/instances/:id/logs", () => {
     it("returns instance logs", async () => {
-      recordLog("inst-1", "info", "test message");
+      (globalThis as any)._testRecordLog("inst-1", "info", "test message");
 
       const res = await app.request("/observability/instances/inst-1/logs");
       expect(res.status).toBe(200);
@@ -106,8 +122,8 @@ describe("observability API routes", () => {
     });
 
     it("supports level filter", async () => {
-      recordLog("inst-1", "info", "info msg");
-      recordLog("inst-1", "error", "error msg");
+      (globalThis as any)._testRecordLog("inst-1", "info", "info msg");
+      (globalThis as any)._testRecordLog("inst-1", "error", "error msg");
 
       const res = await app.request("/observability/instances/inst-1/logs?level=error");
       const body = await res.json();
@@ -117,7 +133,7 @@ describe("observability API routes", () => {
 
     it("supports limit filter", async () => {
       for (let i = 0; i < 5; i++) {
-        recordLog("inst-1", "info", `msg ${i}`);
+        (globalThis as any)._testRecordLog("inst-1", "info", `msg ${i}`);
       }
 
       const res = await app.request("/observability/instances/inst-1/logs?limit=2");
@@ -129,8 +145,8 @@ describe("observability API routes", () => {
   describe("GET /observability/health", () => {
     it("returns platform health", async () => {
       // Register a healthy instance so we get 200 (no instances = unknown = 503)
-      healthMonitor.registerInstance("inst-health");
-      healthMonitor.updateHealth("inst-health", "healthy");
+      (globalThis as any)._testHealthMonitor.registerInstance("inst-health");
+      (globalThis as any)._testHealthMonitor.updateHealth("inst-health", "healthy");
 
       const res = await app.request("/observability/health");
       expect(res.status).toBe(200);
@@ -141,8 +157,8 @@ describe("observability API routes", () => {
     });
 
     it("returns 503 when unhealthy", async () => {
-      healthMonitor.registerInstance("inst-1");
-      healthMonitor.updateHealth("inst-1", "unhealthy");
+      (globalThis as any)._testHealthMonitor.registerInstance("inst-1");
+      (globalThis as any)._testHealthMonitor.updateHealth("inst-1", "unhealthy");
 
       const res = await app.request("/observability/health");
       expect(res.status).toBe(503);
@@ -151,8 +167,8 @@ describe("observability API routes", () => {
 
   describe("GET /observability/instances/:id/health", () => {
     it("returns instance health", async () => {
-      healthMonitor.registerInstance("inst-1");
-      healthMonitor.updateHealth("inst-1", "healthy", { version: "1.0" }, 3600);
+      (globalThis as any)._testHealthMonitor.registerInstance("inst-1");
+      (globalThis as any)._testHealthMonitor.updateHealth("inst-1", "healthy", { version: "1.0" }, 3600);
 
       const res = await app.request("/observability/instances/inst-1/health");
       expect(res.status).toBe(200);
