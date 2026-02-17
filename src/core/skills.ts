@@ -881,13 +881,13 @@ export function clearSkillCache(): void {
 
 // Re-export async API from skills-repository
 export {
-  initSkillsStorage,
-  getSkillState,
+  disableSkillAsync,
+  enableSkillAsync,
   getAllSkillStates,
+  getSkillState,
+  initSkillsStorage,
   isSkillEnabledAsync,
   readAllSkillStatesAsync,
-  enableSkillAsync,
-  disableSkillAsync,
   recordSkillUsage,
   removeSkillState,
 } from "./skills-repository.js";

@@ -4,14 +4,14 @@
  * Handles persistence of security configuration in SQL instead of JSON files.
  */
 
-import { existsSync, renameSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, renameSync } from "node:fs";
+import { join } from "node:path";
 import { logger } from "../logger.js";
 import type { Repository } from "../storage/api/plugin-storage.js";
+import type { SecurityConfigRow, SecurityPluginRuleRow } from "./schema.js";
 import type { SecurityConfig } from "./types.js";
 import { DEFAULT_SECURITY_CONFIG } from "./types.js";
-import type { SecurityConfigRow, SecurityPluginRuleRow } from "./schema.js";
 
 /**
  * Plugin security rule data structures
