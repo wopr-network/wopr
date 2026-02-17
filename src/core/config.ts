@@ -108,15 +108,6 @@ export interface WoprConfig {
       deny?: string[];
     };
   };
-  /**
-   * Billing configuration for hosted capability usage
-   */
-  billing?: {
-    /** Universal margin multiplier applied to all hosted provider costs (default: 1.3 = 30% margin) */
-    multiplier?: number;
-    /** Enable/disable metering (default: true) */
-    enabled?: boolean;
-  };
 }
 
 const DEFAULT_CONFIG: WoprConfig = {
