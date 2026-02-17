@@ -128,7 +128,7 @@ function createInjectors() {
       const result = await inject(session, message, { silent: true, ...options });
       return result.response;
     },
-    getSessions: () => Object.keys(getSessions()),
+    getSessions: async () => Object.keys(await getSessions()),
   };
 }
 

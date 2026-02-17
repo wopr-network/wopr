@@ -2,10 +2,9 @@
 // Adapted from OpenClaw for WOPR
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getConversationLogPath } from "../core/sessions.js";
+import { readConversationLogAsync } from "../core/session-repository.js";
 import { logger } from "../logger.js";
 import { WOPR_HOME } from "../paths.js";
-import { getRecentSessionContent } from "./session-files.js";
 
 const MEMORY_DIR = path.join(WOPR_HOME, "memory");
 
@@ -46,12 +45,18 @@ function generateSlugFromContent(content: string): string {
  */
 export async function saveSessionToMemory(sessionName: string): Promise<string | null> {
   try {
-    // Get conversation log path
-    const conversationPath = getConversationLogPath(sessionName);
+    // Get recent messages from session (now from SQL)
+    const entries = await readConversationLogAsync(sessionName, 20);
+    if (entries.length === 0) {
+      return null;
+    }
 
-    // Get recent messages from session
-    const sessionContent = await getRecentSessionContent(conversationPath, 20);
-    if (!sessionContent || sessionContent.trim().length < 50) {
+    // Convert entries to markdown content
+    const sessionContent = entries
+      .map((entry) => `**${entry.from}** (${new Date(entry.ts).toISOString()}):\n${entry.content}`)
+      .join("\n\n");
+
+    if (sessionContent.trim().length < 50) {
       // Skip if too short
       return null;
     }
