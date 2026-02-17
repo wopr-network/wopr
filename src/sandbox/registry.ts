@@ -1,75 +1,69 @@
 /**
  * Sandbox Container Registry
  * Tracks container state persistently across restarts.
- * Copied from OpenClaw with WOPR adaptations.
+ * Now backed by SQL via Storage API.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { SANDBOX_REGISTRY_PATH, SANDBOX_STATE_DIR } from "./constants.js";
+import {
+  findRegistryEntrySQL,
+  listRegistryEntriesSQL,
+  removeRegistryEntrySQL,
+  updateRegistrySQL,
+} from "./sandbox-repository.js";
 
-export type SandboxRegistryEntry = {
+// Re-export type from schema for backward compatibility
+export type { SandboxRegistryRecord as SandboxRegistryEntry } from "./sandbox-schema.js";
+
+/**
+ * Update or insert a sandbox registry entry (async)
+ */
+export async function updateRegistry(entry: {
   containerName: string;
   sessionKey: string;
   createdAtMs: number;
   lastUsedAtMs: number;
   image: string;
   configHash?: string;
-};
+}): Promise<void> {
+  await updateRegistrySQL(entry);
+}
 
-type SandboxRegistry = {
-  entries: SandboxRegistryEntry[];
-};
+/**
+ * Remove a sandbox registry entry by container name (async)
+ */
+export async function removeRegistryEntry(containerName: string): Promise<void> {
+  await removeRegistryEntrySQL(containerName);
+}
 
-export function readRegistry(): SandboxRegistry {
-  try {
-    if (!existsSync(SANDBOX_REGISTRY_PATH)) {
-      return { entries: [] };
+/**
+ * Find a sandbox registry entry by container name (async)
+ */
+export async function findRegistryEntry(containerName: string): Promise<
+  | {
+      containerName: string;
+      sessionKey: string;
+      createdAtMs: number;
+      lastUsedAtMs: number;
+      image: string;
+      configHash?: string;
     }
-    const raw = readFileSync(SANDBOX_REGISTRY_PATH, "utf-8");
-    const parsed = JSON.parse(raw) as SandboxRegistry;
-    if (parsed && Array.isArray(parsed.entries)) {
-      return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  return { entries: [] };
+  | undefined
+> {
+  return findRegistryEntrySQL(containerName);
 }
 
-function writeRegistry(registry: SandboxRegistry): void {
-  if (!existsSync(SANDBOX_STATE_DIR)) {
-    mkdirSync(SANDBOX_STATE_DIR, { recursive: true });
-  }
-  writeFileSync(SANDBOX_REGISTRY_PATH, `${JSON.stringify(registry, null, 2)}\n`, "utf-8");
-}
-
-export function updateRegistry(entry: SandboxRegistryEntry): void {
-  const registry = readRegistry();
-  const existing = registry.entries.find((item) => item.containerName === entry.containerName);
-  const next = registry.entries.filter((item) => item.containerName !== entry.containerName);
-  next.push({
-    ...entry,
-    createdAtMs: existing?.createdAtMs ?? entry.createdAtMs,
-    image: existing?.image ?? entry.image,
-    configHash: entry.configHash ?? existing?.configHash,
-  });
-  writeRegistry({ entries: next });
-}
-
-export function removeRegistryEntry(containerName: string): void {
-  const registry = readRegistry();
-  const next = registry.entries.filter((item) => item.containerName !== containerName);
-  if (next.length === registry.entries.length) {
-    return;
-  }
-  writeRegistry({ entries: next });
-}
-
-export function findRegistryEntry(containerName: string): SandboxRegistryEntry | undefined {
-  const registry = readRegistry();
-  return registry.entries.find((item) => item.containerName === containerName);
-}
-
-export function listRegistryEntries(): SandboxRegistryEntry[] {
-  return readRegistry().entries;
+/**
+ * List all sandbox registry entries (async)
+ */
+export async function listRegistryEntries(): Promise<
+  Array<{
+    containerName: string;
+    sessionKey: string;
+    createdAtMs: number;
+    lastUsedAtMs: number;
+    image: string;
+    configHash?: string;
+  }>
+> {
+  return listRegistryEntriesSQL();
 }

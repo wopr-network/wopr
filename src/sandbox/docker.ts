@@ -288,7 +288,7 @@ export async function ensureSandboxContainer(params: {
   let registryEntry: { lastUsedAtMs: number; configHash?: string } | undefined;
 
   if (hasContainer) {
-    registryEntry = findRegistryEntry(containerName);
+    registryEntry = await findRegistryEntry(containerName);
     currentHash = await readContainerConfigHash(containerName);
     if (!currentHash) {
       currentHash = registryEntry?.configHash ?? null;
@@ -328,7 +328,7 @@ export async function ensureSandboxContainer(params: {
     await execDocker(["start", containerName]);
   }
 
-  updateRegistry({
+  await updateRegistry({
     containerName,
     sessionKey: scopeKey,
     createdAtMs: now,

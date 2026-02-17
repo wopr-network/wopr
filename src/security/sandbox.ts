@@ -100,7 +100,7 @@ export async function isDockerAvailable(): Promise<boolean> {
 export async function isSandboxImageAvailable(): Promise<boolean> {
   try {
     const { listRegistryEntries } = await import("../sandbox/index.js");
-    const entries = listRegistryEntries();
+    const entries = await listRegistryEntries();
     return entries.length > 0;
   } catch {
     return false;
@@ -139,11 +139,11 @@ export async function createSandbox(
  * Destroy a sandbox (legacy API)
  */
 export async function destroySandbox(sessionName: string): Promise<void> {
-  const entries = listRegistryEntries();
+  const entries = await listRegistryEntries();
   const entry = entries.find((e) => e.sessionKey === sessionName);
   if (entry) {
     await removeSandboxContainer(entry.containerName);
-    removeRegistryEntry(entry.containerName);
+    await removeRegistryEntry(entry.containerName);
   }
 }
 
@@ -167,13 +167,13 @@ export async function getSandboxStatus(
 /**
  * List all active sandboxes (legacy API)
  */
-export function listSandboxes(): Array<{
+export async function listSandboxes(): Promise<Array<{
   containerId: string;
   sessionName: string;
   createdAt: number;
   status: string;
-}> {
-  const entries = listRegistryEntries();
+}>> {
+  const entries = await listRegistryEntries();
   return entries.map((e) => ({
     containerId: e.containerName,
     sessionName: e.sessionKey,

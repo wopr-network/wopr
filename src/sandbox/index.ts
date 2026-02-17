@@ -54,7 +54,6 @@ export type { SandboxRegistryEntry } from "./registry.js";
 export {
   findRegistryEntry,
   listRegistryEntries,
-  readRegistry,
   removeRegistryEntry,
   updateRegistry,
 } from "./registry.js";
