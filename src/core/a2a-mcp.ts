@@ -15,6 +15,7 @@ import {
   closeAllBrowsers,
   createBrowserTools,
   createCanvasTools,
+  createCapabilityDiscoveryTools,
   createConfigTools,
   createEventTools,
   createHttpExecTools,
@@ -92,6 +93,7 @@ export function listA2ATools(): string[] {
     "canvas_reset",
     "canvas_snapshot",
     "canvas_get",
+    "capability_discover",
   ];
   return [...coreTools, ...pluginTools.keys()];
 }
@@ -122,6 +124,7 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     ...createWebSearchTools(sessionName),
     ...createBrowserTools(sessionName),
     ...createCanvasTools(sessionName),
+    ...createCapabilityDiscoveryTools(sessionName),
   ];
 
   // Add plugin tools

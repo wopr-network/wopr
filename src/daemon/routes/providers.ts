@@ -3,6 +3,7 @@
  */
 
 import { Hono } from "hono";
+import { getCapabilityRegistry } from "../../core/capability-registry.js";
 import { providerRegistry } from "../../core/providers.js";
 import { listConfigSchemas } from "../../plugins.js";
 
@@ -69,4 +70,29 @@ providersRouter.post("/health", async (c) => {
 providersRouter.get("/schemas", (c) => {
   const schemas = listConfigSchemas();
   return c.json({ schemas });
+});
+
+// Capability discovery (WOP-503) — generic endpoint that supersedes per-capability tools
+providersRouter.get("/capabilities", (c) => {
+  const capRegistry = getCapabilityRegistry();
+  const allCapabilities = capRegistry.listCapabilities();
+  const providers = providerRegistry.listProviders();
+
+  // Build health lookup
+  const healthMap = new Map(providers.map((p) => [p.id, p.available]));
+
+  const capabilities = allCapabilities.map((cap) => {
+    const capProviders = capRegistry.getProviders(cap.capability);
+    return {
+      capability: cap.capability,
+      providerCount: cap.providerCount,
+      providers: capProviders.map((p) => ({
+        id: p.id,
+        name: p.name,
+        available: healthMap.get(p.id) ?? null,
+      })),
+    };
+  });
+
+  return c.json({ capabilities });
 });
