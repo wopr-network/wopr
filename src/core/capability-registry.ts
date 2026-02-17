@@ -16,10 +16,6 @@ export interface CapabilityEntry {
 export class CapabilityRegistry extends EventEmitter {
   private capabilities = new Map<AdapterCapability, CapabilityEntry>();
 
-  constructor() {
-    super();
-  }
-
   /**
    * Register a provider for a capability.
    * If the capability doesn't exist yet, it's created (extensible).

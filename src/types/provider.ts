@@ -7,13 +7,6 @@
  */
 
 /**
- * Provider source type.
- * - "byok": User brings their own API key (cost is 0, user pays provider directly)
- * - "hosted": WOPR-hosted provider that returns cost information for metering
- */
-export type ProviderSource = "byok" | "hosted";
-
-/**
  * Provider configuration for a session
  * Specifies which provider to use and fallback chain
  */
@@ -29,38 +22,14 @@ export interface ProviderConfig {
 
   /** Provider-specific options (e.g., temperature, top_p) */
   options?: Record<string, unknown>;
-
-  /** Provider source: "byok" (default) or "hosted" */
-  source?: ProviderSource;
-
-  /**
-   * Override the SDK's default API endpoint.
-   *
-   * When set, the provider plugin MUST pass this URL to the SDK constructor
-   * so all API calls go through this endpoint instead of the provider's
-   * default (e.g., api.anthropic.com, api.openai.com).
-   *
-   * Used by WOPR Hosted mode: the platform injects the gateway URL
-   * (e.g., "https://api.wopr.bot/v1") so traffic flows through the
-   * platform for metering, billing, and arbitrage.
-   *
-   * When undefined/omitted (BYOK mode), the SDK uses its default endpoint
-   * and the tenant pays the provider directly.
-   */
-  baseUrl?: string;
 }
 
 /**
- * Response from a hosted provider call.
- * Hosted providers return cost alongside the result so the platform
- * can apply a margin and meter usage. BYOK providers just return
- * the result directly (cost is 0 — user pays their provider).
+ * Response from a provider call.
  */
 export interface ProviderResponse<T = unknown> {
   /** The actual response from the provider */
   result: T;
-  /** Upstream cost in USD cents — only set by hosted providers */
-  cost?: number;
 }
 
 /**
@@ -191,9 +160,6 @@ export interface ModelResponse {
 
   /** Raw provider response (for debugging) */
   raw?: unknown;
-
-  /** Upstream cost in USD cents (only set by hosted providers) */
-  cost?: number;
 }
 
 /**

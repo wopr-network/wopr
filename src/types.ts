@@ -14,7 +14,7 @@ export type {
   TrustLevel,
 } from "./security/types.js";
 // Re-export provider types for plugins
-export type { ModelProvider, ProviderResponse, ProviderSource } from "./types/provider.js";
+export type { ModelProvider, ProviderResponse } from "./types/provider.js";
 
 // Import InjectionSource for use within this file
 import type { InjectionSource as _InjectionSource } from "./security/types.js";
@@ -473,16 +473,6 @@ export interface PluginInjectOptions {
 // Event Bus Types
 // ============================================================================
 
-/**
- * Base event interface - all events extend this
- */
-export interface WOPREvent {
-  type: string;
-  payload: unknown;
-  timestamp: number;
-  source?: string;
-}
-
 // Session lifecycle events
 export interface SessionCreateEvent {
   session: string;
@@ -579,20 +569,11 @@ export interface MemorySearchEvent {
   results: unknown[] | null;
 }
 
-// Meter events (for hosted provider usage tracking)
-export interface MeterEvent {
-  /** User or organization ID */
-  tenant: string;
-  /** What capability was used (e.g., "voice-transcription", "embeddings") */
-  capability: string;
-  /** Which adapter handled the call (e.g., "replicate", "modal") */
-  provider: string;
-  /** Charge to tenant in USD cents (upstream cost * multiplier for hosted; 0 for BYOK) */
-  cost: number;
-  /** When the usage occurred (epoch ms) */
+export interface WOPREvent {
+  type: string;
+  payload: unknown;
   timestamp: number;
-  /** Additional metadata (model name, token counts, upstream cost, etc.) */
-  metadata?: Record<string, unknown>;
+  source?: string;
 }
 
 /**
@@ -613,7 +594,6 @@ export interface WOPREventMap {
   "system:shutdown": SystemShutdownEvent;
   "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
-  "meter:usage": MeterEvent;
   "*": WOPREvent;
 }
 

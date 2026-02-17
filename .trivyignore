@@ -1,0 +1,4 @@
+# Ignore npm bundled dependencies vulnerabilities
+# These are in Node.js's internal npm, not our application code
+CVE-2026-25547
+CVE-2026-24842

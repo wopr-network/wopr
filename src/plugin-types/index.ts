@@ -58,7 +58,6 @@ export type {
   MemorySearchEvent,
   MessageIncomingHandler,
   MessageOutgoingHandler,
-  MeterEvent,
   MutableHookEvent,
   PluginErrorEvent,
   PluginInitEvent,

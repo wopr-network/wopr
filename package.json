@@ -31,7 +31,8 @@
     "generate:compose": "tsx scripts/generate-compose.ts"
   },
   "overrides": {
-    "tar": "^7.0.0"
+    "tar": "^7.5.7",
+    "@isaacs/brace-expansion": "^5.0.1"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.42",

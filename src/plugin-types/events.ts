@@ -117,22 +117,6 @@ export interface MemorySearchEvent {
   results: unknown[] | null;
 }
 
-// Meter events (for hosted provider usage tracking)
-export interface MeterEvent {
-  /** User or organization ID */
-  tenant: string;
-  /** What capability was used (e.g., "voice-transcription", "embeddings", "chat") */
-  capability: string;
-  /** Which adapter handled the call (e.g., "replicate", "modal", "anthropic") */
-  provider: string;
-  /** Charge to tenant in USD cents (upstream cost * multiplier for hosted; 0 for BYOK) */
-  cost: number;
-  /** When the usage occurred (epoch ms) */
-  timestamp: number;
-  /** Additional metadata (model name, token counts, session ID, etc.) */
-  metadata?: Record<string, unknown>;
-}
-
 // Capability registry events
 export interface CapabilityProviderRegisteredEvent {
   capability: string;
@@ -163,7 +147,6 @@ export interface WOPREventMap {
   "system:shutdown": SystemShutdownEvent;
   "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
-  "meter:usage": MeterEvent;
   "capability:providerRegistered": CapabilityProviderRegisteredEvent;
   "capability:providerUnregistered": CapabilityProviderUnregisteredEvent;
   "*": WOPREvent;

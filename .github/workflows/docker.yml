@@ -82,6 +82,7 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
           format: sarif
+          ignorefile: .trivyignore
           output: trivy-results.sarif
 
       - name: Upload Trivy SARIF to GitHub Security
