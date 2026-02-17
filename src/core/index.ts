@@ -11,3 +11,6 @@ export * from "./pairing-commands.js";
 export * from "./registries.js";
 export * from "./sessions.js";
 export * from "./skills.js";
+export * from "./skills-schema.js";
+export * from "./skills-repository.js";
+export * from "./skills-migrate.js";

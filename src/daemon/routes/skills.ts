@@ -7,21 +7,21 @@ import { addRegistry, getRegistries, removeRegistry, searchAllRegistries } from 
 import {
   clearSkillCache,
   createSkill,
-  disableSkill,
+  disableSkillAsync,
   discoverSkills,
-  enableSkill,
+  enableSkillAsync,
   installSkillFromGitHub,
   installSkillFromUrl,
-  readAllSkillStates,
+  readAllSkillStatesAsync,
   removeSkill,
 } from "../../core/skills.js";
 
 export const skillsRouter = new Hono();
 
 // List installed skills
-skillsRouter.get("/", (c) => {
+skillsRouter.get("/", async (c) => {
   const { skills, warnings } = discoverSkills();
-  const skillStates = readAllSkillStates();
+  const skillStates = await readAllSkillStatesAsync();
   return c.json({
     skills: skills.map((s) => ({
       name: s.name,
@@ -127,10 +127,10 @@ skillsRouter.delete("/:name", (c) => {
 });
 
 // Enable a skill
-skillsRouter.post("/:name/enable", (c) => {
+skillsRouter.post("/:name/enable", async (c) => {
   const name = c.req.param("name");
   try {
-    const found = enableSkill(name);
+    const found = await enableSkillAsync(name);
 
     if (!found) {
       return c.json({ error: "Skill not found" }, 404);
@@ -144,10 +144,10 @@ skillsRouter.post("/:name/enable", (c) => {
 });
 
 // Disable a skill
-skillsRouter.post("/:name/disable", (c) => {
+skillsRouter.post("/:name/disable", async (c) => {
   const name = c.req.param("name");
   try {
-    const found = disableSkill(name);
+    const found = await disableSkillAsync(name);
 
     if (!found) {
       return c.json({ error: "Skill not found" }, 404);

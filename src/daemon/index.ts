@@ -200,6 +200,14 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await migrateCronsToSql();
   daemonLog("Cron storage initialized");
 
+  // Initialize skills storage and migrate from JSON
+  daemonLog("Initializing skills storage...");
+  const { initSkillsStorage } = await import("../core/skills-repository.js");
+  const { migrateSkillsToSQL } = await import("../core/skills-migrate.js");
+  await initSkillsStorage();
+  await migrateSkillsToSQL();
+  daemonLog("Skills storage initialized");
+
   // Ensure bearer token exists for API authentication
   ensureToken();
   daemonLog("Bearer token ready for API authentication");
