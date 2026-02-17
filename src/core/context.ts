@@ -23,7 +23,6 @@ import { SESSIONS_DIR } from "../paths.js";
 import { getChannel } from "../plugins.js";
 import type { ChannelRef } from "../types.js";
 import { config } from "./config.js";
-import { discoverSkills, formatSkillsXml } from "./skills.js";
 import { applySoulEvilOverride, formatBootstrapContext, loadBootstrapFiles } from "./workspace.js";
 
 // ============================================================================
@@ -127,31 +126,6 @@ const sessionSystemProvider: ContextProvider = {
       content,
       role: "system",
       metadata: { source: "session_file", priority: 0, path: contextFile },
-    };
-  },
-};
-
-/**
- * Skills as system context
- */
-const skillsProvider: ContextProvider = {
-  name: "skills",
-  priority: 10,
-  enabled: true,
-  async getContext(): Promise<ContextPart | null> {
-    const { skills, warnings } = discoverSkills();
-    if (warnings.length > 0) {
-      for (const w of warnings) {
-        logger.warn(`[skills] ${w.skillPath}: ${w.message}`);
-      }
-    }
-    if (skills.length === 0) return null;
-
-    const skillsXml = formatSkillsXml(skills);
-    return {
-      content: skillsXml,
-      role: "system",
-      metadata: { source: "skills", priority: 10, skillCount: skills.length },
     };
   },
 };
@@ -427,9 +401,6 @@ export async function initContextSystem(): Promise<void> {
   }
   if (!contextProviders.has("bootstrap_files")) {
     registerContextProvider(bootstrapFilesProvider);
-  }
-  if (!contextProviders.has("skills")) {
-    registerContextProvider(skillsProvider);
   }
   if (!contextProviders.has("conversation_history")) {
     registerContextProvider(conversationHistoryProvider);

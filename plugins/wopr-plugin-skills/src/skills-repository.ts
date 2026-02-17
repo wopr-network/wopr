@@ -1,6 +1,6 @@
-import { logger } from "../logger.js";
-import type { Repository } from "../storage/api/plugin-storage.js";
-import { getStorage } from "../storage/index.js";
+import { logger } from "../../../src/logger.js";
+import type { Repository } from "../../../src/storage/api/plugin-storage.js";
+import { getStorage } from "../../../src/storage/index.js";
 import type { SkillStateRecord } from "./skills-schema.js";
 import { skillsPluginSchema } from "./skills-schema.js";
 

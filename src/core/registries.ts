@@ -10,7 +10,7 @@ import { join, relative } from "node:path";
 import { WOPR_HOME } from "../paths.js";
 import type { Registry, SkillPointer } from "../types.js";
 import { addRegistrySQL, getRegistriesFromSQL, removeRegistrySQL } from "./registries-repository.js";
-import { parseSkillFrontmatter } from "./skills.js";
+import { parseSkillFrontmatter } from "./skill-frontmatter-parser.js";
 
 export async function getRegistries(): Promise<Registry[]> {
   return await getRegistriesFromSQL();
