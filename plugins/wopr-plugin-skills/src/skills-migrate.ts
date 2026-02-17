@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { logger } from "../logger.js";
-import { WOPR_HOME } from "../paths.js";
-import type { Repository } from "../storage/api/plugin-storage.js";
-import { getStorage } from "../storage/index.js";
+import { logger } from "../../../src/logger.js";
+import { WOPR_HOME } from "../../../src/paths.js";
+import type { Repository } from "../../../src/storage/api/plugin-storage.js";
+import { getStorage } from "../../../src/storage/index.js";
 import { initSkillsStorage } from "./skills-repository.js";
 import type { SkillStateRecord } from "./skills-schema.js";
 

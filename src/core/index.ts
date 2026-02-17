@@ -9,7 +9,3 @@ export * from "./pairing.js";
 export * from "./pairing-commands.js";
 export * from "./registries.js";
 export * from "./sessions.js";
-export * from "./skills.js";
-export * from "./skills-migrate.js";
-export * from "./skills-repository.js";
-export * from "./skills-schema.js";

@@ -47,7 +47,6 @@ import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
 import { restartRouter } from "./routes/restart.js";
 import { sessionsRouter } from "./routes/sessions.js";
-import { skillsRouter } from "./routes/skills.js";
 import { templatesRouter } from "./routes/templates.js";
 import {
   getSubscriptionStats,
@@ -118,7 +117,6 @@ export function createApp(healthMonitor?: HealthMonitor) {
   app.route("/sessions", sessionsRouter);
   app.route("/crons", cronsRouter);
   app.route("/plugins", pluginsRouter);
-  app.route("/skills", skillsRouter);
   app.route("/hooks", hooksRouter);
   app.route("/providers", providersRouter);
   app.route("/templates", templatesRouter);
@@ -216,14 +214,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   }
 
   // Cron storage is now initialized by wopr-plugin-cron
-
-  // Initialize skills storage and migrate from JSON
-  daemonLog("Initializing skills storage...");
-  const { initSkillsStorage } = await import("../core/skills-repository.js");
-  const { migrateSkillsToSQL } = await import("../core/skills-migrate.js");
-  await initSkillsStorage();
-  await migrateSkillsToSQL();
-  daemonLog("Skills storage initialized");
 
   // Initialize pairing storage and migrate from JSON
   daemonLog("Initializing pairing storage...");
@@ -380,6 +370,11 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
       path: join(import.meta.dirname, "../../plugins/wopr-plugin-cron"),
       version: "1.0.0",
     },
+    {
+      name: "wopr-plugin-skills",
+      path: join(import.meta.dirname, "../../plugins/wopr-plugin-skills"),
+      version: "1.0.0",
+    },
   ];
   for (const bp of bundled) {
     if (!installed.find((p) => p.name === bp.name)) {
@@ -399,6 +394,14 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await loadAllPlugins(injectors);
 
   daemonLog(`[heap] after plugins: ${heapMB()}`);
+
+  // Mount plugin-provided REST routers
+  const { getPluginExtension } = await import("../plugins/extensions.js");
+  const maybeSkillsRouter = getPluginExtension("skills:router");
+  if (maybeSkillsRouter) {
+    app.route("/skills", maybeSkillsRouter as any);
+    daemonLog("Skills REST routes mounted from plugin");
+  }
 
   // Initial memory sync is handled by the memory-semantic plugin during init()
 
