@@ -285,8 +285,14 @@ export async function destroySandbox(sessionName: string): Promise<void> {
     { allowFailure: true },
   );
   if (result.code === 0 && result.stdout.trim()) {
-    const containerName = result.stdout.trim().split("\n")[0];
-    await execDocker(["rm", "-f", containerName], { allowFailure: true });
+    const containerNames = result.stdout
+      .trim()
+      .split("\n")
+      .filter((name) => name.length > 0);
+    for (const name of containerNames) {
+      logger.debug(`[sandbox] Removing container ${name} for session ${sessionName}`);
+      await execDocker(["rm", "-f", name], { allowFailure: true });
+    }
   }
 }
 
@@ -362,7 +368,7 @@ export async function cleanupAllSandboxes(): Promise<void> {
     allowFailure: true,
   });
   if (result.code === 0 && result.stdout.trim()) {
-    for (const name of result.stdout.trim().split("\n")) {
+    for (const name of result.stdout.trim().split("\n").filter((n) => n.length > 0)) {
       await execDocker(["rm", "-f", name], { allowFailure: true });
     }
   }
