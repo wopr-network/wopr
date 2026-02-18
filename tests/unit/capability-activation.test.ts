@@ -139,7 +139,7 @@ describe("GET /api/capabilities", () => {
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.capabilities).toHaveLength(5);
+    expect(body.capabilities).toHaveLength(4);
 
     for (const cap of body.capabilities) {
       expect(cap.active).toBe(false);
@@ -164,16 +164,16 @@ describe("GET /api/capabilities", () => {
         installedAt: Date.now(),
       },
       {
-        name: "wopr-plugin-voice-whisper",
+        name: "wopr-plugin-voice-whisper-local",
         version: "1.0.0",
         source: "github" as const,
-        path: "/plugins/wopr-plugin-voice-whisper",
+        path: "/plugins/wopr-plugin-voice-whisper-local",
         enabled: true,
         installedAt: Date.now(),
       },
     ];
     loadedPlugins.set("wopr-plugin-voice-chatterbox", { plugin: {}, context: {} });
-    loadedPlugins.set("wopr-plugin-voice-whisper", { plugin: {}, context: {} });
+    loadedPlugins.set("wopr-plugin-voice-whisper-local", { plugin: {}, context: {} });
 
     const res = await app.request("/api/capabilities");
     const body = await res.json();
@@ -208,7 +208,7 @@ describe("GET /api/capabilities", () => {
     expect(voice.active).toBe(false);
 
     const tts = voice.plugins.find((p: any) => p.name === "wopr-plugin-voice-chatterbox");
-    const stt = voice.plugins.find((p: any) => p.name === "wopr-plugin-voice-whisper");
+    const stt = voice.plugins.find((p: any) => p.name === "wopr-plugin-voice-whisper-local");
     expect(tts.installed).toBe(true);
     expect(stt.installed).toBe(false);
   });
@@ -235,7 +235,7 @@ describe("POST /api/capabilities/activate — happy path", () => {
 
     const pluginNames = body.plugins.map((p: any) => p.name);
     expect(pluginNames).toContain("wopr-plugin-voice-chatterbox");
-    expect(pluginNames).toContain("wopr-plugin-voice-whisper");
+    expect(pluginNames).toContain("wopr-plugin-voice-whisper-local");
   });
 
   it("installs plugins with correct GitHub sources", async () => {
@@ -248,7 +248,7 @@ describe("POST /api/capabilities/activate — happy path", () => {
     });
 
     expect(installPlugin).toHaveBeenCalledWith("github:wopr-network/wopr-plugin-voice-chatterbox");
-    expect(installPlugin).toHaveBeenCalledWith("github:wopr-network/wopr-plugin-voice-whisper");
+    expect(installPlugin).toHaveBeenCalledWith("github:wopr-network/wopr-plugin-voice-whisper-local");
   });
 
   it("enables and loads each plugin after install", async () => {
@@ -261,7 +261,6 @@ describe("POST /api/capabilities/activate — happy path", () => {
     });
 
     expect(enablePlugin).toHaveBeenCalledWith("wopr-plugin-imagegen");
-    expect(enablePlugin).toHaveBeenCalledWith("wopr-plugin-image-sdxl");
     expect(loadPlugin).toHaveBeenCalled();
   });
 
@@ -279,8 +278,6 @@ describe("POST /api/capabilities/activate — happy path", () => {
     const pluginData = mockConfig?.plugins?.data;
     expect(pluginData).toBeDefined();
     expect(pluginData["wopr-plugin-imagegen"]).toBeDefined();
-    expect(pluginData["wopr-plugin-image-sdxl"]).toBeDefined();
-    expect(pluginData["wopr-plugin-image-sdxl"].baseUrl).toBe("https://api.wopr.bot");
   });
 
   it("calls providerRegistry.checkHealth after all plugins loaded", async () => {
@@ -289,7 +286,7 @@ describe("POST /api/capabilities/activate — happy path", () => {
     await app.request("/api/capabilities/activate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ capability: "embeddings" }),
+      body: JSON.stringify({ capability: "web-search" }),
     });
 
     expect(providerRegistry.checkHealth).toHaveBeenCalledTimes(1);
@@ -309,16 +306,16 @@ describe("POST /api/capabilities/activate — already active", () => {
         installedAt: Date.now(),
       },
       {
-        name: "wopr-plugin-voice-whisper",
+        name: "wopr-plugin-voice-whisper-local",
         version: "1.0.0",
         source: "github" as const,
-        path: "/plugins/wopr-plugin-voice-whisper",
+        path: "/plugins/wopr-plugin-voice-whisper-local",
         enabled: true,
         installedAt: Date.now(),
       },
     ];
     loadedPlugins.set("wopr-plugin-voice-chatterbox", { plugin: {}, context: {} });
-    loadedPlugins.set("wopr-plugin-voice-whisper", { plugin: {}, context: {} });
+    loadedPlugins.set("wopr-plugin-voice-whisper-local", { plugin: {}, context: {} });
 
     const { installPlugin } = await import("../../src/plugins.js");
 
@@ -365,7 +362,7 @@ describe("POST /api/capabilities/activate — partially installed", () => {
 
     // Should only install the missing STT plugin
     expect(installPlugin).toHaveBeenCalledTimes(1);
-    expect(installPlugin).toHaveBeenCalledWith("github:wopr-network/wopr-plugin-voice-whisper");
+    expect(installPlugin).toHaveBeenCalledWith("github:wopr-network/wopr-plugin-voice-whisper-local");
 
     // loadPlugin called for the newly-installed STT plugin (TTS is already loaded)
     expect(loadPlugin).toHaveBeenCalledTimes(1);
@@ -418,7 +415,7 @@ describe("POST /api/capabilities/activate — plugin install failure", () => {
 
     const body = await res.json();
     expect(body.activated).toBe(false);
-    expect(body.errors).toHaveLength(2);
+    expect(body.errors).toHaveLength(1);
     expect(body.errors[0].error).toMatch(/Network error/);
   });
 
@@ -477,12 +474,12 @@ describe("POST /api/capabilities/deactivate — happy path", () => {
     expect(body.deactivated).toBe(true);
     expect(body.capability).toBe("voice");
     expect(body.plugins).toContain("wopr-plugin-voice-chatterbox");
-    expect(body.plugins).toContain("wopr-plugin-voice-whisper");
+    expect(body.plugins).toContain("wopr-plugin-voice-whisper-local");
 
     expect(unloadPlugin).toHaveBeenCalledWith("wopr-plugin-voice-chatterbox");
-    expect(unloadPlugin).toHaveBeenCalledWith("wopr-plugin-voice-whisper");
+    expect(unloadPlugin).toHaveBeenCalledWith("wopr-plugin-voice-whisper-local");
     expect(disablePlugin).toHaveBeenCalledWith("wopr-plugin-voice-chatterbox");
-    expect(disablePlugin).toHaveBeenCalledWith("wopr-plugin-voice-whisper");
+    expect(disablePlugin).toHaveBeenCalledWith("wopr-plugin-voice-whisper-local");
   });
 });
 
