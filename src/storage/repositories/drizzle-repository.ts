@@ -107,16 +107,23 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
     return this;
   }
 
-  select<K extends keyof T>(..._fields: K[]): QueryBuilder<Pick<T, K>> {
-    // Note: This only narrows the TypeScript return type.
-    // Does NOT actually project fields in the SQL query - always selects all columns.
-    // TODO: Implement actual field projection for performance optimization.
+  private selectedFields: string[] | null = null;
+
+  select<K extends keyof T>(...fields: K[]): QueryBuilder<Pick<T, K>> {
+    this.selectedFields = fields.map((f) => String(f));
     return this as unknown as QueryBuilder<Pick<T, K>>;
   }
 
   async execute(): Promise<T[]> {
-    // Build query synchronously
+    // Build query with optional SQL-level field projection
     let query = this.db.select().from(this.table);
+    if (this.selectedFields !== null) {
+      const sel: Record<string, SQLiteColumn> = {};
+      for (const f of this.selectedFields) {
+        if (this.columns[f]) sel[f] = this.columns[f];
+      }
+      query = this.db.select(sel).from(this.table) as unknown as typeof query;
+    }
 
     if (this.conditions.length > 0) {
       query = query.where(and(...this.conditions)) as typeof query;
@@ -441,15 +448,22 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     }
   }
 
-  // Simplified transaction - uses same repository, no actual transaction
   async transaction<R>(fn: (repo: Repository<T>) => Promise<R>): Promise<R> {
-    // For now, just run without transaction to avoid complex type issues
-    // TODO: Properly implement transaction support with type-safe access to raw DB
-    const result = await fn(this as unknown as Repository<T>);
-    return result;
+    if (!this.sqliteRaw) {
+      return fn(this as unknown as Repository<T>);
+    }
+    const raw = this.sqliteRaw as { exec: (sql: string) => void };
+    raw.exec("BEGIN");
+    try {
+      const result = await fn(this as unknown as Repository<T>);
+      raw.exec("COMMIT");
+      return result;
+    } catch (error) {
+      raw.exec("ROLLBACK");
+      throw error;
+    }
   }
 
-  /**
   /**
    * Build Drizzle conditions from filter object
    */
