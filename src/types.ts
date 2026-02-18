@@ -924,9 +924,7 @@ export interface WOPRPluginContext {
     healthy: boolean;
   } | null;
 
-  resolveAllProviders(
-    capability: import("./plugin-types/manifest.js").AdapterCapability,
-  ): Array<{
+  resolveAllProviders(capability: import("./plugin-types/manifest.js").AdapterCapability): Array<{
     capability: import("./plugin-types/manifest.js").AdapterCapability;
     provider: import("./plugin-types/manifest.js").ProviderOption;
     healthy: boolean;

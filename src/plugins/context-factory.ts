@@ -275,10 +275,7 @@ export function createPluginContext(
       return getCapabilityRegistry().hasProvider(capability);
     },
 
-    resolveCapability(
-      capability: AdapterCapability,
-      options?: { preferredProvider?: string; healthyOnly?: boolean },
-    ) {
+    resolveCapability(capability: AdapterCapability, options?: { preferredProvider?: string; healthyOnly?: boolean }) {
       return resolveCapability(capability, options);
     },
 
