@@ -55,8 +55,8 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
         hostedConfig: { ...hostedDefaults(), capability: "tts" },
       },
       {
-        source: "github:wopr-network/wopr-plugin-voice-whisper",
-        name: "wopr-plugin-voice-whisper",
+        source: "github:wopr-network/wopr-plugin-voice-whisper-local",
+        name: "wopr-plugin-voice-whisper-local",
         hostedConfig: { ...hostedDefaults(), capability: "stt" },
       },
     ],
@@ -68,33 +68,13 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
     description: "Generate images from text prompts",
     icon: "🎨",
     plugins: [
-      // Plugin repo created in WOP-571 — catalog entry is a forward reference
       {
         source: "github:wopr-network/wopr-plugin-imagegen",
         name: "wopr-plugin-imagegen",
         hostedConfig: { ...hostedDefaults(), capability: "image-gen" },
       },
-      {
-        source: "github:wopr-network/wopr-plugin-image-sdxl",
-        name: "wopr-plugin-image-sdxl",
-        hostedConfig: { ...hostedDefaults(), capability: "image-gen" },
-      },
     ],
     activatedMessage: "Image generation activated! 🎨",
-  },
-  {
-    id: "embeddings",
-    label: "Embeddings",
-    description: "Vector embeddings for semantic search and memory",
-    icon: "🧠",
-    plugins: [
-      {
-        source: "github:wopr-network/wopr-plugin-embeddings",
-        name: "wopr-plugin-embeddings",
-        hostedConfig: { ...hostedDefaults(), capability: "embeddings" },
-      },
-    ],
-    activatedMessage: "Embeddings activated! 🧠",
   },
   {
     id: "video-gen",
@@ -103,8 +83,8 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
     icon: "🎬",
     plugins: [
       {
-        source: "github:wopr-network/wopr-plugin-video",
-        name: "wopr-plugin-video",
+        source: "github:wopr-network/wopr-plugin-videogen",
+        name: "wopr-plugin-videogen",
         hostedConfig: { ...hostedDefaults(), capability: "video-gen" },
       },
     ],
