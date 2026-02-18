@@ -21,9 +21,10 @@ export { parseTemporalFilter } from "./types.js";
 // discoverSessionMemoryDirs is used by A2A tools - keep it here
 import fs from "node:fs/promises";
 import path from "node:path";
+import { SESSIONS_DIR } from "../paths.js";
 
 export async function discoverSessionMemoryDirs(): Promise<string[]> {
-  const sessionsBase = "/data/sessions";
+  const sessionsBase = SESSIONS_DIR;
   const dirs: string[] = [];
   try {
     const entries = await fs.readdir(sessionsBase, { withFileTypes: true });
