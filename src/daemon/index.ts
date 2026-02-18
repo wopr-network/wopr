@@ -18,7 +18,6 @@ import { initBrowserProfileStorage } from "../core/browser-profile-repository.js
 // Core imports for daemon functionality
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { config as centralConfig } from "../core/config.js";
-import { initPairing } from "../core/pairing.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
 import { inject } from "../core/sessions.js";
@@ -211,11 +210,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     daemonLog(`Warning: ${msg}`);
     startupWarnings.push(msg);
   }
-
-  // Initialize pairing storage and migrate from JSON
-  daemonLog("Initializing pairing storage...");
-  await initPairing();
-  daemonLog("Pairing storage initialized");
 
   // Initialize browser profile storage and migrate from JSON
   daemonLog("Initializing browser profile storage...");
