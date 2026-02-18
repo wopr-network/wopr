@@ -34,6 +34,36 @@ documentation and configuration options.
 
 ---
 
+## [1.2.0](https://github.com/wopr-network/wopr/compare/wopr-v1.1.0...wopr-v1.2.0) (2026-02-18)
+
+
+### Features
+
+* **storage:** SQL field projection and real transactions in DrizzleRepository (WOP-598) ([#763](https://github.com/wopr-network/wopr/issues/763)) ([752c363](https://github.com/wopr-network/wopr/commit/752c3635a6279d2c30d1d9900deed625fa528152))
+* zero-click capability activation endpoint (WOP-504) ([#729](https://github.com/wopr-network/wopr/issues/729)) ([ab38a1b](https://github.com/wopr-network/wopr/commit/ab38a1bbdade1f73ce0e382181fb5face5ed41bf))
+
+
+### Code Refactoring
+
+* extract http_fetch and exec_command into wopr-plugin-tools (WOP-567) ([#750](https://github.com/wopr-network/wopr/issues/750)) ([fde78b8](https://github.com/wopr-network/wopr/commit/fde78b80dc1f882cb9419379c1e939958baae06e))
+* remove ACP from core, delegate to wopr-plugin-acp (WOP-571) ([#748](https://github.com/wopr-network/wopr/issues/748)) ([4c782d0](https://github.com/wopr-network/wopr/commit/4c782d07ea11ad709c78023cd6ff952637593e6a))
+* remove browser module from core (WOP-551) ([#734](https://github.com/wopr-network/wopr/issues/734)) ([8df2b5e](https://github.com/wopr-network/wopr/commit/8df2b5e20f16eb90e6e53bb43bb45b0cf8795946))
+* remove canvas module from core (WOP-562) ([#735](https://github.com/wopr-network/wopr/issues/735)) ([25f2a97](https://github.com/wopr-network/wopr/commit/25f2a97edb6570c0eaad35058d8fb7ccee50759a))
+* remove image generation from core (WOP-564) ([#732](https://github.com/wopr-network/wopr/issues/732)) ([e29c158](https://github.com/wopr-network/wopr/commit/e29c15875dd9f0f19dc9e529c3cd29d95de9f617))
+* remove notify tool from core (WOP-568) ([#736](https://github.com/wopr-network/wopr/issues/736)) ([ba5b889](https://github.com/wopr-network/wopr/commit/ba5b8897d8ba9579ae5a823a9f2047b51fb87700))
+* remove pairing module from core (WOP-570) ([#737](https://github.com/wopr-network/wopr/issues/737)) ([827f837](https://github.com/wopr-network/wopr/commit/827f8370ab5ccf0872a47dc0b8376590ee9c4543))
+* remove sandbox from core, delegate to wopr-plugin-sandbox (WOP-569) ([#749](https://github.com/wopr-network/wopr/issues/749)) ([fcb7d3f](https://github.com/wopr-network/wopr/commit/fcb7d3fe257b09ef3ed2210d6873cbd30984d7de))
+* remove soul A2A tools from core (WOP-566) ([#738](https://github.com/wopr-network/wopr/issues/738)) ([6d98457](https://github.com/wopr-network/wopr/commit/6d9845761218ff58c838c9eaf662574bd5d05d64))
+* remove src/voice/ from core — plugins own their own types (WOP-495) ([#731](https://github.com/wopr-network/wopr/issues/731)) ([d45cdb8](https://github.com/wopr-network/wopr/commit/d45cdb88bc5651e0829ec902afdad56262ace511))
+* remove web search from core (WOP-565) ([#733](https://github.com/wopr-network/wopr/issues/733)) ([02a0400](https://github.com/wopr-network/wopr/commit/02a0400516e095f64c7335a737179cd65fbcd455))
+* rename registerProvider → registerLLMProvider (WOP-609) ([#767](https://github.com/wopr-network/wopr/issues/767)) ([390da4f](https://github.com/wopr-network/wopr/commit/390da4fdb12a53d51d0b82763963365cbde8248e))
+
+
+### Documentation
+
+* add brand voice + pre-launch Twitter plan ([#554](https://github.com/wopr-network/wopr/issues/554)) ([a8eac21](https://github.com/wopr-network/wopr/commit/a8eac21c0cd35456fea11450eb35f416e8929a8a))
+* add CLAUDE.md and ignore .worktrees/ directory ([#751](https://github.com/wopr-network/wopr/issues/751)) ([af7c966](https://github.com/wopr-network/wopr/commit/af7c9662fd5c21460a0cebc1d5529084d0a3b4e9))
+
 ## [1.1.0](https://github.com/wopr-network/wopr/compare/wopr-v1.0.0...wopr-v1.1.0) (2026-02-17)
 
 
