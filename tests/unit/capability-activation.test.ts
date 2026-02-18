@@ -416,7 +416,7 @@ describe("POST /api/capabilities/activate — plugin install failure", () => {
 
     const body = await res.json();
     expect(body.activated).toBe(false);
-    expect(body.errors).toHaveLength(1);
+    expect(body.errors).toHaveLength(2);
     expect(body.errors[0].error).toMatch(/Network error/);
   });
 

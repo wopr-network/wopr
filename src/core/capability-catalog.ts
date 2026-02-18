@@ -69,6 +69,11 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
     icon: "🎨",
     plugins: [
       {
+        source: "github:wopr-network/wopr-plugin-imagegen",
+        name: "wopr-plugin-imagegen",
+        hostedConfig: { ...hostedDefaults(), capability: "image-gen" },
+      },
+      {
         source: "github:wopr-network/wopr-plugin-image-sdxl",
         name: "wopr-plugin-image-sdxl",
         hostedConfig: { ...hostedDefaults(), capability: "image-gen" },
