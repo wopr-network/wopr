@@ -164,7 +164,7 @@ export function createPluginContext(
       return centralConfig.getValue(key);
     },
 
-    registerProvider(provider: ModelProvider) {
+    registerLLMProvider(provider: ModelProvider) {
       logger.info(`[plugins] Provider registration: ${provider.id} (${provider.name})`);
       providerPlugins.set(provider.id, provider);
       providerRegistry.register(provider);
@@ -176,14 +176,14 @@ export function createPluginContext(
       });
     },
 
-    unregisterProvider(id: string) {
+    unregisterLLMProvider(id: string) {
       providerPlugins.delete(id);
       // Note: providerRegistry doesn't have unregister, providers are removed from runtime only
       // Unregister from capability registry
       getCapabilityRegistry().unregisterProvider("text-gen", id);
     },
 
-    getProvider(id: string): ModelProvider | undefined {
+    getLLMProvider(id: string): ModelProvider | undefined {
       return (
         providerPlugins.get(id) ||
         (providerRegistry.listProviders().find((p) => p.id === id) as unknown as ModelProvider)

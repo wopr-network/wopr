@@ -156,7 +156,9 @@ export async function execInSandbox(
     return null;
   }
 
-  const sandbox = await getSandboxForSession(sessionName);
+  const ctx = getContext(sessionName);
+  const trustLevel = ctx?.source?.trustLevel ?? "owner";
+  const sandbox = await ext.resolveSandboxContext({ sessionName, trustLevel });
   if (!sandbox) {
     return null; // Not sandboxed
   }
