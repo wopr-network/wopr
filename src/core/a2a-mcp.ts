@@ -15,7 +15,6 @@ import {
   createCapabilityDiscoveryTools,
   createConfigTools,
   createEventTools,
-  createHttpExecTools,
   createIdentityTools,
   createMemoryTools,
   createSecurityTools,
@@ -62,8 +61,6 @@ export function listA2ATools(): string[] {
     "event_list",
     "security_whoami",
     "security_check",
-    "http_fetch",
-    "exec_command",
     "capability_discover",
   ];
   return [...coreTools, ...pluginTools.keys()];
@@ -88,7 +85,6 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     ...createIdentityTools(sessionName),
     ...createEventTools(sessionName),
     ...createSecurityTools(sessionName),
-    ...createHttpExecTools(sessionName),
     ...createCapabilityDiscoveryTools(sessionName),
   ];
 
