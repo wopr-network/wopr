@@ -76,27 +76,49 @@ export async function initSecurity(woprDir: string): Promise<void> {
  * If called before initSecurity(), returns DEFAULT_SECURITY_CONFIG.
  */
 export function getSecurityConfig(): SecurityConfig {
+  let config: SecurityConfig;
   if (!securityStore) {
-    // Not initialized yet - return default
-    // This is expected during early startup before initSecurity() is called
-    return DEFAULT_SECURITY_CONFIG;
+    config = DEFAULT_SECURITY_CONFIG;
+  } else {
+    config = securityStore.configCache ?? DEFAULT_SECURITY_CONFIG;
   }
 
-  // Access the store's cache directly (synchronous)
-  // The cache is populated during init() and updated on saveConfig()
-  return securityStore.configCache ?? DEFAULT_SECURITY_CONFIG;
+  // Allow environment variable override for enforcement mode
+  // This lets developers use WOPR_SECURITY_ENFORCEMENT=warn during local dev
+  const envEnforcement = process.env.WOPR_SECURITY_ENFORCEMENT;
+  if (envEnforcement === "off" || envEnforcement === "warn" || envEnforcement === "enforce") {
+    if (envEnforcement !== config.enforcement) {
+      return { ...config, enforcement: envEnforcement };
+    }
+  }
+
+  return config;
 }
 
 /**
  * Get security configuration (async version)
+ *
+ * Applies the same WOPR_SECURITY_ENFORCEMENT env var override as the sync version.
  */
 export async function getSecurityConfigAsync(): Promise<SecurityConfig> {
+  let config: SecurityConfig;
   if (!securityStore) {
     logger.warn("[security] Security store not initialized, returning default config");
-    return DEFAULT_SECURITY_CONFIG;
+    config = DEFAULT_SECURITY_CONFIG;
+  } else {
+    config = await securityStore.getConfig();
   }
 
-  return await securityStore.getConfig();
+  // Allow environment variable override for enforcement mode
+  // This lets developers use WOPR_SECURITY_ENFORCEMENT=warn during local dev
+  const envEnforcement = process.env.WOPR_SECURITY_ENFORCEMENT;
+  if (envEnforcement === "off" || envEnforcement === "warn" || envEnforcement === "enforce") {
+    if (envEnforcement !== config.enforcement) {
+      return { ...config, enforcement: envEnforcement };
+    }
+  }
+
+  return config;
 }
 
 /**
