@@ -13,8 +13,6 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
-import { migrateBrowserProfilesToSql } from "../core/browser-profile-migrate.js";
-import { initBrowserProfileStorage } from "../core/browser-profile-repository.js";
 // Core imports for daemon functionality
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { config as centralConfig } from "../core/config.js";
@@ -210,12 +208,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     daemonLog(`Warning: ${msg}`);
     startupWarnings.push(msg);
   }
-
-  // Initialize browser profile storage and migrate from JSON
-  daemonLog("Initializing browser profile storage...");
-  await initBrowserProfileStorage();
-  await migrateBrowserProfilesToSql();
-  daemonLog("Browser profile storage initialized");
 
   // Initialize sandbox storage and migrate from JSON
   daemonLog("Initializing sandbox storage...");
