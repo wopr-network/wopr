@@ -39,8 +39,6 @@ import type {
   WebUiExtension,
   WOPRPluginContext,
 } from "../types.js";
-import { getVoiceRegistry } from "../voice/index.js";
-import type { STTProvider, TTSProvider } from "../voice/types.js";
 import { createPluginEventBus } from "./event-bus.js";
 import {
   getPluginExtension,
@@ -229,50 +227,6 @@ export function createPluginContext(
 
     listExtensions(): string[] {
       return listPluginExtensions();
-    },
-
-    // Voice extensions - allow voice plugins to register STT/TTS providers
-    // and channel plugins to discover and use them
-    registerSTTProvider(provider: STTProvider) {
-      const voiceRegistry = getVoiceRegistry();
-      voiceRegistry.registerSTT(provider);
-      // Also register as an extension for discovery via getExtension('stt')
-      registerPluginExtension(pluginName, "stt", provider);
-      logger.info(`[plugins] STT provider registered: ${provider.metadata.name}`);
-      // Register in capability registry
-      getCapabilityRegistry().registerProvider("stt", {
-        id: provider.metadata.name,
-        name: provider.metadata.description || provider.metadata.name,
-      });
-    },
-
-    registerTTSProvider(provider: TTSProvider) {
-      const voiceRegistry = getVoiceRegistry();
-      voiceRegistry.registerTTS(provider);
-      // Also register as an extension for discovery via getExtension('tts')
-      registerPluginExtension(pluginName, "tts", provider);
-      logger.info(`[plugins] TTS provider registered: ${provider.metadata.name}`);
-      // Register in capability registry
-      getCapabilityRegistry().registerProvider("tts", {
-        id: provider.metadata.name,
-        name: provider.metadata.description || provider.metadata.name,
-      });
-    },
-
-    getSTT(): STTProvider | null {
-      return getVoiceRegistry().getSTT();
-    },
-
-    getTTS(): TTSProvider | null {
-      return getVoiceRegistry().getTTS();
-    },
-
-    hasVoice(): { stt: boolean; tts: boolean } {
-      const voiceRegistry = getVoiceRegistry();
-      return {
-        stt: voiceRegistry.getSTT() !== null,
-        tts: voiceRegistry.getTTS() !== null,
-      };
     },
 
     // Channel providers - channel plugins register themselves for cross-plugin protocol commands
