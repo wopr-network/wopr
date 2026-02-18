@@ -139,7 +139,7 @@ describe("GET /api/capabilities", () => {
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.capabilities).toHaveLength(4);
+    expect(body.capabilities).toHaveLength(5);
 
     for (const cap of body.capabilities) {
       expect(cap.active).toBe(false);
