@@ -224,6 +224,24 @@ export interface WOPRPluginContext {
   getCapabilityProviders(capability: AdapterCapability): ProviderOption[];
   hasCapability(capability: AdapterCapability): boolean;
 
+  /**
+   * Resolve the best provider for a given capability.
+   * Returns null if no providers are registered (or none are healthy).
+   */
+  resolveCapability(
+    capability: AdapterCapability,
+    options?: { preferredProvider?: string; healthyOnly?: boolean },
+  ): { capability: AdapterCapability; provider: ProviderOption; healthy: boolean } | null;
+
+  /**
+   * Resolve all providers for a capability, sorted by health status.
+   */
+  resolveAllProviders(capability: AdapterCapability): Array<{
+    capability: AdapterCapability;
+    provider: ProviderOption;
+    healthy: boolean;
+  }>;
+
   /** Register a health probe for a capability provider this plugin provides */
   registerHealthProbe?(capability: string, providerId: string, probe: () => Promise<boolean>): void;
 
