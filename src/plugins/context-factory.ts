@@ -183,7 +183,7 @@ export function createPluginContext(
       getCapabilityRegistry().unregisterProvider("text-gen", id);
     },
 
-    getProvider(id: string): ModelProvider | undefined {
+    getLLMProvider(id: string): ModelProvider | undefined {
       return (
         providerPlugins.get(id) ||
         (providerRegistry.listProviders().find((p) => p.id === id) as unknown as ModelProvider)

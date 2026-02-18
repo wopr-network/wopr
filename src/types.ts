@@ -865,7 +865,7 @@ export interface WOPRPluginContext {
   // LLM providers — credential management, health checking, and dispatch
   registerLLMProvider(provider: import("./types/provider.js").ModelProvider): void;
   unregisterLLMProvider(id: string): void;
-  getProvider(id: string): import("./types/provider.js").ModelProvider | undefined;
+  getLLMProvider(id: string): import("./types/provider.js").ModelProvider | undefined;
 
   // Config schemas - plugins register their configuration UI schema
   registerConfigSchema(pluginId: string, schema: ConfigSchema): void;

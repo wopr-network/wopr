@@ -190,7 +190,7 @@ export interface WOPRPluginContext {
   // LLM providers (credential management + dispatch)
   registerLLMProvider(provider: unknown): void;
   unregisterLLMProvider(id: string): void;
-  getProvider(id: string): unknown;
+  getLLMProvider(id: string): unknown;
 
   // Config schemas
   registerConfigSchema(pluginId: string, schema: ConfigSchema): void;
