@@ -15,7 +15,6 @@ import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
 import { migrateBrowserProfilesToSql } from "../core/browser-profile-migrate.js";
 import { initBrowserProfileStorage } from "../core/browser-profile-repository.js";
-import { setCanvasPublish } from "../core/canvas.js";
 // Core imports for daemon functionality
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { config as centralConfig } from "../core/config.js";
@@ -34,7 +33,6 @@ import { checkReadiness, markStartupComplete } from "./readiness.js";
 import { restartOnIdleManager } from "./restart-on-idle.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
 import { authRouter } from "./routes/auth.js";
-import { canvasRouter } from "./routes/canvas.js";
 import { capabilitiesRouter } from "./routes/capabilities.js";
 import { capabilityHealthRouter } from "./routes/capability-health.js";
 import { configRouter } from "./routes/config.js";
@@ -114,7 +112,6 @@ export function createApp(healthMonitor?: HealthMonitor) {
 
   // Mount routers
   app.route("/auth", authRouter);
-  app.route("/canvas", canvasRouter);
   app.route("/config", configRouter);
   app.route("/sessions", sessionsRouter);
   app.route("/plugins", pluginsRouter);
@@ -167,9 +164,6 @@ function heapMB(): string {
 export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const port = config.port ?? DEFAULT_PORT;
   const host = config.host ?? DEFAULT_HOST;
-
-  // Inject WebSocket publish into core canvas to avoid cross-layer import
-  setCanvasPublish(publishToTopic);
 
   daemonLog(`[heap] startup: ${heapMB()}`);
 
@@ -380,6 +374,19 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   if (maybeCronsRouter) {
     app.route("/crons", maybeCronsRouter as Hono);
     daemonLog("Crons REST routes mounted from plugin");
+  }
+
+  const maybeCanvasRouter = getPluginExtension("canvas:router");
+  if (maybeCanvasRouter) {
+    app.route("/canvas", maybeCanvasRouter as Hono);
+    daemonLog("Canvas REST routes mounted from plugin");
+  }
+
+  // Wire WebSocket publish into canvas plugin if loaded
+  const maybeCanvasSetPublish = getPluginExtension<(fn: typeof publishToTopic) => void>("canvas:setPublish");
+  if (maybeCanvasSetPublish) {
+    maybeCanvasSetPublish(publishToTopic);
+    daemonLog("Canvas WebSocket publish wired");
   }
 
   // Initial memory sync is handled by the memory-semantic plugin during init()

@@ -14,7 +14,6 @@ import {
   cachedMcpServer,
   closeAllBrowsers,
   createBrowserTools,
-  createCanvasTools,
   createCapabilityDiscoveryTools,
   createConfigTools,
   createEventTools,
@@ -88,11 +87,6 @@ export function listA2ATools(): string[] {
     "browser_type",
     "browser_screenshot",
     "browser_evaluate",
-    "canvas_push",
-    "canvas_remove",
-    "canvas_reset",
-    "canvas_snapshot",
-    "canvas_get",
     "capability_discover",
   ];
   return [...coreTools, ...pluginTools.keys()];
@@ -123,7 +117,6 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     ...createImageGenerateTools(sessionName),
     ...createWebSearchTools(sessionName),
     ...createBrowserTools(sessionName),
-    ...createCanvasTools(sessionName),
     ...createCapabilityDiscoveryTools(sessionName),
   ];
 
