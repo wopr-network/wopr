@@ -38,8 +38,8 @@ async function buildSandboxImage(): Promise<boolean> {
     } catch {
       // Image doesn't exist, pull and tag
     }
-    execSync("docker pull debian:bookworm-slim", { stdio: "ignore" });
-    execSync(`docker tag debian:bookworm-slim ${image}`, { stdio: "ignore" });
+    execSync("docker pull debian:bookworm-slim", { stdio: "ignore", timeout: 300_000 });
+    execSync(`docker tag debian:bookworm-slim ${image}`, { stdio: "ignore", timeout: 300_000 });
     return true;
   } catch {
     return false;

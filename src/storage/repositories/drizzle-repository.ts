@@ -107,16 +107,27 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
     return this;
   }
 
-  select<K extends keyof T>(..._fields: K[]): QueryBuilder<Pick<T, K>> {
-    // Note: This only narrows the TypeScript return type.
-    // Does NOT actually project fields in the SQL query - always selects all columns.
-    // TODO: Implement actual field projection for performance optimization.
+  private selectedFields: string[] | null = null;
+
+  select<K extends keyof T>(...fields: K[]): QueryBuilder<Pick<T, K>> {
+    this.selectedFields = fields.map((f) => String(f));
     return this as unknown as QueryBuilder<Pick<T, K>>;
   }
 
   async execute(): Promise<T[]> {
-    // Build query synchronously
-    let query = this.db.select().from(this.table);
+    // Build query with optional SQL-level field projection
+    const defaultQuery = this.db.select().from(this.table);
+    let query: typeof defaultQuery;
+    if (this.selectedFields !== null && this.selectedFields.length > 0) {
+      const sel: Record<string, SQLiteColumn> = {};
+      for (const f of this.selectedFields) {
+        if (!this.columns[f]) throw new Error(`Unknown column: ${f}`);
+        sel[f] = this.columns[f];
+      }
+      query = this.db.select(sel).from(this.table) as unknown as typeof defaultQuery;
+    } else {
+      query = defaultQuery;
+    }
 
     if (this.conditions.length > 0) {
       query = query.where(and(...this.conditions)) as typeof query;
@@ -196,6 +207,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
   private columns: Record<string, SQLiteColumn>;
   private jsonColumns: Set<string>;
   private booleanColumns: Set<string>;
+  private inTransaction = false;
 
   constructor(
     private db: DrizzleDB,
@@ -441,15 +453,32 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     }
   }
 
-  // Simplified transaction - uses same repository, no actual transaction
   async transaction<R>(fn: (repo: Repository<T>) => Promise<R>): Promise<R> {
-    // For now, just run without transaction to avoid complex type issues
-    // TODO: Properly implement transaction support with type-safe access to raw DB
-    const result = await fn(this as unknown as Repository<T>);
-    return result;
+    if (!this.sqliteRaw) {
+      throw new Error("transaction() requires a raw SQLite connection (sqliteRaw was not provided)");
+    }
+    if (this.inTransaction) {
+      throw new Error("Nested transactions are not supported; a transaction is already active");
+    }
+    const raw = this.sqliteRaw as { exec: (sql: string) => void };
+    raw.exec("BEGIN");
+    this.inTransaction = true;
+    try {
+      const result = await fn(this as unknown as Repository<T>);
+      raw.exec("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        raw.exec("ROLLBACK");
+      } catch {
+        // ROLLBACK failed — original error takes priority
+      }
+      throw error;
+    } finally {
+      this.inTransaction = false;
+    }
   }
 
-  /**
   /**
    * Build Drizzle conditions from filter object
    */

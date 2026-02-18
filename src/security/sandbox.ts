@@ -83,12 +83,19 @@ function execDockerDirect(
       stderr += chunk.toString();
     });
     child.on("close", (code) => {
-      const exitCode = code ?? 0;
-      if (exitCode !== 0 && !opts?.allowFailure) {
+      if (code === null) {
+        if (opts?.allowFailure) {
+          resolve({ stdout, stderr, code: 1 });
+        } else {
+          reject(new Error(`docker ${args.join(" ")} was killed by a signal`));
+        }
+        return;
+      }
+      if (code !== 0 && !opts?.allowFailure) {
         reject(new Error(stderr.trim() || `docker ${args.join(" ")} failed`));
         return;
       }
-      resolve({ stdout, stderr, code: exitCode });
+      resolve({ stdout, stderr, code });
     });
     child.on("error", (err) => {
       if (opts?.allowFailure) {

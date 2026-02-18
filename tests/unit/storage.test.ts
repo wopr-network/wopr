@@ -498,6 +498,35 @@ describe("Storage Module (WOP-545)", () => {
       expect(results).toHaveLength(1);
       expect(results[0].name).toBe("Alice");
     });
+
+    it("should project only selected fields at SQL level (WOP-598)", async () => {
+      const repo = storage.getRepository<TestRecord>("test", "users");
+      const results = await repo.query().select("id", "name").execute() as Array<Record<string, unknown>>;
+      expect(results).toHaveLength(3);
+      // Each row should have only the selected fields
+      for (const row of results) {
+        expect(Object.keys(row).sort()).toEqual(["id", "name"]);
+        expect(row.age).toBeUndefined();
+      }
+    });
+
+    it("should project selected fields with a where clause (WOP-598)", async () => {
+      const repo = storage.getRepository<TestRecord>("test", "users");
+      const results = await repo.query()
+        .select("id", "name")
+        .where("name", "Bob")
+        .execute() as Array<Record<string, unknown>>;
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe("Bob");
+      expect(results[0].age).toBeUndefined();
+    });
+
+    it("should return all fields when select() is not called (WOP-598)", async () => {
+      const repo = storage.getRepository<TestRecord>("test", "users");
+      const results = await repo.query().where("name", "Alice").execute();
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ id: "1", name: "Alice", age: 30 });
+    });
   });
 
   describe("8. Transaction support", () => {
@@ -539,6 +568,32 @@ describe("Storage Module (WOP-545)", () => {
           });
         })
       ).rejects.toThrow();
+    });
+
+    it("should run repository-level transaction atomically (WOP-598)", async () => {
+      const repo = storage.getRepository<TestRecord>("test", "users");
+      await repo.transaction(async (trxRepo) => {
+        await trxRepo.insert({ id: "1", name: "Alice", age: 30 });
+        await trxRepo.insert({ id: "2", name: "Bob", age: 25 });
+      });
+
+      const all = await repo.findMany();
+      expect(all).toHaveLength(2);
+    });
+
+    it("should rollback repository-level transaction on error (WOP-598)", async () => {
+      const repo = storage.getRepository<TestRecord>("test", "users");
+
+      await expect(
+        repo.transaction(async (trxRepo) => {
+          await trxRepo.insert({ id: "1", name: "Alice", age: 30 });
+          throw new Error("abort");
+        })
+      ).rejects.toThrow("abort");
+
+      // Alice should not be persisted
+      const all = await repo.findMany();
+      expect(all).toHaveLength(0);
     });
   });
 
