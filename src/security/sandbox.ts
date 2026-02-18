@@ -346,7 +346,7 @@ export async function cleanupAllSandboxes(): Promise<void> {
     allowFailure: true,
   });
   if (result.code === 0 && result.stdout.trim()) {
-    for (const name of result.stdout.trim().split("\n")) {
+    for (const name of result.stdout.trim().split("\n").filter((n) => n.length > 0)) {
       await execDocker(["rm", "-f", name], { allowFailure: true });
     }
   }
