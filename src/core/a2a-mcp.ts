@@ -23,7 +23,6 @@ import {
   createNotifyTools,
   createSecurityTools,
   createSessionTools,
-  createWebSearchTools,
   mcpServerDirty,
   pluginTools,
   type RegisteredTool,
@@ -76,7 +75,6 @@ export function listA2ATools(): string[] {
     "http_fetch",
     "exec_command",
     "notify",
-    "web_search",
     "browser_navigate",
     "browser_click",
     "browser_type",
@@ -108,7 +106,6 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     ...createSecurityTools(sessionName),
     ...createHttpExecTools(sessionName),
     ...createNotifyTools(sessionName),
-    ...createWebSearchTools(sessionName),
     ...createBrowserTools(sessionName),
     ...createCapabilityDiscoveryTools(sessionName),
   ];

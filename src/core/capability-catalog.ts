@@ -110,6 +110,20 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
     ],
     activatedMessage: "Video generation activated! 🎬",
   },
+  {
+    id: "web-search",
+    label: "Web Search",
+    description: "Multi-provider web search with Google, Brave, and xAI/Grok",
+    icon: "🔍",
+    plugins: [
+      {
+        source: "github:wopr-network/wopr-plugin-websearch",
+        name: "@wopr-network/plugin-web-search",
+        hostedConfig: {},
+      },
+    ],
+    activatedMessage: "Web search activated! 🔍",
+  },
 ];
 
 /**

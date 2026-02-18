@@ -124,7 +124,7 @@ export const AVAILABLE_CHANNELS = [
 
 // Available skills (from our skills system)
 export const AVAILABLE_SKILLS = [
-  { id: "web-search", name: "Web Search", description: "Search the web using Brave API" },
+  { id: "web-search", name: "Web Search", description: "Search the web (requires wopr-plugin-websearch)" },
   { id: "file-ops", name: "File Operations", description: "Read/write files in workspace" },
   { id: "shell", name: "Shell Commands", description: "Execute shell commands" },
   { id: "memory", name: "Memory", description: "Persistent memory and recall" },
