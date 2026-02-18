@@ -116,13 +116,17 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
 
   async execute(): Promise<T[]> {
     // Build query with optional SQL-level field projection
-    let query = this.db.select().from(this.table);
+    const defaultQuery = this.db.select().from(this.table);
+    let query: typeof defaultQuery;
     if (this.selectedFields !== null) {
       const sel: Record<string, SQLiteColumn> = {};
       for (const f of this.selectedFields) {
-        if (this.columns[f]) sel[f] = this.columns[f];
+        if (!this.columns[f]) throw new Error(`Unknown column: ${f}`);
+        sel[f] = this.columns[f];
       }
-      query = this.db.select(sel).from(this.table) as unknown as typeof query;
+      query = this.db.select(sel).from(this.table) as unknown as typeof defaultQuery;
+    } else {
+      query = defaultQuery;
     }
 
     if (this.conditions.length > 0) {
@@ -459,7 +463,11 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
       raw.exec("COMMIT");
       return result;
     } catch (error) {
-      raw.exec("ROLLBACK");
+      try {
+        raw.exec("ROLLBACK");
+      } catch {
+        // ROLLBACK failed — original error takes priority
+      }
       throw error;
     }
   }
