@@ -97,6 +97,8 @@ export function getSecurityConfig(): SecurityConfig {
 
 /**
  * Get security configuration (async version)
+ *
+ * Applies the same WOPR_SECURITY_ENFORCEMENT env var override as the sync version.
  */
 export async function getSecurityConfigAsync(): Promise<SecurityConfig> {
   if (!securityStore) {
@@ -104,7 +106,18 @@ export async function getSecurityConfigAsync(): Promise<SecurityConfig> {
     return DEFAULT_SECURITY_CONFIG;
   }
 
-  return await securityStore.getConfig();
+  const config = await securityStore.getConfig();
+
+  // Allow environment variable override for enforcement mode
+  // This lets developers use WOPR_SECURITY_ENFORCEMENT=warn during local dev
+  const envEnforcement = process.env.WOPR_SECURITY_ENFORCEMENT;
+  if (envEnforcement === "off" || envEnforcement === "warn" || envEnforcement === "enforce") {
+    if (envEnforcement !== config.enforcement) {
+      return { ...config, enforcement: envEnforcement };
+    }
+  }
+
+  return config;
 }
 
 /**

@@ -737,11 +737,11 @@ describe("Security Policy Module", () => {
       expect(config.enforcement).toBe("enforce"); // new default
     });
 
-    it("should not persist env var override to async config", async () => {
+    it("should apply env var override to async config (same as sync)", async () => {
       process.env.WOPR_SECURITY_ENFORCEMENT = "warn";
       const asyncConfig = await getSecurityConfigAsync();
-      // Async config should NOT have the env override applied
-      expect(asyncConfig.enforcement).toBe("enforce"); // stored default
+      // Async config should apply the same env override as the sync version
+      expect(asyncConfig.enforcement).toBe("warn");
     });
   });
 
