@@ -279,7 +279,8 @@ export function createMemoryTools(sessionName: string): unknown[] {
             if (!sessionMatch) return true;
             return canIndexSession(sessionName, sessionMatch[1], indexablePatterns);
           });
-          if (filteredFilesToSearch.length === 0) return { content: [{ type: "text", text: "No memory files found." }] };
+          if (filteredFilesToSearch.length === 0)
+            return { content: [{ type: "text", text: "No memory files found." }] };
           const queryTerms = query
             .toLowerCase()
             .split(/\s+/)

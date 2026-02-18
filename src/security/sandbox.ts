@@ -66,6 +66,20 @@ function getSandboxExtension(): SandboxExtension | undefined {
 // Docker helper (for functions that need docker when plugin isn't loaded)
 // ============================================================================
 
+/**
+ * Map common signal names to their numeric values.
+ * Used to compute 128+N exit codes for signal-killed processes
+ * following the standard Unix convention (e.g., SIGKILL=9 -> exit 137).
+ */
+const SIGNAL_NUMBERS: Record<string, number> = {
+  SIGHUP: 1,
+  SIGINT: 2,
+  SIGQUIT: 3,
+  SIGABRT: 6,
+  SIGKILL: 9,
+  SIGTERM: 15,
+};
+
 function execDockerDirect(
   args: string[],
   opts?: { allowFailure?: boolean },
@@ -82,20 +96,28 @@ function execDockerDirect(
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
     });
-    child.on("close", (code) => {
-      if (code === null) {
-        if (opts?.allowFailure) {
-          resolve({ stdout, stderr, code: 1 });
-        } else {
-          reject(new Error(`docker ${args.join(" ")} was killed by a signal`));
-        }
+    child.on("close", (code, signal) => {
+      let exitCode: number;
+      if (code !== null) {
+        exitCode = code;
+      } else if (signal) {
+        const sigNum = SIGNAL_NUMBERS[signal] ?? 9; // default to SIGKILL convention
+        exitCode = 128 + sigNum;
+        logger.warn(
+          `[sandbox] docker process killed by signal ${signal} (exit code ${exitCode}): docker ${args.join(" ")}`,
+        );
+      } else {
+        // code is null and no signal — treat as generic failure
+        exitCode = 1;
+        logger.warn(
+          `[sandbox] docker process exited with null code and no signal (treating as failure): docker ${args.join(" ")}`,
+        );
+      }
+      if (exitCode !== 0 && !opts?.allowFailure) {
+        reject(new Error(stderr.trim() || `docker ${args.join(" ")} failed (exit code ${exitCode})`));
         return;
       }
-      if (code !== 0 && !opts?.allowFailure) {
-        reject(new Error(stderr.trim() || `docker ${args.join(" ")} failed`));
-        return;
-      }
-      resolve({ stdout, stderr, code });
+      resolve({ stdout, stderr, code: exitCode });
     });
     child.on("error", (err) => {
       if (opts?.allowFailure) {
