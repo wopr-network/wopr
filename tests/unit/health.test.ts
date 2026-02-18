@@ -16,6 +16,10 @@ vi.mock("../../src/plugins/state.js", () => ({
   pluginManifests: new Map(),
 }));
 
+vi.mock("../../src/security/policy.js", () => ({
+  getSecurityConfig: vi.fn(() => ({ enforcement: "enforce" })),
+}));
+
 vi.mock("../../src/logger.js", () => ({
   logger: {
     info: vi.fn(),
@@ -30,6 +34,7 @@ import { getSessions } from "../../src/core/sessions.js";
 import { HealthMonitor } from "../../src/daemon/health.js";
 import type { HealthSnapshot, HealthStatus } from "../../src/daemon/health.js";
 import { loadedPlugins } from "../../src/plugins/state.js";
+import { getSecurityConfig } from "../../src/security/policy.js";
 
 describe("HealthMonitor", () => {
   let monitor: HealthMonitor;
@@ -221,5 +226,17 @@ describe("HealthMonitor", () => {
     monitor.start();
     monitor.start(); // should not throw or create duplicate
     monitor.stop();
+  });
+
+  it("includes security enforcement mode in snapshot", async () => {
+    const snapshot = await monitor.check();
+    expect(snapshot.security).toBeDefined();
+    expect(snapshot.security.enforcement).toBe("enforce");
+  });
+
+  it("reflects changed enforcement mode", async () => {
+    vi.mocked(getSecurityConfig).mockReturnValue({ enforcement: "warn" } as any);
+    const snapshot = await monitor.check();
+    expect(snapshot.security.enforcement).toBe("warn");
   });
 });

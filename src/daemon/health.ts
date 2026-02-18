@@ -10,6 +10,7 @@ import { providerRegistry } from "../core/providers.js";
 import { getSessions } from "../core/sessions.js";
 import { logger } from "../logger.js";
 import { loadedPlugins } from "../plugins/state.js";
+import { getSecurityConfig } from "../security/policy.js";
 
 export type HealthStatus = "healthy" | "degraded" | "unhealthy";
 
@@ -45,6 +46,9 @@ export interface HealthSnapshot {
   providers: ProviderHealth[];
   sessions: SessionStats;
   memory: MemoryStats;
+  security: {
+    enforcement: "off" | "warn" | "enforce";
+  };
 }
 
 export interface HealthMonitorConfig {
@@ -101,6 +105,7 @@ export class HealthMonitor extends EventEmitter {
     const providers = this.checkProviders();
     const sessions = await this.checkSessions();
     const mem = process.memoryUsage();
+    const securityConfig = getSecurityConfig();
 
     const status = this.computeStatus(plugins, providers);
 
@@ -115,6 +120,9 @@ export class HealthMonitor extends EventEmitter {
         heapUsed: mem.heapUsed,
         heapTotal: mem.heapTotal,
         rss: mem.rss,
+      },
+      security: {
+        enforcement: securityConfig.enforcement,
       },
     };
 

@@ -5,9 +5,9 @@
  * capability checking, tool access, and edge cases.
  */
 import { randomBytes } from "node:crypto";
-import { join } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { mkdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the logger to suppress output during tests
@@ -44,10 +44,9 @@ const {
   canGatewayForward,
 } = await import("../../src/security/policy.js");
 
-const {
-  createInjectionSource,
-  DEFAULT_SECURITY_CONFIG,
-} = await import("../../src/security/types.js");
+const { createInjectionSource, DEFAULT_SECURITY_CONFIG } = await import(
+  "../../src/security/types.js"
+);
 
 import type { InjectionSource, SecurityConfig } from "../../src/security/types.js";
 
@@ -57,7 +56,10 @@ import type { InjectionSource, SecurityConfig } from "../../src/security/types.j
 
 let testDir: string;
 
-function makeSource(type: InjectionSource["type"], overrides?: Partial<InjectionSource>): InjectionSource {
+function makeSource(
+  type: InjectionSource["type"],
+  overrides?: Partial<InjectionSource>,
+): InjectionSource {
   return createInjectionSource(type, overrides);
 }
 
@@ -98,7 +100,7 @@ describe("Security Policy Module", () => {
   describe("getSecurityConfig", () => {
     it("should return default config when no security.json exists", async () => {
       const config = getSecurityConfig();
-      expect(config.enforcement).toBe("warn");
+      expect(config.enforcement).toBe("enforce");
       expect(config.defaults.minTrustLevel).toBe("semi-trusted");
     });
 
@@ -122,7 +124,7 @@ describe("Security Policy Module", () => {
     it("should return default config when not initialized", async () => {
       // Before init, should return defaults
       const config = getSecurityConfig();
-      expect(config.enforcement).toBe("warn"); // Falls back to default
+      expect(config.enforcement).toBe("enforce"); // Falls back to default
     });
   });
 
@@ -574,7 +576,7 @@ describe("Security Policy Module", () => {
     });
 
     it("should warn about missing capability in warn mode", async () => {
-      // Default config is "warn" mode
+      await setSecurityConfig({ enforcement: "warn" });
       const source = makeSource("p2p");
       const result = checkToolAccess(source, "http_fetch");
 
@@ -583,6 +585,7 @@ describe("Security Policy Module", () => {
     });
 
     it("should allow tools with no capability requirement", async () => {
+      await setSecurityConfig({ enforcement: "warn" });
       const source = makeSource("p2p");
       // A tool not in the TOOL_CAPABILITY_MAP has no requirement
       const result = checkToolAccess(source, "unknown_tool");
@@ -668,6 +671,7 @@ describe("Security Policy Module", () => {
       // Default untrusted has tools: { deny: ["*"] }
       // filterToolsByPolicy checks deny list first - deny list is enforced
       // even in warn mode (warn mode only applies to capability checks)
+      await setSecurityConfig({ enforcement: "warn" });
       const source = makeSource("p2p");
       const tools = ["http_fetch", "security_whoami"];
       const filtered = filterToolsByPolicy(source, tools);
@@ -681,8 +685,8 @@ describe("Security Policy Module", () => {
   // Enforcement Mode
   // ==========================================================================
   describe("isEnforcementEnabled", () => {
-    it("should return false for default config (warn mode)", async () => {
-      expect(isEnforcementEnabled()).toBe(false);
+    it("should return true for default config (enforce mode)", async () => {
+      expect(isEnforcementEnabled()).toBe(true);
     });
 
     it("should return true when enforcement is 'enforce'", async () => {
@@ -694,6 +698,50 @@ describe("Security Policy Module", () => {
     it("should return false when enforcement is 'off'", async () => {
       await setSecurityConfig({ enforcement: "off" });
       expect(isEnforcementEnabled()).toBe(false);
+    });
+  });
+
+  // ==========================================================================
+  // WOPR_SECURITY_ENFORCEMENT env var override
+  // ==========================================================================
+  describe("WOPR_SECURITY_ENFORCEMENT env var override", () => {
+    afterEach(() => {
+      delete process.env.WOPR_SECURITY_ENFORCEMENT;
+    });
+
+    it("should override stored config enforcement to 'warn' via env var", async () => {
+      // Default is now 'enforce', override to 'warn'
+      process.env.WOPR_SECURITY_ENFORCEMENT = "warn";
+      const config = getSecurityConfig();
+      expect(config.enforcement).toBe("warn");
+    });
+
+    it("should override stored config enforcement to 'off' via env var", async () => {
+      process.env.WOPR_SECURITY_ENFORCEMENT = "off";
+      const config = getSecurityConfig();
+      expect(config.enforcement).toBe("off");
+    });
+
+    it("should override stored config enforcement to 'enforce' via env var", async () => {
+      // Save config as 'warn', then override to 'enforce'
+      await setSecurityConfig({ enforcement: "warn" });
+      process.env.WOPR_SECURITY_ENFORCEMENT = "enforce";
+      const config = getSecurityConfig();
+      expect(config.enforcement).toBe("enforce");
+    });
+
+    it("should ignore invalid env var values", async () => {
+      process.env.WOPR_SECURITY_ENFORCEMENT = "invalid";
+      const config = getSecurityConfig();
+      // Should return the stored/default value, not the invalid one
+      expect(config.enforcement).toBe("enforce"); // new default
+    });
+
+    it("should not persist env var override to async config", async () => {
+      process.env.WOPR_SECURITY_ENFORCEMENT = "warn";
+      const asyncConfig = await getSecurityConfigAsync();
+      // Async config should NOT have the env override applied
+      expect(asyncConfig.enforcement).toBe("enforce"); // stored default
     });
   });
 

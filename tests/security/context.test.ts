@@ -260,8 +260,8 @@ describe("Security Context Module", () => {
       expect(events[0].tool).toBe("config_set");
     });
 
-    it("should handle warn mode tool checks", () => {
-      // Default is warn mode
+    it("should handle warn mode tool checks", async () => {
+      await saveSecurityConfig({ ...DEFAULT_SECURITY_CONFIG, enforcement: "warn" });
       const source = createInjectionSource("p2p");
       const ctx = new SecurityContext(source, "test");
 

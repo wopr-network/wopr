@@ -506,7 +506,7 @@ export interface SecurityConfig {
  * Default security configuration
  */
 export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
-  enforcement: "warn", // Start with warnings, not blocking
+  enforcement: "enforce", // Enforce security policies by default
   defaults: {
     minTrustLevel: "semi-trusted",
     capabilities: CAPABILITY_PROFILES["semi-trusted"],
