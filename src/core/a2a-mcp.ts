@@ -18,7 +18,6 @@ import {
   createHttpExecTools,
   createIdentityTools,
   createMemoryTools,
-  createNotifyTools,
   createSecurityTools,
   createSessionTools,
   mcpServerDirty,
@@ -65,7 +64,6 @@ export function listA2ATools(): string[] {
     "security_check",
     "http_fetch",
     "exec_command",
-    "notify",
     "capability_discover",
   ];
   return [...coreTools, ...pluginTools.keys()];
@@ -91,7 +89,6 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     ...createEventTools(sessionName),
     ...createSecurityTools(sessionName),
     ...createHttpExecTools(sessionName),
-    ...createNotifyTools(sessionName),
     ...createCapabilityDiscoveryTools(sessionName),
   ];
 

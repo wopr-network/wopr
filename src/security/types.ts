@@ -651,7 +651,6 @@ export const TOOL_CAPABILITY_MAP: Record<string, Capability> = {
   // Dangerous tools
   http_fetch: "inject.network",
   exec_command: "inject.exec",
-  notify: "event.emit",
 };
 
 /**
