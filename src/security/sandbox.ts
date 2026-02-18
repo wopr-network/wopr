@@ -1,30 +1,118 @@
 /**
  * WOPR Security Sandbox Integration
  *
- * Bridges the sandbox module with the security model.
+ * Bridges the sandbox plugin with the security model.
  * Uses Docker-based isolation for untrusted sessions.
+ *
+ * Sandbox logic now lives in @wopr-network/wopr-plugin-sandbox.
+ * This module accesses it via the plugin extension system.
  */
 
+import { spawn } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { createServer, connect as netConnect, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { logger } from "../logger.js";
-import {
-  execDocker,
-  execInContainer,
-  listRegistryEntries,
-  pruneAllSandboxes,
-  removeRegistryEntry,
-  removeSandboxContainer,
-  resolveSandboxContext,
-  type SandboxContext,
-} from "../sandbox/index.js";
+import { getPluginExtension } from "../plugins/extensions.js";
 import { getContext } from "./context.js";
 import type { SandboxConfig as LegacySandboxConfig } from "./types.js";
 
-// Re-export new sandbox types
-export type { SandboxContext } from "../sandbox/index.js";
+// ============================================================================
+// Sandbox Extension Interface (provided by wopr-plugin-sandbox)
+// ============================================================================
+
+/**
+ * Sandbox context — returned by the sandbox plugin.
+ */
+export interface SandboxContext {
+  enabled: boolean;
+  sessionKey: string;
+  workspaceDir: string;
+  workspaceAccess: "none" | "ro" | "rw";
+  containerName: string;
+  containerWorkdir: string;
+  docker: Record<string, unknown>;
+  tools: { allow?: string[]; deny?: string[] };
+}
+
+/**
+ * Extension API registered by wopr-plugin-sandbox.
+ */
+interface SandboxExtension {
+  resolveSandboxContext(params: { sessionName: string; trustLevel?: string }): Promise<SandboxContext | null>;
+  execInContainer(
+    containerName: string,
+    command: string,
+    opts?: { workdir?: string; env?: Record<string, string>; timeout?: number },
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  execDocker(
+    args: string[],
+    opts?: { allowFailure?: boolean },
+  ): Promise<{ stdout: string; stderr: string; code: number }>;
+  pruneAllSandboxes(): Promise<number>;
+  shouldSandbox(params: { sessionName: string; trustLevel?: string }): boolean;
+}
+
+/**
+ * Get the sandbox extension from the plugin system.
+ * Returns undefined if the sandbox plugin is not installed.
+ */
+function getSandboxExtension(): SandboxExtension | undefined {
+  return getPluginExtension<SandboxExtension>("sandbox");
+}
+
+// ============================================================================
+// Docker helper (for functions that need docker when plugin isn't loaded)
+// ============================================================================
+
+function execDockerDirect(
+  args: string[],
+  opts?: { allowFailure?: boolean },
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("docker", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("close", (code) => {
+      const exitCode = code ?? 0;
+      if (exitCode !== 0 && !opts?.allowFailure) {
+        reject(new Error(stderr.trim() || `docker ${args.join(" ")} failed`));
+        return;
+      }
+      resolve({ stdout, stderr, code: exitCode });
+    });
+    child.on("error", (err) => {
+      if (opts?.allowFailure) {
+        resolve({ stdout, stderr, code: 1 });
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
+
+/**
+ * Run a docker command, preferring the plugin extension if available.
+ */
+async function execDocker(
+  args: string[],
+  opts?: { allowFailure?: boolean },
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  const ext = getSandboxExtension();
+  if (ext) {
+    return ext.execDocker(args, opts);
+  }
+  return execDockerDirect(args, opts);
+}
 
 // ============================================================================
 // Security-Aware Sandbox Resolution
@@ -34,12 +122,17 @@ export type { SandboxContext } from "../sandbox/index.js";
  * Resolve sandbox context for a session based on its security context.
  */
 export async function getSandboxForSession(sessionName: string): Promise<SandboxContext | null> {
+  const ext = getSandboxExtension();
+  if (!ext) {
+    return null; // Sandbox plugin not installed
+  }
+
   // Get the security context for this session
   const ctx = getContext(sessionName);
   const trustLevel = ctx?.source?.trustLevel ?? "owner";
 
   // Resolve sandbox context based on trust level
-  return resolveSandboxContext({
+  return ext.resolveSandboxContext({
     sessionName,
     trustLevel,
   });
@@ -58,12 +151,17 @@ export async function execInSandbox(
     env?: Record<string, string>;
   },
 ): Promise<{ stdout: string; stderr: string; exitCode: number } | null> {
+  const ext = getSandboxExtension();
+  if (!ext) {
+    return null;
+  }
+
   const sandbox = await getSandboxForSession(sessionName);
   if (!sandbox) {
     return null; // Not sandboxed
   }
 
-  return execInContainer(sandbox.containerName, command, {
+  return ext.execInContainer(sandbox.containerName, command, {
     workdir: options?.workDir ?? sandbox.containerWorkdir,
     env: options?.env,
     timeout: options?.timeout,
@@ -79,7 +177,7 @@ export async function isSessionSandboxed(sessionName: string): Promise<boolean> 
 }
 
 // ============================================================================
-// Legacy API (for backwards compatibility with existing security/sandbox.ts)
+// Legacy API (for backwards compatibility)
 // ============================================================================
 
 /**
@@ -99,9 +197,8 @@ export async function isDockerAvailable(): Promise<boolean> {
  */
 export async function isSandboxImageAvailable(): Promise<boolean> {
   try {
-    const { listRegistryEntries } = await import("../sandbox/index.js");
-    const entries = await listRegistryEntries();
-    return entries.length > 0;
+    const result = await execDocker(["image", "inspect", "wopr-sandbox:bookworm-slim"], { allowFailure: true });
+    return result.code === 0;
   } catch {
     return false;
   }
@@ -111,8 +208,15 @@ export async function isSandboxImageAvailable(): Promise<boolean> {
  * Build the sandbox Docker image
  */
 export async function buildSandboxImage(_force = false): Promise<void> {
-  const { ensureDockerImage, DEFAULT_SANDBOX_IMAGE } = await import("../sandbox/index.js");
-  await ensureDockerImage(DEFAULT_SANDBOX_IMAGE);
+  const image = "wopr-sandbox:bookworm-slim";
+  // Check if image already exists
+  const exists = await execDocker(["image", "inspect", image], { allowFailure: true });
+  if (exists.code === 0) {
+    return;
+  }
+  logger.info("[sandbox] Pulling debian:bookworm-slim as base image");
+  await execDocker(["pull", "debian:bookworm-slim"]);
+  await execDocker(["tag", "debian:bookworm-slim", image]);
 }
 
 /**
@@ -139,11 +243,13 @@ export async function createSandbox(
  * Destroy a sandbox (legacy API)
  */
 export async function destroySandbox(sessionName: string): Promise<void> {
-  const entries = await listRegistryEntries();
-  const entry = entries.find((e) => e.sessionKey === sessionName);
-  if (entry) {
-    await removeSandboxContainer(entry.containerName);
-    await removeRegistryEntry(entry.containerName);
+  const result = await execDocker(
+    ["ps", "-a", "--filter", `label=wopr.sessionKey=${sessionName}`, "--format", "{{.Names}}"],
+    { allowFailure: true },
+  );
+  if (result.code === 0 && result.stdout.trim()) {
+    const containerName = result.stdout.trim().split("\n")[0];
+    await execDocker(["rm", "-f", containerName], { allowFailure: true });
   }
 }
 
@@ -175,21 +281,54 @@ export async function listSandboxes(): Promise<
     status: string;
   }>
 > {
-  const entries = await listRegistryEntries();
-  return entries.map((e) => ({
-    containerId: e.containerName,
-    sessionName: e.sessionKey,
-    createdAt: e.createdAtMs,
-    status: "running",
-  }));
+  const result = await execDocker(
+    [
+      "ps",
+      "-a",
+      "--filter",
+      "label=wopr.sandbox=1",
+      "--format",
+      '{{.Names}}\t{{.Label "wopr.sessionKey"}}\t{{.Label "wopr.createdAtMs"}}',
+    ],
+    { allowFailure: true },
+  );
+  if (result.code !== 0 || !result.stdout.trim()) {
+    return [];
+  }
+  return result.stdout
+    .trim()
+    .split("\n")
+    .map((line) => {
+      const [containerId, sessionKey, createdAtStr] = line.split("\t");
+      return {
+        containerId: containerId || "",
+        sessionName: sessionKey || "",
+        createdAt: Number(createdAtStr) || Date.now(),
+        status: "running",
+      };
+    });
 }
 
 /**
  * Cleanup all sandboxes
  */
 export async function cleanupAllSandboxes(): Promise<void> {
-  logger.info("[sandbox] Cleaning up all sandboxes");
-  await pruneAllSandboxes();
+  const ext = getSandboxExtension();
+  if (ext) {
+    logger.info("[sandbox] Cleaning up all sandboxes via plugin");
+    await ext.pruneAllSandboxes();
+    return;
+  }
+  // Fallback: use docker directly
+  logger.info("[sandbox] Cleaning up all sandboxes via docker");
+  const result = await execDocker(["ps", "-a", "--filter", "label=wopr.sandbox=1", "--format", "{{.Names}}"], {
+    allowFailure: true,
+  });
+  if (result.code === 0 && result.stdout.trim()) {
+    for (const name of result.stdout.trim().split("\n")) {
+      await execDocker(["rm", "-f", name], { allowFailure: true });
+    }
+  }
 }
 
 // ============================================================================
@@ -200,35 +339,29 @@ export async function cleanupAllSandboxes(): Promise<void> {
  * Generate seccomp profile for sandboxing
  */
 export function generateSeccompProfile(): string {
-  // Minimal seccomp profile that blocks dangerous syscalls
   const profile = {
     defaultAction: "SCMP_ACT_ALLOW",
     syscalls: [
-      // Block process creation (anti-fork bomb)
       {
         names: ["clone", "clone3", "fork", "vfork"],
         action: "SCMP_ACT_ERRNO",
         args: [],
       },
-      // Block network operations (prevent exfiltration)
       {
         names: ["socket", "connect", "bind", "listen", "accept", "accept4"],
         action: "SCMP_ACT_ERRNO",
         args: [],
       },
-      // Block mounting (prevent escape)
       {
         names: ["mount", "umount", "umount2", "pivot_root"],
         action: "SCMP_ACT_ERRNO",
         args: [],
       },
-      // Block kernel module loading
       {
         names: ["init_module", "finit_module", "delete_module"],
         action: "SCMP_ACT_ERRNO",
         args: [],
       },
-      // Block dangerous system calls
       {
         names: ["reboot", "sethostname", "setdomainname", "kexec_load", "kexec_file_load"],
         action: "SCMP_ACT_ERRNO",
@@ -249,71 +382,45 @@ export function generateSeccompProfile(): string {
  * Call close() to tear down the bridge and clean up resources.
  */
 export interface McpSocketBridgeHandle {
-  /** Host-side directory containing the socket */
   hostDir: string;
-  /** Path to the socket file on the host */
   hostSocketPath: string;
-  /** Path where the socket is mounted inside the container */
   containerSocketPath: string;
-  /** The container this bridge is attached to */
   containerName: string;
-  /** Close the bridge and clean up */
   close: () => void;
 }
 
-/** Active bridges keyed by session name */
 const activeBridges = new Map<string, McpSocketBridgeHandle>();
 
-/** Rate limiting: track connection timestamps per bridge */
 const connectionTimestamps = new Map<string, number[]>();
 const MAX_CONNECTIONS_PER_SECOND = 10;
 
 /**
  * Create an MCP socket bridge for a sandboxed session.
- *
- * Creates a Unix domain socket on the host and bind-mounts the socket
- * directory into the running container. Processes inside the container
- * can connect to the socket to communicate with the host-side MCP server.
- *
- * Each incoming connection on the socket is proxied to a new connection
- * on the target MCP socket path (the upstream MCP server).
- *
- * @param sessionName - The session to bridge
- * @param socketPath  - The upstream MCP server socket path to proxy to
- * @returns A handle for managing the bridge lifecycle
  */
 export async function createMcpSocketBridge(sessionName: string, socketPath: string): Promise<McpSocketBridgeHandle> {
-  // Check if a bridge already exists for this session
   const existing = activeBridges.get(sessionName);
   if (existing) {
     logger.warn(`[sandbox] MCP bridge already exists for session ${sessionName}, closing old bridge`);
     existing.close();
   }
 
-  // Resolve the sandbox context to get the container name
   const sandbox = await getSandboxForSession(sessionName);
   if (!sandbox) {
     throw new Error(`Session ${sessionName} is not sandboxed — cannot create MCP bridge`);
   }
 
-  // Create a host-side directory for the bridge socket
   const hostDir = join(tmpdir(), `wopr-mcp-bridge-${sandbox.containerName}`);
   mkdirSync(hostDir, { recursive: true });
   const hostSocketFile = join(hostDir, "mcp.sock");
 
-  // Remove stale socket file from a previous process that may have crashed
   rmSync(hostSocketFile, { force: true });
 
-  // Container-side mount point
   const containerSocketDir = "/run/wopr-mcp";
   const containerSocketPath = `${containerSocketDir}/mcp.sock`;
 
-  // Track active client connections for cleanup
   const clients = new Set<Socket>();
 
-  // Create the Unix domain socket server on the host
   const server: Server = createServer((clientConn: Socket) => {
-    // Rate limiting: reject connections that exceed the threshold
     const now = Date.now();
     const timestamps = connectionTimestamps.get(sessionName) ?? [];
     const recentTimestamps = timestamps.filter((t) => now - t < 1000);
@@ -328,16 +435,13 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
     logger.debug(`[sandbox] MCP bridge: new connection for session ${sessionName}`);
     clients.add(clientConn);
 
-    // Connect to the upstream MCP server socket
     const upstream: Socket = netConnect(socketPath, () => {
       logger.debug(`[sandbox] MCP bridge: connected to upstream MCP at ${socketPath}`);
     });
 
-    // Bidirectional proxy
     clientConn.pipe(upstream);
     upstream.pipe(clientConn);
 
-    // Error handling — log at warn level so errors are visible
     clientConn.on("error", (err) => {
       logger.warn(`[sandbox] MCP bridge client error: ${err.message}`);
       clients.delete(clientConn);
@@ -349,7 +453,6 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
       clientConn.destroy();
     });
 
-    // Cleanup on close — ensure both sides are torn down (with idempotency guards)
     const cleanup = () => {
       clients.delete(clientConn);
       if (!clientConn.destroyed) clientConn.destroy();
@@ -359,12 +462,10 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
     upstream.on("close", cleanup);
   });
 
-  // Listen on the Unix socket
   await new Promise<void>((resolve, reject) => {
     server.on("error", reject);
     server.listen(hostSocketFile, () => {
       server.removeListener("error", reject);
-      // Add permanent error handler so unhandled server errors don't crash the process
       server.on("error", (err) => {
         logger.warn(`[sandbox] MCP bridge server error for session ${sessionName}: ${err.message}`);
       });
@@ -374,26 +475,10 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
 
   logger.info(`[sandbox] MCP bridge listening at ${hostSocketFile} for session ${sessionName}`);
 
-  // Bind-mount the socket directory into the running container.
-  // We use `docker exec mkdir` + `docker cp` to make the socket accessible.
-  // Note: `docker cp` copies files, but for Unix sockets we need a volume mount
-  // on the running container. Since the container is already running, we use
-  // `docker exec` to create a socat relay from a named pipe instead.
-  //
-  // The most reliable approach for already-running containers: stop, add mount, restart.
-  // But that's disruptive. Instead, we'll record the mount info so that future container
-  // creations include it, and for the current container we'll exec a background relay.
   try {
-    // Create the socket directory inside the container
     await execDocker(["exec", sandbox.containerName, "mkdir", "-p", containerSocketDir]);
-
-    // Copy the host socket directory into the container
-    // docker cp copies the socket file itself
     await execDocker(["cp", hostSocketFile, `${sandbox.containerName}:${containerSocketPath}`]);
   } catch (err: unknown) {
-    // If docker cp fails for a socket (some Docker versions don't support it),
-    // log and continue — the bridge is still listening on the host side and can
-    // be accessed by future containers that mount the directory as a volume.
     const message = err instanceof Error ? err.message : String(err);
     logger.warn(
       `[sandbox] Could not copy socket into container ${sandbox.containerName}: ${message}. ` +
@@ -401,7 +486,6 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
     );
   }
 
-  // Build the handle
   let closed = false;
   const handle: McpSocketBridgeHandle = {
     hostDir,
@@ -412,14 +496,11 @@ export async function createMcpSocketBridge(sessionName: string, socketPath: str
       if (closed) return;
       closed = true;
       logger.info(`[sandbox] Closing MCP bridge for session ${sessionName}`);
-      // Close all client connections
       for (const client of clients) {
         client.destroy();
       }
       clients.clear();
-      // Close the server
       server.close();
-      // Clean up the host socket directory
       try {
         rmSync(hostDir, { recursive: true, force: true });
       } catch {
@@ -454,14 +535,12 @@ export function getMcpSocketBridge(sessionName: string): McpSocketBridgeHandle |
 
 /**
  * Get the host directory path for a bridge socket mount.
- * Useful when creating new containers to include the mount from the start.
  */
 export function getMcpBridgeMountArgs(sessionName: string): string[] {
   const handle = activeBridges.get(sessionName);
   if (!handle) {
     return [];
   }
-  // Returns Docker -v args to mount the bridge socket directory
   return ["-v", `${handle.hostDir}:/run/wopr-mcp:ro`];
 }
 
@@ -472,7 +551,6 @@ async function shutdownCleanup(): Promise<void> {
     process.exit(1);
   }, 10000);
   try {
-    // Close all active MCP bridges
     for (const [, handle] of activeBridges) {
       try {
         handle.close();

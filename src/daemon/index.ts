@@ -209,14 +209,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     startupWarnings.push(msg);
   }
 
-  // Initialize sandbox storage and migrate from JSON
-  daemonLog("Initializing sandbox storage...");
-  const { initSandboxStorage } = await import("../sandbox/sandbox-repository.js");
-  const { migrateSandboxRegistryToSql } = await import("../sandbox/sandbox-migrate.js");
-  await initSandboxStorage();
-  await migrateSandboxRegistryToSql();
-  daemonLog("Sandbox storage initialized");
-
   // Initialize registries storage and migrate from JSON
   daemonLog("Initializing registries storage...");
   const { initRegistriesStorage } = await import("../core/registries-repository.js");
