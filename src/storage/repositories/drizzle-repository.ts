@@ -118,7 +118,7 @@ class QueryBuilderImpl<T> implements QueryBuilder<T> {
     // Build query with optional SQL-level field projection
     const defaultQuery = this.db.select().from(this.table);
     let query: typeof defaultQuery;
-    if (this.selectedFields !== null) {
+    if (this.selectedFields !== null && this.selectedFields.length > 0) {
       const sel: Record<string, SQLiteColumn> = {};
       for (const f of this.selectedFields) {
         if (!this.columns[f]) throw new Error(`Unknown column: ${f}`);
@@ -207,6 +207,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
   private columns: Record<string, SQLiteColumn>;
   private jsonColumns: Set<string>;
   private booleanColumns: Set<string>;
+  private inTransaction = false;
 
   constructor(
     private db: DrizzleDB,
@@ -454,10 +455,14 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
 
   async transaction<R>(fn: (repo: Repository<T>) => Promise<R>): Promise<R> {
     if (!this.sqliteRaw) {
-      return fn(this as unknown as Repository<T>);
+      throw new Error("transaction() requires a raw SQLite connection (sqliteRaw was not provided)");
+    }
+    if (this.inTransaction) {
+      throw new Error("Nested transactions are not supported; a transaction is already active");
     }
     const raw = this.sqliteRaw as { exec: (sql: string) => void };
     raw.exec("BEGIN");
+    this.inTransaction = true;
     try {
       const result = await fn(this as unknown as Repository<T>);
       raw.exec("COMMIT");
@@ -469,6 +474,8 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
         // ROLLBACK failed — original error takes priority
       }
       throw error;
+    } finally {
+      this.inTransaction = false;
     }
   }
 
