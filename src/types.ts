@@ -862,9 +862,9 @@ export interface WOPRPluginContext {
   // Main WOPR config (read-only access)
   getMainConfig(key?: string): unknown;
 
-  // Model providers - plugins register AI model providers
-  registerProvider(provider: import("./types/provider.js").ModelProvider): void;
-  unregisterProvider(id: string): void;
+  // LLM providers — credential management, health checking, and dispatch
+  registerLLMProvider(provider: import("./types/provider.js").ModelProvider): void;
+  unregisterLLMProvider(id: string): void;
   getProvider(id: string): import("./types/provider.js").ModelProvider | undefined;
 
   // Config schemas - plugins register their configuration UI schema
