@@ -36,6 +36,8 @@ describe("discoverSessionMemoryDirs", () => {
       rmSync(TEST_SESSIONS_DIR, { recursive: true, force: true });
     }
     mkdirSync(TEST_SESSIONS_DIR, { recursive: true });
+    // Reset module cache to ensure fresh imports
+    vi.resetModules();
   });
 
   it("uses SESSIONS_DIR from paths module, not hardcoded /data/sessions", async () => {
