@@ -85,7 +85,7 @@ export function createSecurityTools(sessionName: string): unknown[] {
               {
                 type: "text",
                 text: JSON.stringify(
-                  { allowed: true, reason: "No security context (legacy mode allows all)" },
+                  { allowed: true, reason: "No security context available" },
                   null,
                   2,
                 ),

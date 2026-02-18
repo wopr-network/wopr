@@ -191,6 +191,16 @@ export function createMemoryTools(sessionName: string): unknown[] {
           };
         const temporal = parsedTemporal ?? undefined;
 
+        const ctx = getContext(sessionName);
+        if (!ctx) {
+          logger.warn(
+            `[memory_search] No security context for session ${sessionName}, defaulting to untrusted indexable scope`,
+          );
+        }
+        const trustLevel = ctx?.source?.trustLevel ?? "untrusted";
+        const secConfig = getSecurityConfig();
+        const indexablePatterns = getSessionIndexable(secConfig, sessionName, trustLevel);
+
         try {
           const hookPayload = { query, maxResults, minScore, temporal, sessionName, results: null as unknown[] | null };
           await eventBus.emit("memory:search", hookPayload);
@@ -202,15 +212,6 @@ export function createMemoryTools(sessionName: string): unknown[] {
             // No plugin handled memory:search — fall through to grep fallback
             throw new Error("No memory plugin available");
           }
-          const ctx = getContext(sessionName);
-          if (!ctx) {
-            logger.warn(
-              `[memory_search] No security context for session ${sessionName}, defaulting to untrusted indexable scope`,
-            );
-          }
-          const trustLevel = ctx?.source?.trustLevel ?? "untrusted";
-          const secConfig = getSecurityConfig();
-          const indexablePatterns = getSessionIndexable(secConfig, sessionName, trustLevel);
           results = results
             .filter((r: unknown) => {
               const result = r as Record<string, unknown>;
@@ -273,7 +274,12 @@ export function createMemoryTools(sessionName: string): unknown[] {
               }
             } catch {}
           }
-          if (filesToSearch.length === 0) return { content: [{ type: "text", text: "No memory files found." }] };
+          const filteredFilesToSearch = filesToSearch.filter(({ source }) => {
+            const sessionMatch = source.match(/^sessions\/(.+?)\/memory\//);
+            if (!sessionMatch) return true;
+            return canIndexSession(sessionName, sessionMatch[1], indexablePatterns);
+          });
+          if (filteredFilesToSearch.length === 0) return { content: [{ type: "text", text: "No memory files found." }] };
           const queryTerms = query
             .toLowerCase()
             .split(/\s+/)
@@ -285,7 +291,7 @@ export function createMemoryTools(sessionName: string): unknown[] {
             snippet: string;
             score: number;
           }> = [];
-          for (const { path: filePath, source } of filesToSearch) {
+          for (const { path: filePath, source } of filteredFilesToSearch) {
             const content = readFileSync(filePath, "utf-8");
             const lines = content.split("\n");
             const chunkSize = 5;
