@@ -381,8 +381,8 @@ describe("Security Context Module", () => {
       expect(ctx.canForward()).toBe(true);
     });
 
-    it("should not canForward without cross.inject", () => {
-      setSecurityConfig({
+    it("should not canForward without cross.inject", async () => {
+      await setSecurityConfig({
         gateways: {
           sessions: ["gw-session"],
         },
