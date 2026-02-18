@@ -167,7 +167,10 @@ export async function execInSandbox(
   }
 
   const ctx = getContext(sessionName);
-  const trustLevel = ctx?.source?.trustLevel ?? "owner";
+  if (!ctx) {
+    logger.warn(`[sandbox] execInSandbox: missing context for session ${sessionName}, defaulting to untrusted`);
+  }
+  const trustLevel = ctx?.source?.trustLevel ?? "untrusted";
   const sandbox = await ext.resolveSandboxContext({ sessionName, trustLevel });
   if (!sandbox) {
     return null; // Not sandboxed

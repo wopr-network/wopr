@@ -31,7 +31,7 @@ vi.mock("../../src/plugins/extensions.js", () => ({
 // Import after mocks
 const { getContext } = await import("../../src/security/context.js");
 const { getPluginExtension } = await import("../../src/plugins/extensions.js");
-const { getSandboxForSession } = await import("../../src/security/sandbox.js");
+const { getSandboxForSession, execInSandbox } = await import("../../src/security/sandbox.js");
 const { getSessionIndexable, DEFAULT_SECURITY_CONFIG } = await import("../../src/security/types.js");
 
 describe("WOP-610: fail-closed security defaults", () => {
@@ -108,6 +108,58 @@ describe("WOP-610: fail-closed security defaults", () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining("missing-ctx-session"),
       );
+    });
+  });
+
+  describe("execInSandbox — sandbox trust level", () => {
+    it("defaults to untrusted when no security context exists", async () => {
+      // Arrange: no context, but sandbox plugin is installed with a sandbox ready
+      vi.mocked(getContext).mockReturnValue(undefined);
+      const mockExecInContainer = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+      vi.mocked(getPluginExtension).mockReturnValue({
+        resolveSandboxContext: vi.fn().mockResolvedValue({ containerName: "test-container", containerWorkdir: "/workspace" }),
+        execInContainer: mockExecInContainer,
+      } as unknown as ReturnType<typeof getPluginExtension>);
+
+      // Act
+      await execInSandbox("test-session", "echo hello");
+
+      // Assert: must NOT pass "owner" — must pass "untrusted"
+      const { getPluginExtension: ext } = await import("../../src/plugins/extensions.js");
+      const mockExt = vi.mocked(ext).mock.results[0]?.value as { resolveSandboxContext: ReturnType<typeof vi.fn> };
+      expect(mockExt.resolveSandboxContext).toHaveBeenCalledWith({
+        sessionName: "test-session",
+        trustLevel: "untrusted",
+      });
+    });
+
+    it("logs a warning when context is missing", async () => {
+      // Arrange: no context
+      vi.mocked(getContext).mockReturnValue(undefined);
+      vi.mocked(getPluginExtension).mockReturnValue({
+        resolveSandboxContext: vi.fn().mockResolvedValue(null),
+        execInContainer: vi.fn(),
+      } as unknown as ReturnType<typeof getPluginExtension>);
+      const { logger } = await import("../../src/logger.js");
+
+      // Act
+      await execInSandbox("missing-ctx-session", "echo hello");
+
+      // Assert: warning was logged
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("missing-ctx-session"),
+      );
+    });
+
+    it("returns null when sandbox plugin is not installed", async () => {
+      // Arrange: no sandbox extension
+      vi.mocked(getPluginExtension).mockReturnValue(undefined);
+
+      // Act
+      const result = await execInSandbox("test-session", "echo hello");
+
+      // Assert
+      expect(result).toBeNull();
     });
   });
 
