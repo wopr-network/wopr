@@ -29,8 +29,17 @@ async function checkSandboxImageExists(): Promise<boolean> {
 
 async function buildSandboxImage(): Promise<boolean> {
   try {
-    const { ensureDockerImage, DEFAULT_SANDBOX_IMAGE } = await import("../../../sandbox/index.js");
-    await ensureDockerImage(DEFAULT_SANDBOX_IMAGE);
+    const { execSync } = await import("node:child_process");
+    const image = "wopr-sandbox:bookworm-slim";
+    // Check if image already exists
+    try {
+      execSync(`docker image inspect ${image}`, { stdio: "ignore" });
+      return true;
+    } catch {
+      // Image doesn't exist, pull and tag
+    }
+    execSync("docker pull debian:bookworm-slim", { stdio: "ignore" });
+    execSync(`docker tag debian:bookworm-slim ${image}`, { stdio: "ignore" });
     return true;
   } catch {
     return false;
