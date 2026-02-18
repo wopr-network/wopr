@@ -5,6 +5,35 @@ All notable changes to WOPR will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Migration Notes
+
+### `http_fetch` and `exec_command` Extracted to Plugin (WOP-567)
+
+The built-in `http_fetch` and `exec_command` tools have been **removed from the WOPR core** and
+extracted to the standalone [`@wopr-network/plugin-tools`](https://github.com/wopr-network/wopr-plugin-tools) package.
+
+**Upgrade steps:**
+
+```bash
+npm install @wopr-network/plugin-tools
+```
+
+Then register the plugin in your WOPR config:
+
+```json
+{
+  "plugins": ["@wopr-network/plugin-tools"]
+}
+```
+
+If you do not install `@wopr-network/plugin-tools`, any agent tool calls to `http_fetch` or
+`exec_command` will fail with an unknown-tool error.
+
+See the [plugin-tools README](https://github.com/wopr-network/wopr-plugin-tools#readme) for full
+documentation and configuration options.
+
+---
+
 ## [1.1.0](https://github.com/wopr-network/wopr/compare/wopr-v1.0.0...wopr-v1.1.0) (2026-02-17)
 
 
