@@ -8,6 +8,7 @@
 import { join } from "node:path";
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
+import { resolveAllProviders, resolveCapability } from "../core/capability-resolver.js";
 import {
   getChannelProvider as getChannelProviderCore,
   getChannelProviders as getChannelProvidersCore,
@@ -272,6 +273,14 @@ export function createPluginContext(
 
     hasCapability(capability: AdapterCapability): boolean {
       return getCapabilityRegistry().hasProvider(capability);
+    },
+
+    resolveCapability(capability: AdapterCapability, options?: { preferredProvider?: string; healthyOnly?: boolean }) {
+      return resolveCapability(capability, options);
+    },
+
+    resolveAllProviders(capability: AdapterCapability) {
+      return resolveAllProviders(capability);
     },
 
     registerHealthProbe(capability: string, providerId: string, probe: () => Promise<boolean>): void {

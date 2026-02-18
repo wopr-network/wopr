@@ -915,6 +915,21 @@ export interface WOPRPluginContext {
   ): import("./plugin-types/manifest.js").ProviderOption[];
   hasCapability(capability: import("./plugin-types/manifest.js").AdapterCapability): boolean;
 
+  resolveCapability(
+    capability: import("./plugin-types/manifest.js").AdapterCapability,
+    options?: { preferredProvider?: string; healthyOnly?: boolean },
+  ): {
+    capability: import("./plugin-types/manifest.js").AdapterCapability;
+    provider: import("./plugin-types/manifest.js").ProviderOption;
+    healthy: boolean;
+  } | null;
+
+  resolveAllProviders(capability: import("./plugin-types/manifest.js").AdapterCapability): Array<{
+    capability: import("./plugin-types/manifest.js").AdapterCapability;
+    provider: import("./plugin-types/manifest.js").ProviderOption;
+    healthy: boolean;
+  }>;
+
   /** Register a health probe for a capability provider this plugin provides */
   registerHealthProbe?(capability: string, providerId: string, probe: () => Promise<boolean>): void;
 }
