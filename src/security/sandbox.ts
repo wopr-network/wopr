@@ -263,8 +263,14 @@ export async function destroySandbox(sessionName: string): Promise<void> {
     { allowFailure: true },
   );
   if (result.code === 0 && result.stdout.trim()) {
-    const containerName = result.stdout.trim().split("\n")[0];
-    await execDocker(["rm", "-f", containerName], { allowFailure: true });
+    const containerNames = result.stdout
+      .trim()
+      .split("\n")
+      .filter((name) => name.length > 0);
+    for (const name of containerNames) {
+      logger.debug(`[sandbox] Removing container ${name} for session ${sessionName}`);
+      await execDocker(["rm", "-f", name], { allowFailure: true });
+    }
   }
 }
 
