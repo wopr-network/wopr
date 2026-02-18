@@ -12,11 +12,7 @@ import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
 import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
 import { logger } from "../logger.js";
-import type {
-  InstallMethod as ManifestInstallMethod,
-  PluginManifest,
-  PluginRequirements,
-} from "../plugin-types/manifest.js";
+import type { InstallMethod, PluginManifest, PluginRequirements } from "../plugin-types/manifest.js";
 import {
   checkNodeRequirement,
   checkOsRequirement,
@@ -25,7 +21,6 @@ import {
   formatMissingRequirements,
 } from "../plugins/requirements.js";
 import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContext } from "../types.js";
-import type { InstallMethod, VoicePluginRequirements } from "../voice/types.js";
 import { createPluginContext } from "./context-factory.js";
 import { getInstalledPlugins } from "./installation.js";
 import { configSchemas, loadedPlugins, pluginManifests, pluginStates } from "./state.js";
@@ -83,28 +78,27 @@ export async function loadPlugin(
   if (!options.skipRequirementsCheck) {
     // Prefer manifest requirements, fall back to legacy pkg.wopr.plugin.requires
     const manifestRequires: PluginRequirements | undefined = manifest?.requires;
-    const legacyMeta = (pkg.wopr as { plugin?: { requires?: VoicePluginRequirements; install?: InstallMethod[] } })
-      ?.plugin;
-    const legacyRequires: VoicePluginRequirements | undefined = legacyMeta?.requires;
+    const legacyMeta = (pkg.wopr as { plugin?: { requires?: PluginRequirements; install?: InstallMethod[] } })?.plugin;
+    const legacyRequires: PluginRequirements | undefined = legacyMeta?.requires;
     const requires = manifestRequires ?? legacyRequires;
 
-    const manifestInstall: ManifestInstallMethod[] | undefined = manifest?.install;
+    const manifestInstall: InstallMethod[] | undefined = manifest?.install;
     const legacyInstall: InstallMethod[] | undefined = legacyMeta?.install;
     const installMethods = manifestInstall ?? legacyInstall;
 
     if (requires) {
-      // Check OS constraint before anything else (manifest-only field)
-      if ("os" in requires && !checkOsRequirement((requires as PluginRequirements).os)) {
-        const allowed = (requires as PluginRequirements).os?.join(", ") ?? "unknown";
+      // Check OS constraint before anything else
+      if (requires.os && !checkOsRequirement(requires.os)) {
+        const allowed = requires.os.join(", ");
         throw new Error(
           `Plugin ${installed.name} does not support this platform (${process.platform}). Supported: ${allowed}`,
         );
       }
 
-      // Check Node.js version constraint (manifest-only field)
-      if ("node" in requires && !checkNodeRequirement((requires as PluginRequirements).node)) {
+      // Check Node.js version constraint
+      if (requires.node && !checkNodeRequirement(requires.node)) {
         throw new Error(
-          `Plugin ${installed.name} requires Node.js ${(requires as PluginRequirements).node} (running ${process.versions.node})`,
+          `Plugin ${installed.name} requires Node.js ${requires.node} (running ${process.versions.node})`,
         );
       }
 

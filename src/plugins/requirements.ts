@@ -10,8 +10,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 import { logger } from "../logger.js";
-import type { InstallMethod as ManifestInstallMethod, PluginRequirements } from "../plugin-types/manifest.js";
-import type { InstallMethod, VoicePluginRequirements } from "../voice/types.js";
+import type { InstallMethod, PluginRequirements } from "../plugin-types/manifest.js";
 
 // =============================================================================
 // Requirement Check Results
@@ -238,10 +237,9 @@ export function checkNodeRequirement(range: string | undefined): boolean {
 
 /**
  * Check all requirements for a plugin.
- * Accepts both legacy VoicePluginRequirements and manifest PluginRequirements.
  */
 export async function checkRequirements(
-  requires: VoicePluginRequirements | PluginRequirements | undefined,
+  requires: PluginRequirements | undefined,
   config?: Record<string, unknown>,
 ): Promise<RequirementCheckResult> {
   const result: RequirementCheckResult = {
@@ -461,11 +459,10 @@ export interface AutoInstallOptions {
 
 /**
  * Check requirements and optionally auto-install missing dependencies.
- * Accepts both legacy InstallMethod[] and manifest InstallMethod[].
  */
 export async function ensureRequirements(
-  requires: VoicePluginRequirements | PluginRequirements | undefined,
-  installMethods: InstallMethod[] | ManifestInstallMethod[] | undefined,
+  requires: PluginRequirements | undefined,
+  installMethods: InstallMethod[] | undefined,
   options: AutoInstallOptions = {},
 ): Promise<{ satisfied: boolean; installed: InstallResult[]; errors: string[] }> {
   const check = await checkRequirements(requires);

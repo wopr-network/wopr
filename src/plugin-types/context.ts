@@ -123,27 +123,11 @@ export interface PluginLogger {
 }
 
 /**
- * STT provider interface (minimal, for context typing).
- * Full definition lives in voice/types.ts.
- */
-export interface STTProviderRef {
-  readonly metadata: { name: string; type: "stt" };
-}
-
-/**
- * TTS provider interface (minimal, for context typing).
- * Full definition lives in voice/types.ts.
- */
-export interface TTSProviderRef {
-  readonly metadata: { name: string; type: "tts" };
-}
-
-/**
  * The full plugin context API.
  *
  * This is the canonical interface that all plugins receive during init().
  * It provides access to sessions, events, hooks, channels, config, UI
- * extensions, voice, A2A tools, and more.
+ * extensions, A2A tools, and more.
  */
 export interface WOPRPluginContext {
   // Inject into local session, get response (with optional streaming)
@@ -218,13 +202,6 @@ export interface WOPRPluginContext {
   unregisterExtension(name: string): void;
   getExtension<T = unknown>(name: string): T | undefined;
   listExtensions(): string[];
-
-  // Voice providers
-  registerSTTProvider(provider: unknown): void;
-  registerTTSProvider(provider: unknown): void;
-  getSTT(): unknown;
-  getTTS(): unknown;
-  hasVoice(): { stt: boolean; tts: boolean };
 
   // Channel providers
   registerChannelProvider(provider: ChannelProvider): void;

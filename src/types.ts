@@ -880,14 +880,6 @@ export interface WOPRPluginContext {
   getExtension<T = unknown>(name: string): T | undefined;
   listExtensions(): string[];
 
-  // Voice providers - STT and TTS plugins register providers
-  // Channel plugins discover via getSTT()/getTTS() or getExtension('stt'/'tts')
-  registerSTTProvider(provider: import("./voice/types.js").STTProvider): void;
-  registerTTSProvider(provider: import("./voice/types.js").TTSProvider): void;
-  getSTT(): import("./voice/types.js").STTProvider | null;
-  getTTS(): import("./voice/types.js").TTSProvider | null;
-  hasVoice(): { stt: boolean; tts: boolean };
-
   // Channel providers - channel plugins (Discord, Slack, etc.) register themselves
   // so other plugins (like P2P) can add commands and message parsers.
   // Example: P2P plugin registers /friend command on all channels
