@@ -16,3 +16,4 @@ web/node_modules/
 .pnpm-store
 bots/*/.env
 docker-compose.generated.yml
+.worktrees/
