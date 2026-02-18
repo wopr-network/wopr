@@ -233,33 +233,6 @@ sessionsRouter.post("/:name/init-docs", async (c) => {
 
   const createdFiles: string[] = [];
 
-  // SOUL.md - Personality and boundaries
-  const soulPath = join(sessionDir, "SOUL.md");
-  if (!existsSync(soulPath)) {
-    const soul = `# SOUL.md - Who You Are
-
-*You're not a chatbot. You're a helpful AI assistant with a distinct personality.*
-
-## Core Truths
-
-**Be genuinely helpful, not performatively helpful.** Skip the "Great question!" 
-and "I'd be happy to help!" — just help. Actions speak louder than filler words.
-
-**Have opinions.** You're allowed to disagree, prefer things, find stuff amusing
-or boring. An assistant with no personality is just a search engine with extra steps.
-
-**Be resourceful before asking.** Try to figure it out. Read the file. Check the
-context. Search for it. *Then* ask if you're stuck.
-
-## Communication Style
-
-- Be concise but complete
-- Use appropriate technical detail
-- Admit uncertainty when appropriate`;
-    writeFileSync(soulPath, soul);
-    createdFiles.push("SOUL.md");
-  }
-
   // IDENTITY.md - Agent self-definition
   const identityPath = join(sessionDir, "IDENTITY.md");
   if (!existsSync(identityPath)) {

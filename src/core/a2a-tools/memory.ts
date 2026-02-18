@@ -50,7 +50,7 @@ export function createMemoryTools(sessionName: string): unknown[] {
 
         if (!file) {
           const files: string[] = listAllMemoryFiles(sessionDir);
-          for (const f of ["SOUL.md", "IDENTITY.md", "MEMORY.md", "USER.md"]) {
+          for (const f of ["IDENTITY.md", "MEMORY.md", "USER.md"]) {
             const resolved = resolveRootFile(sessionDir, f);
             if (resolved.exists && !files.includes(f)) files.push(f);
           }
@@ -93,7 +93,7 @@ export function createMemoryTools(sessionName: string): unknown[] {
           return { content: [{ type: "text", text: contents }] };
         }
 
-        const rootFiles = ["SOUL.md", "IDENTITY.md", "MEMORY.md", "USER.md", "AGENTS.md"];
+        const rootFiles = ["IDENTITY.md", "MEMORY.md", "USER.md", "AGENTS.md"];
         let filePath: string;
         if (rootFiles.includes(file)) {
           const resolved = resolveRootFile(sessionDir, file);
@@ -151,7 +151,7 @@ export function createMemoryTools(sessionName: string): unknown[] {
           if (!existsSync(memoryDir)) mkdirSync(memoryDir, { recursive: true });
           let filename = file;
           if (file === "today") filename = `${new Date().toISOString().split("T")[0]}.md`;
-          const rootFiles = ["SOUL.md", "IDENTITY.md", "MEMORY.md", "USER.md", "AGENTS.md"];
+          const rootFiles = ["IDENTITY.md", "MEMORY.md", "USER.md", "AGENTS.md"];
           const filePath = rootFiles.includes(filename) ? join(sessionDir, filename) : join(memoryDir, filename);
           const shouldAppend = append !== undefined ? append : filename.match(/^\d{4}-\d{2}-\d{2}\.md$/);
           if (shouldAppend && existsSync(filePath)) {
@@ -235,7 +235,7 @@ export function createMemoryTools(sessionName: string): unknown[] {
           const sessionDir = join(SESSIONS_DIR, sessionName);
           const sessionMemoryDir = join(sessionDir, "memory");
           const filesToSearch: { path: string; source: string }[] = [];
-          for (const f of ["MEMORY.md", "IDENTITY.md", "SOUL.md", "USER.md", "AGENTS.md", "PRIVATE.md", "SELF.md"]) {
+          for (const f of ["MEMORY.md", "IDENTITY.md", "USER.md", "AGENTS.md", "PRIVATE.md", "SELF.md"]) {
             const globalPath = join(GLOBAL_IDENTITY_DIR, f);
             if (existsSync(globalPath)) filesToSearch.push({ path: globalPath, source: `global/${f}` });
             const sessionPath = join(sessionDir, f);

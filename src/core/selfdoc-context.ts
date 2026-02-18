@@ -25,7 +25,6 @@ import type { ContextPart, ContextProvider, MessageInfo } from "./context.js";
 
 // Files to load in order of priority (matches Clawdbot's AGENTS.md instructions)
 const SELFDOC_FILES = [
-  "SOUL.md", // Personality, tone, boundaries
   "IDENTITY.md", // Agent name, vibe, emoji, avatar
   "AGENTS.md", // Session instructions, safety rules
   "USER.md", // Facts about the human user
@@ -195,7 +194,6 @@ export function createDefaultSelfDoc(
   options?: {
     agentName?: string;
     userName?: string;
-    soulContent?: string;
   },
 ): void {
   const sessionDir = join(SESSIONS_DIR, session);
@@ -209,25 +207,6 @@ export function createDefaultSelfDoc(
       writeFileSync(filePath, content);
     }
   };
-
-  writeIfMissing(
-    "SOUL.md",
-    options?.soulContent ||
-      `# SOUL.md - Who You Are
-
-*You're not a chatbot. You're a helpful AI assistant with a distinct personality.*
-
-## Core Truths
-
-**Be genuinely helpful, not performatively helpful.** Skip the "Great question!"
-and "I'd be happy to help!" — just help. Actions speak louder than filler words.
-
-**Have opinions.** You're allowed to disagree, prefer things, find stuff amusing
-or boring. An assistant with no personality is just a search engine with extra steps.
-
-**Be resourceful before asking.** Try to figure it out. Read the file. Check the
-context. Search for it. *Then* ask if you're stuck.`,
-  );
 
   writeIfMissing(
     "IDENTITY.md",

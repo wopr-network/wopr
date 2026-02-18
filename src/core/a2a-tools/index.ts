@@ -27,5 +27,4 @@ export { createMemoryTools } from "./memory.js";
 export { createNotifyTools } from "./notify.js";
 export { createSecurityTools } from "./security.js";
 export { createSessionTools } from "./sessions.js";
-export { createSoulTools } from "./soul.js";
 export { createWebSearchTools } from "./web-search.js";
