@@ -18,6 +18,8 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      id-token: write
+      actions: read
     steps:
       - name: Check for auto-fixing label
         id: label-check
@@ -49,45 +51,60 @@ jobs:
             });
 
       # Wait to give the other reviewer a chance to post before Claude reads comments.
-      # If coderabbit is rate-limited or absent, we still proceed after the window.
       - name: Wait for other reviewers (3 min window)
         if: steps.label-check.outputs.skip == 'false'
         run: sleep 180
 
-      - name: Trigger Claude to fix all review feedback
+      - name: Get PR branch
         if: steps.label-check.outputs.skip == 'false'
+        id: pr-info
         uses: actions/github-script@v7
         with:
           script: |
-            // Collect which reviewers actually posted so Claude knows what to read
-            const { data: comments } = await github.rest.issues.listComments({
+            const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
-              per_page: 100,
+              pull_number: context.issue.number,
             });
-            const hasGreptile = comments.some(c => c.user.login === 'greptile-apps[bot]');
-            const hasCodeRabbit = comments.some(c => c.user.login === 'coderabbitai[bot]');
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('pr_number', context.issue.number);
 
-            const reviewers = [
-              hasGreptile && '`greptile-apps[bot]`',
-              hasCodeRabbit && '`coderabbitai[bot]`',
-            ].filter(Boolean).join(' and ');
+      - uses: actions/checkout@v4
+        if: steps.label-check.outputs.skip == 'false'
+        with:
+          ref: ${{ steps.pr-info.outputs.head_ref }}
+          fetch-depth: 0
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `@claude Please fix all issues raised by the reviewers on this PR.
-
-            Feedback available from: ${reviewers}
+      - name: Claude auto-fix
+        if: steps.label-check.outputs.skip == 'false'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          path_to_claude_code_executable: /home/runner/.local/bin/claude
+          prompt: |
+            You are fixing issues flagged by automated code reviewers on PR #${{ steps.pr-info.outputs.pr_number }} in ${{ github.repository }}.
 
             Steps:
-            1. Read every comment from ${reviewers} on this PR
+            1. Read every comment from `greptile-apps[bot]` and `coderabbitai[bot]` on this PR
             2. Fix every issue they flagged — bugs, security concerns, TypeScript issues, missing error handling, test gaps
             3. Commit and push fixes to this branch
-            4. Remove the \`auto-fixing\` label from this PR
-            5. Run \`gh pr merge --auto --squash --repo ${{ github.repository }} ${context.issue.number}\` to queue it for merge
+            4. Remove the `auto-fixing` label: gh issue edit ${{ steps.pr-info.outputs.pr_number }} --remove-label auto-fixing --repo ${{ github.repository }}
+            5. Queue for merge: gh pr merge --auto --squash --repo ${{ github.repository }} ${{ steps.pr-info.outputs.pr_number }}
 
-            Do not skip issues. If a reviewer flags something, fix it or leave a clear explanation as a PR comment.`,
-            });
+            Do not skip flagged issues. If greptile or coderabbit flag something, fix it or leave a clear PR comment explaining why it doesn't apply.
+
+      - name: Remove auto-fixing label (cleanup)
+        if: always() && steps.label-check.outputs.skip == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'auto-fixing',
+              });
+            } catch (e) {
+              // Label may already be removed by Claude
+            }
