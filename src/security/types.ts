@@ -633,8 +633,6 @@ export const TOOL_CAPABILITY_MAP: Record<string, Capability> = {
   self_reflect: "memory.write",
   identity_get: "memory.read",
   identity_update: "memory.write",
-  soul_get: "memory.read",
-  soul_update: "memory.write",
 
   // Cron tools
   cron_schedule: "cron.manage",
