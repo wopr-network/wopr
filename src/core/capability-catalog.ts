@@ -68,6 +68,12 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
     description: "Generate images from text prompts",
     icon: "🎨",
     plugins: [
+      // Plugin repo created in WOP-571 — catalog entry is a forward reference
+      {
+        source: "github:wopr-network/wopr-plugin-imagegen",
+        name: "wopr-plugin-imagegen",
+        hostedConfig: { ...hostedDefaults(), capability: "image-gen" },
+      },
       {
         source: "github:wopr-network/wopr-plugin-image-sdxl",
         name: "wopr-plugin-image-sdxl",

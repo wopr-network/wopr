@@ -260,6 +260,7 @@ describe("POST /api/capabilities/activate — happy path", () => {
       body: JSON.stringify({ capability: "image-gen" }),
     });
 
+    expect(enablePlugin).toHaveBeenCalledWith("wopr-plugin-imagegen");
     expect(enablePlugin).toHaveBeenCalledWith("wopr-plugin-image-sdxl");
     expect(loadPlugin).toHaveBeenCalled();
   });
@@ -277,6 +278,7 @@ describe("POST /api/capabilities/activate — happy path", () => {
     // Config should have been written for the plugin
     const pluginData = mockConfig?.plugins?.data;
     expect(pluginData).toBeDefined();
+    expect(pluginData["wopr-plugin-imagegen"]).toBeDefined();
     expect(pluginData["wopr-plugin-image-sdxl"]).toBeDefined();
     expect(pluginData["wopr-plugin-image-sdxl"].baseUrl).toBe("https://api.wopr.bot");
   });
@@ -416,7 +418,7 @@ describe("POST /api/capabilities/activate — plugin install failure", () => {
 
     const body = await res.json();
     expect(body.activated).toBe(false);
-    expect(body.errors).toHaveLength(1);
+    expect(body.errors).toHaveLength(2);
     expect(body.errors[0].error).toMatch(/Network error/);
   });
 
