@@ -136,7 +136,10 @@ export async function getSandboxForSession(sessionName: string): Promise<Sandbox
 
   // Get the security context for this session
   const ctx = getContext(sessionName);
-  const trustLevel = ctx?.source?.trustLevel ?? "owner";
+  if (!ctx) {
+    logger.warn(`[sandbox] No security context found for session ${sessionName}, defaulting to untrusted`);
+  }
+  const trustLevel = ctx?.source?.trustLevel ?? "untrusted";
 
   // Resolve sandbox context based on trust level
   return ext.resolveSandboxContext({
@@ -164,7 +167,10 @@ export async function execInSandbox(
   }
 
   const ctx = getContext(sessionName);
-  const trustLevel = ctx?.source?.trustLevel ?? "owner";
+  if (!ctx) {
+    logger.warn(`[sandbox] execInSandbox: missing context for session ${sessionName}, defaulting to untrusted`);
+  }
+  const trustLevel = ctx?.source?.trustLevel ?? "untrusted";
   const sandbox = await ext.resolveSandboxContext({ sessionName, trustLevel });
   if (!sandbox) {
     return null; // Not sandboxed

@@ -760,7 +760,7 @@ export function getSessionAccess(config: SecurityConfig, sessionName: string): A
 export function getSessionIndexable(
   config: SecurityConfig,
   sessionName: string,
-  trustLevel: TrustLevel = "owner",
+  trustLevel: TrustLevel = "untrusted",
 ): AccessPattern[] {
   const sessionConfig = getSessionConfig(config, sessionName);
 
