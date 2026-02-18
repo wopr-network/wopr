@@ -15,7 +15,6 @@ export {
   type ToolContext,
   unregisterA2ATool,
 } from "./_base.js";
-export { closeAllBrowsers, createBrowserTools } from "./browser.js";
 export { createCapabilityDiscoveryTools } from "./capability-discovery.js";
 export { createConfigTools } from "./config.js";
 export { createEventTools } from "./events.js";
