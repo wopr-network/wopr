@@ -203,7 +203,12 @@ export function createMemoryTools(sessionName: string): unknown[] {
             throw new Error("No memory plugin available");
           }
           const ctx = getContext(sessionName);
-          const trustLevel = ctx?.source?.trustLevel ?? "owner";
+          if (!ctx) {
+            logger.warn(
+              `[memory_search] No security context for session ${sessionName}, defaulting to untrusted indexable scope`,
+            );
+          }
+          const trustLevel = ctx?.source?.trustLevel ?? "untrusted";
           const secConfig = getSecurityConfig();
           const indexablePatterns = getSessionIndexable(secConfig, sessionName, trustLevel);
           results = results

@@ -16,6 +16,9 @@ export function createSecurityTools(sessionName: string): unknown[] {
       async () => {
         const context = getContext(sessionName);
         if (!context) {
+          // Informational response only -- not used for permission decisions.
+          // Legacy mode (no security context) reports owner-level for transparency.
+          // Permission gates in sandbox.ts and memory.ts default to "untrusted", not "owner".
           return {
             content: [
               {
