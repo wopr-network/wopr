@@ -118,7 +118,7 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
     plugins: [
       {
         source: "github:wopr-network/wopr-plugin-websearch",
-        name: "@wopr-network/plugin-web-search",
+        name: "wopr-plugin-websearch",
         hostedConfig: {},
       },
     ],

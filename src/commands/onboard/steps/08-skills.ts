@@ -59,7 +59,7 @@ export const skillsStep: OnboardStep = async (ctx: OnboardContext) => {
     await note(
       [
         "Web search requires the wopr-plugin-websearch plugin.",
-        "Install it: wopr plugin install wopr-plugin-websearch",
+        "Install it: wopr plugin install github:wopr-network/wopr-plugin-websearch",
         "",
         "Then configure a search provider API key.",
         "Get a free Brave Search key at: https://api.search.brave.com/",
