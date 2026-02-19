@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
+import { describeRoute } from "hono-openapi";
 import { providerRegistry } from "../../core/providers.js";
 import { deleteSession, inject, setSessionContext, setSessionProvider } from "../../core/sessions.js";
 import { createInjectionSource } from "../../security/index.js";
@@ -94,246 +95,271 @@ function buildPrompts(messages: ChatCompletionRequest["messages"]): {
 // POST /v1/chat/completions
 // ============================================================================
 
-openaiRouter.post("/chat/completions", async (c) => {
-  let body: ChatCompletionRequest;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(
-      { error: { message: "Invalid JSON in request body", type: "invalid_request_error", code: "invalid_json" } },
-      400,
-    );
-  }
+openaiRouter.post(
+  "/chat/completions",
+  describeRoute({
+    tags: ["OpenAI Compatible"],
+    summary: "Chat completions (OpenAI-compatible)",
+    description:
+      "OpenAI-compatible chat completions endpoint. Supports streaming via Accept: text/event-stream or stream: true in body.",
+    responses: {
+      200: { description: "Chat completion response (or SSE stream)" },
+      400: { description: "Invalid request" },
+      503: { description: "No AI providers available" },
+      500: { description: "Provider error" },
+    },
+  }),
+  async (c) => {
+    let body: ChatCompletionRequest;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json(
+        { error: { message: "Invalid JSON in request body", type: "invalid_request_error", code: "invalid_json" } },
+        400,
+      );
+    }
 
-  // Validate required fields
-  if (!body.model) {
-    return c.json(
-      { error: { message: "'model' is required", type: "invalid_request_error", code: "missing_field" } },
-      400,
-    );
-  }
-  if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
-    return c.json(
-      {
-        error: {
-          message: "'messages' must be a non-empty array",
-          type: "invalid_request_error",
-          code: "missing_field",
-        },
-      },
-      400,
-    );
-  }
-
-  // Resolve provider
-  const providerConfig = resolveProviderConfig(body.model);
-  if (!providerConfig) {
-    return c.json(
-      {
-        error: {
-          message: "No AI providers available. Install a provider plugin and restart the daemon.",
-          type: "server_error",
-          code: "no_providers",
-        },
-      },
-      503,
-    );
-  }
-
-  const sessionName = makeSessionName();
-  const { systemPrompt, userPrompt } = buildPrompts(body.messages);
-  const requestId = `chatcmpl-${randomUUID().replace(/-/g, "").slice(0, 24)}`;
-  const created = Math.floor(Date.now() / 1000);
-
-  // Set up the ephemeral session
-  if (systemPrompt) {
-    await setSessionContext(sessionName, systemPrompt);
-  }
-  await setSessionProvider(sessionName, providerConfig);
-
-  if (body.stream) {
-    // ---- Streaming response (SSE) ----
-    c.header("Content-Type", "text/event-stream");
-    c.header("Cache-Control", "no-cache");
-    c.header("Connection", "keep-alive");
-
-    return stream(c, async (s) => {
-      // Clean up the ephemeral session when the client disconnects
-      s.onAbort(() => {
-        deleteSession(sessionName, "client-disconnect").catch(() => {});
-      });
-
-      try {
-        await inject(sessionName, userPrompt, {
-          silent: true,
-          from: "openai-api",
-          source: createInjectionSource("daemon"),
-          onStream: (msg) => {
-            if (msg.type === "text" && msg.content) {
-              const chunk = {
-                id: requestId,
-                object: "chat.completion.chunk",
-                created,
-                model: body.model,
-                choices: [
-                  {
-                    index: 0,
-                    delta: { content: msg.content },
-                    finish_reason: null,
-                  },
-                ],
-              };
-              s.write(`data: ${JSON.stringify(chunk)}\n\n`);
-            }
+    // Validate required fields
+    if (!body.model) {
+      return c.json(
+        { error: { message: "'model' is required", type: "invalid_request_error", code: "missing_field" } },
+        400,
+      );
+    }
+    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+      return c.json(
+        {
+          error: {
+            message: "'messages' must be a non-empty array",
+            type: "invalid_request_error",
+            code: "missing_field",
           },
+        },
+        400,
+      );
+    }
+
+    // Resolve provider
+    const providerConfig = resolveProviderConfig(body.model);
+    if (!providerConfig) {
+      return c.json(
+        {
+          error: {
+            message: "No AI providers available. Install a provider plugin and restart the daemon.",
+            type: "server_error",
+            code: "no_providers",
+          },
+        },
+        503,
+      );
+    }
+
+    const sessionName = makeSessionName();
+    const { systemPrompt, userPrompt } = buildPrompts(body.messages);
+    const requestId = `chatcmpl-${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+    const created = Math.floor(Date.now() / 1000);
+
+    // Set up the ephemeral session
+    if (systemPrompt) {
+      await setSessionContext(sessionName, systemPrompt);
+    }
+    await setSessionProvider(sessionName, providerConfig);
+
+    if (body.stream) {
+      // ---- Streaming response (SSE) ----
+      c.header("Content-Type", "text/event-stream");
+      c.header("Cache-Control", "no-cache");
+      c.header("Connection", "keep-alive");
+
+      return stream(c, async (s) => {
+        // Clean up the ephemeral session when the client disconnects
+        s.onAbort(() => {
+          deleteSession(sessionName, "client-disconnect").catch(() => {});
         });
 
-        // Final chunk with finish_reason
-        const finalChunk = {
-          id: requestId,
-          object: "chat.completion.chunk",
-          created,
-          model: body.model,
-          choices: [
-            {
-              index: 0,
-              delta: {},
-              finish_reason: "stop",
+        try {
+          await inject(sessionName, userPrompt, {
+            silent: true,
+            from: "openai-api",
+            source: createInjectionSource("daemon"),
+            onStream: (msg) => {
+              if (msg.type === "text" && msg.content) {
+                const chunk = {
+                  id: requestId,
+                  object: "chat.completion.chunk",
+                  created,
+                  model: body.model,
+                  choices: [
+                    {
+                      index: 0,
+                      delta: { content: msg.content },
+                      finish_reason: null,
+                    },
+                  ],
+                };
+                s.write(`data: ${JSON.stringify(chunk)}\n\n`);
+              }
             },
-          ],
-        };
-        s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
-        s.write("data: [DONE]\n\n");
-      } catch (err) {
-        const errorChunk = {
+          });
+
+          // Final chunk with finish_reason
+          const finalChunk = {
+            id: requestId,
+            object: "chat.completion.chunk",
+            created,
+            model: body.model,
+            choices: [
+              {
+                index: 0,
+                delta: {},
+                finish_reason: "stop",
+              },
+            ],
+          };
+          s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+          s.write("data: [DONE]\n\n");
+        } catch (err) {
+          const errorChunk = {
+            error: {
+              message: err instanceof Error ? err.message : "Internal server error",
+              type: "server_error",
+            },
+          };
+          s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+          s.write("data: [DONE]\n\n");
+        } finally {
+          // Clean up the ephemeral session after streaming completes
+          await deleteSession(sessionName, "request-complete").catch(() => {});
+        }
+      });
+    }
+
+    // ---- Non-streaming response ----
+    try {
+      const result = await inject(sessionName, userPrompt, {
+        silent: true,
+        from: "openai-api",
+        source: createInjectionSource("daemon"),
+      });
+
+      return c.json({
+        id: requestId,
+        object: "chat.completion",
+        created,
+        model: body.model,
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: result.response,
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
+      });
+    } catch (err) {
+      return c.json(
+        {
           error: {
             message: err instanceof Error ? err.message : "Internal server error",
             type: "server_error",
           },
-        };
-        s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
-        s.write("data: [DONE]\n\n");
-      } finally {
-        // Clean up the ephemeral session after streaming completes
-        await deleteSession(sessionName, "request-complete").catch(() => {});
-      }
-    });
-  }
-
-  // ---- Non-streaming response ----
-  try {
-    const result = await inject(sessionName, userPrompt, {
-      silent: true,
-      from: "openai-api",
-      source: createInjectionSource("daemon"),
-    });
-
-    return c.json({
-      id: requestId,
-      object: "chat.completion",
-      created,
-      model: body.model,
-      choices: [
-        {
-          index: 0,
-          message: {
-            role: "assistant",
-            content: result.response,
-          },
-          finish_reason: "stop",
         },
-      ],
-      usage: {
-        prompt_tokens: 0,
-        completion_tokens: 0,
-        total_tokens: 0,
-      },
-    });
-  } catch (err) {
-    return c.json(
-      {
-        error: {
-          message: err instanceof Error ? err.message : "Internal server error",
-          type: "server_error",
-        },
-      },
-      500,
-    );
-  } finally {
-    // Clean up the ephemeral session after request completes
-    deleteSession(sessionName, "request-complete").catch(() => {});
-  }
-});
+        500,
+      );
+    } finally {
+      // Clean up the ephemeral session after request completes
+      deleteSession(sessionName, "request-complete").catch(() => {});
+    }
+  },
+);
 
 // ============================================================================
 // GET /v1/models
 // ============================================================================
 
-openaiRouter.get("/models", async (c) => {
-  const providers = providerRegistry.listProviders();
-  const models: Array<{
-    id: string;
-    object: string;
-    created: number;
-    owned_by: string;
-  }> = [];
+openaiRouter.get(
+  "/models",
+  describeRoute({
+    tags: ["OpenAI Compatible"],
+    summary: "List available models",
+    responses: {
+      200: { description: "List of models in OpenAI format" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const providers = providerRegistry.listProviders();
+    const models: Array<{
+      id: string;
+      object: string;
+      created: number;
+      owned_by: string;
+    }> = [];
 
-  for (const provider of providers) {
-    if (!provider.available) continue;
+    for (const provider of providers) {
+      if (!provider.available) continue;
 
-    try {
-      // Resolve the provider to get the client and list models
-      const resolved = await providerRegistry.resolveProvider({ name: provider.id });
-      const providerModels = await resolved.client.listModels();
+      try {
+        // Resolve the provider to get the client and list models
+        const resolved = await providerRegistry.resolveProvider({ name: provider.id });
+        const providerModels = await resolved.client.listModels();
 
-      for (const modelId of providerModels) {
+        for (const modelId of providerModels) {
+          models.push({
+            id: modelId,
+            object: "model",
+            created: Math.floor(Date.now() / 1000),
+            owned_by: provider.id,
+          });
+        }
+      } catch {
+        // If we can't list models for a provider, add the provider itself as a model
         models.push({
-          id: modelId,
+          id: provider.id,
           object: "model",
           created: Math.floor(Date.now() / 1000),
           owned_by: provider.id,
         });
       }
-    } catch {
-      // If we can't list models for a provider, add the provider itself as a model
-      models.push({
-        id: provider.id,
-        object: "model",
-        created: Math.floor(Date.now() / 1000),
-        owned_by: provider.id,
-      });
     }
-  }
 
-  return c.json({
-    object: "list",
-    data: models,
-  });
-});
+    return c.json({
+      object: "list",
+      data: models,
+    });
+  },
+);
 
 // ============================================================================
 // GET /v1/models/:model - Get single model info
 // ============================================================================
 
-openaiRouter.get("/models/:model", async (c) => {
-  const modelId = c.req.param("model");
-  const providers = providerRegistry.listProviders().filter((p) => p.available);
+openaiRouter.get(
+  "/models/:model",
+  describeRoute({
+    tags: ["OpenAI Compatible"],
+    summary: "Get model info",
+    responses: {
+      200: { description: "Model details in OpenAI format" },
+      404: { description: "Model not found" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const modelId = c.req.param("model");
+    const providers = providerRegistry.listProviders().filter((p) => p.available);
 
-  // Check if model matches a provider or a provider's model
-  for (const provider of providers) {
-    if (provider.id === modelId) {
-      return c.json({
-        id: modelId,
-        object: "model",
-        created: Math.floor(Date.now() / 1000),
-        owned_by: provider.id,
-      });
-    }
-
-    try {
-      const resolved = await providerRegistry.resolveProvider({ name: provider.id });
-      const models = await resolved.client.listModels();
-      if (models.includes(modelId)) {
+    // Check if model matches a provider or a provider's model
+    for (const provider of providers) {
+      if (provider.id === modelId) {
         return c.json({
           id: modelId,
           object: "model",
@@ -341,19 +367,32 @@ openaiRouter.get("/models/:model", async (c) => {
           owned_by: provider.id,
         });
       }
-    } catch {
-      // skip
-    }
-  }
 
-  return c.json(
-    {
-      error: {
-        message: `The model '${modelId}' does not exist`,
-        type: "invalid_request_error",
-        code: "model_not_found",
+      try {
+        const resolved = await providerRegistry.resolveProvider({ name: provider.id });
+        const models = await resolved.client.listModels();
+        if (models.includes(modelId)) {
+          return c.json({
+            id: modelId,
+            object: "model",
+            created: Math.floor(Date.now() / 1000),
+            owned_by: provider.id,
+          });
+        }
+      } catch {
+        // skip
+      }
+    }
+
+    return c.json(
+      {
+        error: {
+          message: `The model '${modelId}' does not exist`,
+          type: "invalid_request_error",
+          code: "model_not_found",
+        },
       },
-    },
-    404,
-  );
-});
+      404,
+    );
+  },
+);

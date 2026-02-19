@@ -6,6 +6,7 @@
  */
 
 import { type Context, Hono } from "hono";
+import { describeRoute } from "hono-openapi";
 import { rateLimiter } from "hono-rate-limiter";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
@@ -135,58 +136,102 @@ async function createInjectors() {
 }
 
 // List installed plugins (with manifest metadata)
-pluginsRouter.get("/", async (c) => {
-  const plugins = await listPlugins();
-  const runtimeManifests = getAllPluginManifests();
+pluginsRouter.get(
+  "/",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "List installed plugins",
+    responses: {
+      200: { description: "List of installed plugins with manifest metadata" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const plugins = await listPlugins();
+    const runtimeManifests = getAllPluginManifests();
 
-  return c.json({
-    plugins: plugins.map((p: PluginEntry) => {
-      // Prefer runtime manifest (loaded plugins), fall back to reading from disk
-      const manifest = runtimeManifests.get(p.name) || readPluginManifest(p.path);
-      return {
-        name: p.name,
-        version: p.version,
-        description: p.description || null,
-        source: p.source,
-        enabled: p.enabled,
-        installedAt: p.installedAt,
-        loaded: getLoadedPlugin(p.name) !== undefined,
-        manifest: manifest
-          ? {
-              capabilities: manifest.capabilities,
-              category: manifest.category || null,
-              tags: manifest.tags || [],
-              icon: manifest.icon || null,
-              author: manifest.author || null,
-              license: manifest.license || null,
-              homepage: manifest.homepage || null,
-              configSchema: manifest.configSchema || null,
-            }
-          : null,
-      };
-    }),
-  });
-});
+    return c.json({
+      plugins: plugins.map((p: PluginEntry) => {
+        // Prefer runtime manifest (loaded plugins), fall back to reading from disk
+        const manifest = runtimeManifests.get(p.name) || readPluginManifest(p.path);
+        return {
+          name: p.name,
+          version: p.version,
+          description: p.description || null,
+          source: p.source,
+          enabled: p.enabled,
+          installedAt: p.installedAt,
+          loaded: getLoadedPlugin(p.name) !== undefined,
+          manifest: manifest
+            ? {
+                capabilities: manifest.capabilities,
+                category: manifest.category || null,
+                tags: manifest.tags || [],
+                icon: manifest.icon || null,
+                author: manifest.author || null,
+                license: manifest.license || null,
+                homepage: manifest.homepage || null,
+                configSchema: manifest.configSchema || null,
+              }
+            : null,
+        };
+      }),
+    });
+  },
+);
 
 // Search npm registry for available wopr-plugin-* packages
-pluginsRouter.get("/available", async (c) => {
-  const query = c.req.query("q") || "";
-  const limit = Math.min(Number(c.req.query("limit")) || 25, 100);
-  const results = await searchPlugins(query);
-  return c.json({ results: results.slice(0, limit) });
-});
+pluginsRouter.get(
+  "/available",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "List available plugins from npm registry",
+    responses: {
+      200: { description: "Search results from npm" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const query = c.req.query("q") || "";
+    const limit = Math.min(Number(c.req.query("limit")) || 25, 100);
+    const results = await searchPlugins(query);
+    return c.json({ results: results.slice(0, limit) });
+  },
+);
 
 // List plugin-provided Web UI extensions
-pluginsRouter.get("/ui", async (c) => {
-  const extensions = getWebUiExtensions();
-  return c.json({ extensions });
-});
+pluginsRouter.get(
+  "/ui",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "List plugin Web UI extensions",
+    responses: {
+      200: { description: "Web UI extension definitions" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const extensions = getWebUiExtensions();
+    return c.json({ extensions });
+  },
+);
 
 // List plugin-provided UI components
-pluginsRouter.get("/components", async (c) => {
-  const components = getUiComponents();
-  return c.json({ components });
-});
+pluginsRouter.get(
+  "/components",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "List plugin UI components",
+    responses: {
+      200: { description: "Plugin UI component definitions" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const components = getUiComponents();
+    return c.json({ components });
+  },
+);
 
 // Install plugin (POST / — legacy, POST /install — new)
 async function handleInstall(c: Context) {
@@ -242,350 +287,546 @@ async function handleInstall(c: Context) {
   }
 }
 
-pluginsRouter.post("/", installRateLimit, handleInstall);
-pluginsRouter.post("/install", installRateLimit, handleInstall);
+pluginsRouter.post(
+  "/",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Install plugin (legacy endpoint)",
+    responses: {
+      201: { description: "Plugin installed" },
+      400: { description: "Validation error" },
+      429: { description: "Rate limit exceeded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  installRateLimit,
+  handleInstall,
+);
+pluginsRouter.post(
+  "/install",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Install plugin",
+    responses: {
+      201: { description: "Plugin installed" },
+      400: { description: "Validation error" },
+      429: { description: "Rate limit exceeded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  installRateLimit,
+  handleInstall,
+);
 
 // Uninstall plugin (POST /uninstall — new endpoint)
-pluginsRouter.post("/uninstall", installRateLimit, async (c) => {
-  const body = await c.req.json();
-  const { name } = body;
+pluginsRouter.post(
+  "/uninstall",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Uninstall plugin",
+    responses: {
+      200: { description: "Plugin uninstalled" },
+      400: { description: "Validation error" },
+      429: { description: "Rate limit exceeded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  installRateLimit,
+  async (c) => {
+    const body = await c.req.json();
+    const { name } = body;
 
-  if (!name) {
-    return c.json({ error: "name is required" }, 400);
-  }
-
-  try {
-    validatePluginName(name);
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
+    if (!name) {
+      return c.json({ error: "name is required" }, 400);
     }
-    throw err;
-  }
 
-  try {
-    await unloadPlugin(name);
-    await removePlugin(name);
-    return c.json({ removed: true, unloaded: true });
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
+    try {
+      validatePluginName(name);
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      throw err;
     }
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error({ msg: "[plugins] Uninstall failed", plugin: name, error: message });
-    return c.json({ error: "Plugin uninstall failed" }, 400);
-  }
-});
+
+    try {
+      await unloadPlugin(name);
+      await removePlugin(name);
+      return c.json({ removed: true, unloaded: true });
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ msg: "[plugins] Uninstall failed", plugin: name, error: message });
+      return c.json({ error: "Plugin uninstall failed" }, 400);
+    }
+  },
+);
 
 // Remove plugin (hot-unloads first) — legacy DELETE endpoint
-pluginsRouter.delete("/:name", installRateLimit, async (c) => {
-  const name = c.req.param("name");
+pluginsRouter.delete(
+  "/:name",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Remove plugin (legacy)",
+    responses: {
+      200: { description: "Plugin removed" },
+      400: { description: "Removal failed" },
+      429: { description: "Rate limit exceeded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  installRateLimit,
+  async (c) => {
+    const name = c.req.param("name");
 
-  try {
-    validatePluginName(name);
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
+    try {
+      validatePluginName(name);
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      throw err;
     }
-    throw err;
-  }
 
-  try {
-    // Parse optional drain options from body
-    const body = await c.req.json().catch(() => ({}));
-    const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
-    const force = body?.force === true;
+    try {
+      // Parse optional drain options from body
+      const body = await c.req.json().catch(() => ({}));
+      const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
+      const force = body?.force === true;
 
-    // Hot-unload the plugin first
-    await unloadPlugin(name, { drainTimeoutMs, force });
+      // Hot-unload the plugin first
+      await unloadPlugin(name, { drainTimeoutMs, force });
 
-    await removePlugin(name);
-    return c.json({ removed: true, unloaded: true });
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
+      await removePlugin(name);
+      return c.json({ removed: true, unloaded: true });
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ msg: "[plugins] Remove failed", plugin: name, error: message });
+      return c.json({ error: "Plugin removal failed" }, 400);
     }
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error({ msg: "[plugins] Remove failed", plugin: name, error: message });
-    return c.json({ error: "Plugin removal failed" }, 400);
-  }
-});
+  },
+);
 
 // Enable plugin (hot-loads if not already loaded)
-pluginsRouter.post("/:name/enable", mutateRateLimit, async (c) => {
-  const name = c.req.param("name");
+pluginsRouter.post(
+  "/:name/enable",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Enable plugin",
+    responses: {
+      200: { description: "Plugin enabled and loaded" },
+      400: { description: "Enable failed" },
+      404: { description: "Plugin not found" },
+      429: { description: "Rate limit exceeded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  mutateRateLimit,
+  async (c) => {
+    const name = c.req.param("name");
 
-  try {
-    validatePluginName(name);
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
+    try {
+      validatePluginName(name);
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      throw err;
     }
-    throw err;
-  }
 
-  try {
-    const plugins = await listPlugins();
-    const plugin = plugins.find((p: PluginEntry) => p.name === name);
-    if (!plugin) {
-      return c.json({ error: "Plugin not found" }, 404);
+    try {
+      const plugins = await listPlugins();
+      const plugin = plugins.find((p: PluginEntry) => p.name === name);
+      if (!plugin) {
+        return c.json({ error: "Plugin not found" }, 404);
+      }
+
+      await enablePlugin(name);
+
+      // Hot-load the plugin
+      const injectors = await createInjectors();
+      await loadPlugin(plugin, injectors);
+
+      // Run health check for any newly registered providers
+      await providerRegistry.checkHealth();
+
+      return c.json({ enabled: true, loaded: true });
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ msg: "[plugins] Enable failed", plugin: name, error: message });
+      return c.json({ error: "Plugin enable failed" }, 400);
     }
-
-    await enablePlugin(name);
-
-    // Hot-load the plugin
-    const injectors = await createInjectors();
-    await loadPlugin(plugin, injectors);
-
-    // Run health check for any newly registered providers
-    await providerRegistry.checkHealth();
-
-    return c.json({ enabled: true, loaded: true });
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
-    }
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error({ msg: "[plugins] Enable failed", plugin: name, error: message });
-    return c.json({ error: "Plugin enable failed" }, 400);
-  }
-});
+  },
+);
 
 // Disable plugin (hot-unloads)
-pluginsRouter.post("/:name/disable", mutateRateLimit, async (c) => {
-  const name = c.req.param("name");
+pluginsRouter.post(
+  "/:name/disable",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Disable plugin",
+    responses: {
+      200: { description: "Plugin disabled and unloaded" },
+      400: { description: "Disable failed" },
+      429: { description: "Rate limit exceeded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  mutateRateLimit,
+  async (c) => {
+    const name = c.req.param("name");
 
-  try {
-    validatePluginName(name);
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
+    try {
+      validatePluginName(name);
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      throw err;
     }
-    throw err;
-  }
 
-  try {
-    // Parse optional drain options from body
-    const body = await c.req.json().catch(() => ({}));
-    const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
-    const force = body?.force === true;
+    try {
+      // Parse optional drain options from body
+      const body = await c.req.json().catch(() => ({}));
+      const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
+      const force = body?.force === true;
 
-    // Hot-unload the plugin first
-    await unloadPlugin(name, { drainTimeoutMs, force });
+      // Hot-unload the plugin first
+      await unloadPlugin(name, { drainTimeoutMs, force });
 
-    await disablePlugin(name);
-    return c.json({ disabled: true, unloaded: true });
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
+      await disablePlugin(name);
+      return c.json({ disabled: true, unloaded: true });
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ msg: "[plugins] Disable failed", plugin: name, error: message });
+      return c.json({ error: "Plugin disable failed" }, 400);
     }
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error({ msg: "[plugins] Disable failed", plugin: name, error: message });
-    return c.json({ error: "Plugin disable failed" }, 400);
-  }
-});
+  },
+);
 
 // Reload plugin (hot-unload then hot-load - picks up code changes without restart)
-pluginsRouter.post("/:name/reload", mutateRateLimit, async (c) => {
-  const name = c.req.param("name");
+pluginsRouter.post(
+  "/:name/reload",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Reload plugin",
+    responses: {
+      200: { description: "Plugin reloaded" },
+      400: { description: "Reload failed or plugin not enabled" },
+      404: { description: "Plugin not found" },
+      429: { description: "Rate limit exceeded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  mutateRateLimit,
+  async (c) => {
+    const name = c.req.param("name");
 
-  try {
-    validatePluginName(name);
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
+    try {
+      validatePluginName(name);
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      throw err;
     }
-    throw err;
-  }
 
-  try {
+    try {
+      const plugins = await listPlugins();
+      const plugin = plugins.find((p: PluginEntry) => p.name === name);
+      if (!plugin) {
+        return c.json({ error: "Plugin not found" }, 404);
+      }
+
+      if (!plugin.enabled) {
+        return c.json({ error: "Plugin is not enabled" }, 400);
+      }
+
+      // Parse optional drain options from body
+      const body = await c.req.json().catch(() => ({}));
+      const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
+      const force = body?.force === true;
+
+      // Hot-unload first
+      await unloadPlugin(name, { drainTimeoutMs, force });
+
+      // Hot-load with fresh code
+      const injectors = await createInjectors();
+      await loadPlugin(plugin, injectors);
+
+      // Run health check for any newly registered providers
+      await providerRegistry.checkHealth();
+
+      return c.json({ reloaded: true, plugin: name });
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ msg: "[plugins] Reload failed", plugin: name, error: message });
+      return c.json({ error: "Plugin reload failed" }, 400);
+    }
+  },
+);
+
+// Get plugin runtime state
+pluginsRouter.get(
+  "/:name/state",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Get plugin runtime state",
+    responses: {
+      200: { description: "Plugin runtime state" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    const state = getPluginState(name);
+    return c.json({ name, state: state ?? "unloaded" });
+  },
+);
+
+// Get plugin config
+pluginsRouter.get(
+  "/:name/config",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Get plugin config",
+    responses: {
+      200: { description: "Plugin config and schema" },
+      404: { description: "Plugin not found" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+
     const plugins = await listPlugins();
-    const plugin = plugins.find((p: PluginEntry) => p.name === name);
+    const plugin = plugins.find((p: { name: string }) => p.name === name);
     if (!plugin) {
       return c.json({ error: "Plugin not found" }, 404);
     }
 
-    if (!plugin.enabled) {
-      return c.json({ error: "Plugin is not enabled" }, 400);
+    await centralConfig.load();
+    const cfg = centralConfig.get();
+    const pluginConfig = (cfg as unknown as PluginConfigData).plugins?.data?.[name] || {};
+
+    const schemas = getConfigSchemas();
+    let schema = schemas.get(name) || null;
+
+    // Fall back to reading configSchema from manifest on disk if not in runtime state
+    if (!schema) {
+      const manifest = readPluginManifest(plugin.path);
+      if (manifest?.configSchema) {
+        schema = manifest.configSchema as ConfigSchema;
+      }
     }
 
-    // Parse optional drain options from body
-    const body = await c.req.json().catch(() => ({}));
-    const drainTimeoutMs = typeof body?.drainTimeoutMs === "number" ? body.drainTimeoutMs : undefined;
-    const force = body?.force === true;
-
-    // Hot-unload first
-    await unloadPlugin(name, { drainTimeoutMs, force });
-
-    // Hot-load with fresh code
-    const injectors = await createInjectors();
-    await loadPlugin(plugin, injectors);
-
-    // Run health check for any newly registered providers
-    await providerRegistry.checkHealth();
-
-    return c.json({ reloaded: true, plugin: name });
-  } catch (err) {
-    if (err instanceof PluginRouteError) {
-      return c.json({ error: err.message }, err.statusCode as 400);
-    }
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error({ msg: "[plugins] Reload failed", plugin: name, error: message });
-    return c.json({ error: "Plugin reload failed" }, 400);
-  }
-});
-
-// Get plugin runtime state
-pluginsRouter.get("/:name/state", async (c) => {
-  const name = c.req.param("name");
-  const state = getPluginState(name);
-  return c.json({ name, state: state ?? "unloaded" });
-});
-
-// Get plugin config
-pluginsRouter.get("/:name/config", async (c) => {
-  const name = c.req.param("name");
-
-  const plugins = await listPlugins();
-  const plugin = plugins.find((p: { name: string }) => p.name === name);
-  if (!plugin) {
-    return c.json({ error: "Plugin not found" }, 404);
-  }
-
-  await centralConfig.load();
-  const cfg = centralConfig.get();
-  const pluginConfig = (cfg as unknown as PluginConfigData).plugins?.data?.[name] || {};
-
-  const schemas = getConfigSchemas();
-  let schema = schemas.get(name) || null;
-
-  // Fall back to reading configSchema from manifest on disk if not in runtime state
-  if (!schema) {
-    const manifest = readPluginManifest(plugin.path);
-    if (manifest?.configSchema) {
-      schema = manifest.configSchema as ConfigSchema;
-    }
-  }
-
-  return c.json({ name, config: pluginConfig, configSchema: schema });
-});
+    return c.json({ name, config: pluginConfig, configSchema: schema });
+  },
+);
 
 // Update plugin config
-pluginsRouter.put("/:name/config", mutateRateLimit, async (c) => {
-  const name = c.req.param("name");
+pluginsRouter.put(
+  "/:name/config",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Update plugin config",
+    responses: {
+      200: { description: "Config updated" },
+      400: { description: "Validation error" },
+      404: { description: "Plugin not found" },
+      429: { description: "Rate limit exceeded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  mutateRateLimit,
+  async (c) => {
+    const name = c.req.param("name");
 
-  const plugins = await listPlugins();
-  const plugin = plugins.find((p: { name: string }) => p.name === name);
-  if (!plugin) {
-    return c.json({ error: "Plugin not found" }, 404);
-  }
-
-  const body = await c.req.json();
-  const { config: newConfig } = body;
-
-  if (newConfig === undefined) {
-    return c.json({ error: "config is required in request body" }, 400);
-  }
-
-  if (typeof newConfig !== "object" || newConfig === null || Array.isArray(newConfig)) {
-    return c.json({ error: "config must be a JSON object" }, 400);
-  }
-
-  // Validate against configSchema if available (runtime or disk)
-  const schemas = getConfigSchemas();
-  let schema = schemas.get(name);
-  if (!schema) {
-    const manifest = readPluginManifest(plugin.path);
-    if (manifest?.configSchema) {
-      schema = manifest.configSchema as ConfigSchema;
+    const plugins = await listPlugins();
+    const plugin = plugins.find((p: { name: string }) => p.name === name);
+    if (!plugin) {
+      return c.json({ error: "Plugin not found" }, 404);
     }
-  }
-  if (schema) {
-    const errors = validateConfigAgainstSchema(newConfig, schema);
-    if (errors.length > 0) {
-      return c.json({ error: "Config validation failed", details: errors }, 400);
+
+    const body = await c.req.json();
+    const { config: newConfig } = body;
+
+    if (newConfig === undefined) {
+      return c.json({ error: "config is required in request body" }, 400);
     }
-  }
 
-  // Save to central config
-  await centralConfig.load();
-  const cfg = centralConfig.get() as unknown as PluginConfigData;
-  if (!cfg.plugins) cfg.plugins = {};
-  if (!cfg.plugins.data) cfg.plugins.data = {};
-  cfg.plugins.data[name] = newConfig;
-  centralConfig.setValue("plugins.data", cfg.plugins.data);
-  await centralConfig.save();
+    if (typeof newConfig !== "object" || newConfig === null || Array.isArray(newConfig)) {
+      return c.json({ error: "config must be a JSON object" }, 400);
+    }
 
-  return c.json({ name, config: newConfig, updated: true });
-});
+    // Validate against configSchema if available (runtime or disk)
+    const schemas = getConfigSchemas();
+    let schema = schemas.get(name);
+    if (!schema) {
+      const manifest = readPluginManifest(plugin.path);
+      if (manifest?.configSchema) {
+        schema = manifest.configSchema as ConfigSchema;
+      }
+    }
+    if (schema) {
+      const errors = validateConfigAgainstSchema(newConfig, schema);
+      if (errors.length > 0) {
+        return c.json({ error: "Config validation failed", details: errors }, 400);
+      }
+    }
+
+    // Save to central config
+    await centralConfig.load();
+    const cfg = centralConfig.get() as unknown as PluginConfigData;
+    if (!cfg.plugins) cfg.plugins = {};
+    if (!cfg.plugins.data) cfg.plugins.data = {};
+    cfg.plugins.data[name] = newConfig;
+    centralConfig.setValue("plugins.data", cfg.plugins.data);
+    await centralConfig.save();
+
+    return c.json({ name, config: newConfig, updated: true });
+  },
+);
 
 // Plugin health/status
-pluginsRouter.get("/:name/health", async (c) => {
-  const name = c.req.param("name");
+pluginsRouter.get(
+  "/:name/health",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Get plugin health",
+    responses: {
+      200: { description: "Plugin health and status" },
+      404: { description: "Plugin not found" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
 
-  const plugins = await listPlugins();
-  const plugin = plugins.find((p: { name: string }) => p.name === name);
-  if (!plugin) {
-    return c.json({ error: "Plugin not found" }, 404);
-  }
+    const plugins = await listPlugins();
+    const plugin = plugins.find((p: { name: string }) => p.name === name);
+    if (!plugin) {
+      return c.json({ error: "Plugin not found" }, 404);
+    }
 
-  const loaded = getLoadedPlugin(name);
-  const runtimeManifests = getAllPluginManifests();
-  // Prefer runtime manifest, fall back to reading from disk
-  const manifest = runtimeManifests.get(name) || readPluginManifest(plugin.path);
+    const loaded = getLoadedPlugin(name);
+    const runtimeManifests = getAllPluginManifests();
+    // Prefer runtime manifest, fall back to reading from disk
+    const manifest = runtimeManifests.get(name) || readPluginManifest(plugin.path);
 
-  return c.json({
-    name,
-    installed: true,
-    enabled: plugin.enabled,
-    loaded: loaded !== undefined,
-    version: plugin.version,
-    source: plugin.source,
-    manifest: manifest
-      ? {
-          capabilities: manifest.capabilities,
-          category: manifest.category || null,
-          lifecycle: manifest.lifecycle || null,
-        }
-      : null,
-  });
-});
+    return c.json({
+      name,
+      installed: true,
+      enabled: plugin.enabled,
+      loaded: loaded !== undefined,
+      version: plugin.version,
+      source: plugin.source,
+      manifest: manifest
+        ? {
+            capabilities: manifest.capabilities,
+            category: manifest.category || null,
+            lifecycle: manifest.lifecycle || null,
+          }
+        : null,
+    });
+  },
+);
 
 // Search npm for plugins
-pluginsRouter.get("/search", async (c) => {
-  const query = c.req.query("q");
+pluginsRouter.get(
+  "/search",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Search npm for plugins",
+    responses: {
+      200: { description: "Search results" },
+      400: { description: "Query parameter required" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const query = c.req.query("q");
 
-  if (!query) {
-    return c.json({ error: "Query parameter 'q' is required" }, 400);
-  }
+    if (!query) {
+      return c.json({ error: "Query parameter 'q' is required" }, 400);
+    }
 
-  const results = await searchPlugins(query);
-  return c.json({ results });
-});
+    const results = await searchPlugins(query);
+    return c.json({ results });
+  },
+);
 
 // Plugin registries
-pluginsRouter.get("/registries", async (c) => {
-  const registries = await listRegistries();
-  return c.json({ registries });
-});
+pluginsRouter.get(
+  "/registries",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "List plugin registries",
+    responses: {
+      200: { description: "List of registries" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const registries = await listRegistries();
+    return c.json({ registries });
+  },
+);
 
-pluginsRouter.post("/registries", async (c) => {
-  const body = await c.req.json();
-  const { name, url } = body;
+pluginsRouter.post(
+  "/registries",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Add plugin registry",
+    responses: {
+      201: { description: "Registry added" },
+      400: { description: "name and url are required" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const body = await c.req.json();
+    const { name, url } = body;
 
-  if (!name || !url) {
-    return c.json({ error: "name and url are required" }, 400);
-  }
+    if (!name || !url) {
+      return c.json({ error: "name and url are required" }, 400);
+    }
 
-  await addRegistry(name, url);
-  return c.json({ added: true, name, url }, 201);
-});
+    await addRegistry(name, url);
+    return c.json({ added: true, name, url }, 201);
+  },
+);
 
-pluginsRouter.delete("/registries/:name", async (c) => {
-  const name = c.req.param("name");
-  await removeRegistry(name);
-  return c.json({ removed: true });
-});
+pluginsRouter.delete(
+  "/registries/:name",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Remove plugin registry",
+    responses: {
+      200: { description: "Registry removed" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    await removeRegistry(name);
+    return c.json({ removed: true });
+  },
+);
 
 // ============================================================================
 // Helpers
@@ -610,36 +851,51 @@ function validateConfigAgainstSchema(
 }
 
 // Discord owner claim - call the Discord plugin's claimOwnership function
-pluginsRouter.post("/discord/claim", async (c) => {
-  const body = await c.req.json();
-  const { code } = body;
+pluginsRouter.post(
+  "/discord/claim",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Claim Discord bot ownership",
+    responses: {
+      200: { description: "Ownership claimed" },
+      400: { description: "Invalid code or plugin error" },
+      404: { description: "Discord plugin not loaded" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const body = await c.req.json();
+    const { code } = body;
 
-  if (!code) {
-    return c.json({ error: "code is required" }, 400);
-  }
+    if (!code) {
+      return c.json({ error: "code is required" }, 400);
+    }
 
-  // Get the Discord extension
-  interface DiscordExtension {
-    claimOwnership: (code: string) => Promise<{ success: boolean; userId?: string; username?: string; error?: string }>;
-  }
-  const discordExt = getPluginExtension<DiscordExtension>("discord");
+    // Get the Discord extension
+    interface DiscordExtension {
+      claimOwnership: (
+        code: string,
+      ) => Promise<{ success: boolean; userId?: string; username?: string; error?: string }>;
+    }
+    const discordExt = getPluginExtension<DiscordExtension>("discord");
 
-  if (!discordExt) {
-    return c.json({ error: "Discord plugin not loaded" }, 404);
-  }
+    if (!discordExt) {
+      return c.json({ error: "Discord plugin not loaded" }, 404);
+    }
 
-  if (!discordExt.claimOwnership) {
-    return c.json({ error: "Discord plugin does not support ownership claiming" }, 400);
-  }
+    if (!discordExt.claimOwnership) {
+      return c.json({ error: "Discord plugin does not support ownership claiming" }, 400);
+    }
 
-  const result = await discordExt.claimOwnership(code);
-  if (result.success) {
-    return c.json({
-      success: true,
-      userId: result.userId,
-      username: result.username,
-    });
-  } else {
-    return c.json({ success: false, error: result.error }, 400);
-  }
-});
+    const result = await discordExt.claimOwnership(code);
+    if (result.success) {
+      return c.json({
+        success: true,
+        userId: result.userId,
+        username: result.username,
+      });
+    } else {
+      return c.json({ success: false, error: result.error }, 400);
+    }
+  },
+);
