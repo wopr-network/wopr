@@ -190,6 +190,37 @@ export class ProviderRegistry {
   }
 
   /**
+   * Get a single provider registration by ID
+   */
+  getProvider(id: string): ProviderRegistration | undefined {
+    return this.providers.get(id);
+  }
+
+  /**
+   * Get the currently active (first available) provider
+   */
+  getActiveProvider(): { id: string; name: string; defaultModel: string } | null {
+    for (const reg of this.providers.values()) {
+      if (reg.available) {
+        return {
+          id: reg.provider.id,
+          name: reg.provider.name,
+          defaultModel: reg.provider.defaultModel,
+        };
+      }
+    }
+    const first = this.providers.values().next().value;
+    if (first) {
+      return {
+        id: first.provider.id,
+        name: first.provider.name,
+        defaultModel: first.provider.defaultModel,
+      };
+    }
+    return null;
+  }
+
+  /**
    * Resolve a provider with fallback chain
    * Returns the first available provider in the chain
    */
