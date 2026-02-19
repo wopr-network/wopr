@@ -218,6 +218,15 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await migrateRegistriesToSql();
   daemonLog("Registries storage initialized");
 
+  // Initialize session context storage and migrate from filesystem (WOP-556)
+  daemonLog("Initializing session context storage...");
+  const { initSessionContextStorage } = await import("../core/session-context-repository.js");
+  const { migrateSessionContextFromFilesystem } = await import("../core/session-context-repository.js");
+  const { SESSIONS_DIR: sDir, GLOBAL_IDENTITY_DIR: gDir } = await import("../paths.js");
+  await initSessionContextStorage();
+  await migrateSessionContextFromFilesystem(sDir, gDir);
+  daemonLog("Session context storage initialized");
+
   // Ensure bearer token exists for API authentication
   ensureToken();
   daemonLog("Bearer token ready for API authentication");

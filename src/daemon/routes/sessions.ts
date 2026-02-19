@@ -2,8 +2,6 @@
  * Sessions API routes
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import {
@@ -16,9 +14,8 @@ import {
   readConversationLog,
   setSessionContext,
 } from "../../core/sessions.js";
-import { SESSIONS_DIR } from "../../paths.js";
 import { createInjectionSource } from "../../security/index.js";
-import { assertPathContained, validateSessionName } from "../validation.js";
+import { validateSessionName } from "../validation.js";
 import { broadcastInjection, broadcastStream } from "../ws.js";
 
 export const sessionsRouter = new Hono();
@@ -208,7 +205,7 @@ sessionsRouter.post("/:name/log", async (c) => {
   });
 });
 
-// Initialize self-documentation files (SOUL.md, AGENTS.md, etc.)
+// Initialize self-documentation files in SQL (SOUL.md, AGENTS.md, etc.) — WOP-556
 sessionsRouter.post("/:name/init-docs", async (c) => {
   const name = c.req.param("name");
   validateSessionName(name);
@@ -222,26 +219,33 @@ sessionsRouter.post("/:name/init-docs", async (c) => {
     return c.json({ error: "Session not found" }, 404);
   }
 
-  // Create self-doc files (defense-in-depth: verify path stays within SESSIONS_DIR)
-  assertPathContained(SESSIONS_DIR, name);
-  const sessionDir = join(SESSIONS_DIR, name);
+  const {
+    getSessionContext: getSqlContext,
+    setSessionContext: setSqlContext,
+    initSessionContextStorage,
+  } = await import("../../core/session-context-repository.js");
 
-  // Ensure directory exists
-  if (!existsSync(sessionDir)) {
-    mkdirSync(sessionDir, { recursive: true });
-  }
+  await initSessionContextStorage();
 
   const createdFiles: string[] = [];
 
+  const writeIfMissing = async (filename: string, content: string) => {
+    const existing = await getSqlContext(name, filename);
+    if (existing === null) {
+      await setSqlContext(name, filename, content, "session");
+      createdFiles.push(filename);
+    }
+  };
+
   // IDENTITY.md - Agent self-definition
-  const identityPath = join(sessionDir, "IDENTITY.md");
-  if (!existsSync(identityPath)) {
-    const identity = `# IDENTITY.md - About Yourself
+  await writeIfMissing(
+    "IDENTITY.md",
+    `# IDENTITY.md - About Yourself
 
 ## Identity
 **Name:** ${agentName || `${name} Assistant`}
 **Vibe:** Helpful, concise, occasionally witty
-**Emoji:** 🤖
+**Emoji:** \u{1F916}
 **Version:** 1.0
 
 ## Purpose
@@ -252,21 +256,19 @@ remembers context across conversations, and can be extended through plugins.
 - Execute shell commands
 - Read and write files
 - Search and analyze code
-- Communicate via multiple channels`;
-    writeFileSync(identityPath, identity);
-    createdFiles.push("IDENTITY.md");
-  }
+- Communicate via multiple channels`,
+  );
 
   // AGENTS.md - Session instructions
-  const agentsPath = join(sessionDir, "AGENTS.md");
-  if (!existsSync(agentsPath)) {
-    const agents = `# AGENTS.md - Session Instructions
+  await writeIfMissing(
+    "AGENTS.md",
+    `# AGENTS.md - Session Instructions
 
 ## Every Session
 
 Before doing anything else:
 1. **Read SOUL.md** — this is who you are
-2. **Read USER.md** — this is who you're helping  
+2. **Read USER.md** — this is who you're helping
 3. **Read MEMORY.md** — long-term important memories
 4. **Check memory/YYYY-MM-DD.md** — recent daily notes
 
@@ -284,15 +286,13 @@ Do not ask permission to read these files. Just do it.
 - Prefer reading files over asking "what's in the file?"
 - Use search to find relevant code before modifying
 - Batch related file operations when possible
-- Clean up temporary files after use`;
-    writeFileSync(agentsPath, agents);
-    createdFiles.push("AGENTS.md");
-  }
+- Clean up temporary files after use`,
+  );
 
   // USER.md - User profile
-  const userPath = join(sessionDir, "USER.md");
-  if (!existsSync(userPath)) {
-    const user = `# USER.md - About Your Human
+  await writeIfMissing(
+    "USER.md",
+    `# USER.md - About Your Human
 
 ## Profile
 **Name:** ${userName || "Unknown"}
@@ -305,15 +305,13 @@ Do not ask permission to read these files. Just do it.
 - *To be filled in as learned*
 
 ## Important Facts
-- *To be filled in as learned*`;
-    writeFileSync(userPath, user);
-    createdFiles.push("USER.md");
-  }
+- *To be filled in as learned*`,
+  );
 
   // MEMORY.md - Long-term memory (empty initially)
-  const memoryPath = join(sessionDir, "MEMORY.md");
-  if (!existsSync(memoryPath)) {
-    const memory = `# MEMORY.md - Long-term Memories
+  await writeIfMissing(
+    "MEMORY.md",
+    `# MEMORY.md - Long-term Memories
 
 ## Important Decisions
 
@@ -321,14 +319,11 @@ Do not ask permission to read these files. Just do it.
 
 ## User Preferences (persisted facts)
 
-## Project Context`;
-    writeFileSync(memoryPath, memory);
-    createdFiles.push("MEMORY.md");
-  }
+## Project Context`,
+  );
 
   return c.json({
     session: name,
     created: createdFiles,
-    path: sessionDir,
   });
 });

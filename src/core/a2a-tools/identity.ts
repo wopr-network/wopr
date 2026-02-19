@@ -1,18 +1,9 @@
 /**
- * Identity tools: identity_get, identity_update
+ * Identity tools: identity_get, identity_update (WOP-556: SQL-backed)
  */
 
-import {
-  existsSync,
-  join,
-  readFileSync,
-  resolveRootFile,
-  SESSIONS_DIR,
-  tool,
-  withSecurityCheck,
-  writeFileSync,
-  z,
-} from "./_base.js";
+import { getSessionContext, initSessionContextStorage, setSessionContext } from "../session-context-repository.js";
+import { tool, withSecurityCheck, z } from "./_base.js";
 
 export function createIdentityTools(sessionName: string): unknown[] {
   const tools: unknown[] = [];
@@ -20,13 +11,25 @@ export function createIdentityTools(sessionName: string): unknown[] {
   tools.push(
     tool(
       "identity_get",
-      "Get current identity from IDENTITY.md. Checks global identity first, then session-specific.",
+      "Get current identity from IDENTITY.md. Checks session-specific first, then global.",
       {},
       async () => {
-        const sessionDir = join(SESSIONS_DIR, sessionName);
-        const resolved = resolveRootFile(sessionDir, "IDENTITY.md");
-        if (!resolved.exists) return { content: [{ type: "text", text: "No IDENTITY.md found." }] };
-        const content = readFileSync(resolved.path, "utf-8");
+        await initSessionContextStorage();
+
+        // Try session-specific first
+        let content = await getSessionContext(sessionName, "IDENTITY.md");
+        let isGlobal = false;
+
+        // Fall back to global
+        if (content === null) {
+          content = await getSessionContext("__global__", "IDENTITY.md");
+          isGlobal = content !== null;
+        }
+
+        if (content === null) {
+          return { content: [{ type: "text", text: "No IDENTITY.md found." }] };
+        }
+
         const identity: Record<string, string> = {};
         const nameMatch = content.match(/[-*]\s*Name:\s*(.+)/i);
         const creatureMatch = content.match(/[-*]\s*Creature:\s*(.+)/i);
@@ -36,12 +39,13 @@ export function createIdentityTools(sessionName: string): unknown[] {
         if (creatureMatch) identity.creature = creatureMatch[1].trim();
         if (vibeMatch) identity.vibe = vibeMatch[1].trim();
         if (emojiMatch) identity.emoji = emojiMatch[1].trim();
+
         return {
           content: [
             {
               type: "text",
               text: JSON.stringify(
-                { parsed: identity, raw: content, source: resolved.isGlobal ? "global" : "session" },
+                { parsed: identity, raw: content, source: isGlobal ? "global" : "session" },
                 null,
                 2,
               ),
@@ -73,12 +77,15 @@ export function createIdentityTools(sessionName: string): unknown[] {
         sectionContent?: string;
       }) => {
         return withSecurityCheck("identity_update", sessionName, async () => {
+          await initSessionContextStorage();
           const { name, creature, vibe, emoji, section, sectionContent } = args;
-          const sessionDir = join(SESSIONS_DIR, sessionName);
-          const identityPath = join(sessionDir, "IDENTITY.md");
-          let content = existsSync(identityPath)
-            ? readFileSync(identityPath, "utf-8")
-            : "# IDENTITY.md - Agent Identity\n\n";
+
+          // Read current content (session-specific, not global)
+          let content = await getSessionContext(sessionName, "IDENTITY.md");
+          if (content === null) {
+            content = "# IDENTITY.md - Agent Identity\n\n";
+          }
+
           const updates: string[] = [];
           if (name) {
             content = content.replace(/[-*]\s*Name:\s*.+/i, `- Name: ${name}`);
@@ -108,7 +115,8 @@ export function createIdentityTools(sessionName: string): unknown[] {
             else content += `\n${newSection}`;
             updates.push(`section: ${section}`);
           }
-          writeFileSync(identityPath, content);
+
+          await setSessionContext(sessionName, "IDENTITY.md", content, "session");
           return { content: [{ type: "text", text: `Identity updated: ${updates.join(", ")}` }] };
         });
       },

@@ -1,6 +1,7 @@
 import { logger } from "../logger.js";
+
 /**
- * Self-Documentation Context Provider
+ * Self-Documentation Context Provider (WOP-556)
  *
  * Mirrors Clawdbot/Moltbot's file-based memory system:
  * - SOUL.md: Personality, tone, boundaries
@@ -14,14 +15,13 @@ import { logger } from "../logger.js";
  * at the start of every session, similar to how AGENTS.md instructs
  * Clawdbot to read SOUL.md and USER.md before each session.
  *
- * IMPORTANT: Checks GLOBAL_IDENTITY_DIR first for memory files,
- * then falls back to session-specific directories.
+ * IMPORTANT: Reads from SQL (Storage API) first, with filesystem fallback
+ * for backward compatibility during migration.
+ * Global identity files are stored under sessionName "__global__".
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { GLOBAL_IDENTITY_DIR, SESSIONS_DIR } from "../paths.js";
 import type { ContextPart, ContextProvider, MessageInfo } from "./context.js";
+import { getSessionContext, initSessionContextStorage, setSessionContext } from "./session-context-repository.js";
 
 // Files to load in order of priority (matches Clawdbot's AGENTS.md instructions)
 const SELFDOC_FILES = [
@@ -34,93 +34,87 @@ const SELFDOC_FILES = [
 ] as const;
 
 /**
- * Read a self-documentation file from the session directory
+ * Read a self-documentation file from SQL.
+ * Checks global identity first (stored under "__global__"), then session-specific.
  */
-function readSelfDocFile(session: string, filename: string): string | null {
-  const sessionDir = join(SESSIONS_DIR, session);
-  const filePath = join(sessionDir, filename);
-
-  if (!existsSync(filePath)) {
-    return null;
+async function readSelfDocFile(session: string, filename: string): Promise<string | null> {
+  // Try session-specific first
+  const sessionContent = await getSessionContext(session, filename);
+  if (sessionContent !== null) {
+    return sessionContent;
   }
-
-  try {
-    return readFileSync(filePath, "utf-8");
-  } catch (err) {
-    logger.error(`[selfdoc-context] Failed to read ${filename}:`, err);
-    return null;
+  // Fall back to global
+  const globalContent = await getSessionContext("__global__", filename);
+  if (globalContent !== null) {
+    logger.debug(`[selfdoc-context] Loaded ${filename} from global SQL`);
+    return globalContent;
   }
+  return null;
 }
 
 /**
- * Read SELF.md - the main memory/identity file
- * Checks global identity first, then session directory
+ * Read SELF.md - the main memory/identity file.
+ * Checks global identity first, then session directory.
  */
-function readSelfFile(session: string): string | null {
-  // Try global identity first
-  const globalPath = join(GLOBAL_IDENTITY_DIR, "memory", "SELF.md");
-  if (existsSync(globalPath)) {
-    try {
-      const content = readFileSync(globalPath, "utf-8");
-      logger.debug(`[selfdoc-context] Loaded SELF.md from global: ${globalPath}`);
-      return content;
-    } catch (err) {
-      logger.error(`[selfdoc-context] Failed to read global SELF.md:`, err);
-    }
+async function readSelfFile(session: string): Promise<string | null> {
+  // Try global first
+  const globalContent = await getSessionContext("__global__", "memory/SELF.md");
+  if (globalContent !== null) {
+    logger.debug(`[selfdoc-context] Loaded SELF.md from global SQL`);
+    return globalContent;
   }
 
   // Fall back to session directory
-  const sessionPath = join(SESSIONS_DIR, session, "memory", "SELF.md");
-  if (existsSync(sessionPath)) {
-    try {
-      return readFileSync(sessionPath, "utf-8");
-    } catch (err) {
-      logger.error(`[selfdoc-context] Failed to read session SELF.md:`, err);
-    }
+  const sessionContent = await getSessionContext(session, "memory/SELF.md");
+  if (sessionContent !== null) {
+    return sessionContent;
   }
 
   return null;
 }
 
 /**
- * Read memory/YYYY-MM-DD.md files (last 7 days)
- * Checks global identity first, then session directory
+ * Read memory/YYYY-MM-DD.md files (last 7 days).
+ * Checks global identity first, then session directory.
  */
-function readRecentMemoryFiles(session: string): Array<{ date: string; content: string }> {
+async function readRecentMemoryFiles(session: string): Promise<Array<{ date: string; content: string }>> {
   const entries: Array<{ date: string; content: string }> = [];
   const seenDates = new Set<string>();
 
-  // Helper to read from a memory directory
-  const readFromDir = (memoryDir: string, source: string) => {
-    if (!existsSync(memoryDir)) return;
-
-    try {
-      const files = readdirSync(memoryDir)
-        .filter((f) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
-        .sort();
-
-      for (const file of files) {
-        const date = file.replace(".md", "");
-        if (seenDates.has(date)) continue; // Skip if already loaded from global
-
-        const filePath = join(memoryDir, file);
-        const content = readFileSync(filePath, "utf-8");
-        entries.push({ date, content });
-        seenDates.add(date);
-        logger.debug(`[selfdoc-context] Loaded ${file} from ${source}`);
-      }
-    } catch (err) {
-      logger.error(`[selfdoc-context] Failed to read memory files from ${source}:`, err);
-    }
+  // Helper to add an entry if not already seen
+  const addEntry = (date: string, content: string, source: string) => {
+    if (seenDates.has(date)) return;
+    entries.push({ date, content });
+    seenDates.add(date);
+    logger.debug(`[selfdoc-context] Loaded memory/${date}.md from ${source}`);
   };
 
-  // Check global identity memory first
-  const globalMemoryDir = join(GLOBAL_IDENTITY_DIR, "memory");
-  readFromDir(globalMemoryDir, "global");
+  // Load all session_context records for global identity memory
+  try {
+    const { listSessionContextFiles } = await import("./session-context-repository.js");
 
-  // Then check session-specific memory
-  const sessionMemoryDir = join(SESSIONS_DIR, session, "memory");
-  readFromDir(sessionMemoryDir, "session");
+    const globalFiles = await listSessionContextFiles("__global__");
+    for (const filename of globalFiles) {
+      if (!filename.startsWith("memory/") || !filename.match(/memory\/\d{4}-\d{2}-\d{2}\.md$/)) continue;
+      const date = filename.slice("memory/".length).replace(".md", "");
+      const content = await getSessionContext("__global__", filename);
+      if (content !== null) {
+        addEntry(date, content, "global");
+      }
+    }
+
+    const sessionFiles = await listSessionContextFiles(session);
+    for (const filename of sessionFiles) {
+      if (!filename.startsWith("memory/") || !filename.match(/memory\/\d{4}-\d{2}-\d{2}\.md$/)) continue;
+      const date = filename.slice("memory/".length).replace(".md", "");
+      const content = await getSessionContext(session, filename);
+      if (content !== null) {
+        addEntry(date, content, "session");
+      }
+    }
+  } catch (err) {
+    logger.error(`[selfdoc-context] Failed to read memory files from SQL:`, err);
+  }
 
   // Sort by date and return last 7 days
   return entries.sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
@@ -138,12 +132,15 @@ export const selfDocContextProvider: ContextProvider = {
   enabled: true,
 
   async getContext(session: string, _message?: MessageInfo): Promise<ContextPart | null> {
+    // Ensure storage is initialized
+    await initSessionContextStorage();
+
     const parts: string[] = [];
     const loadedFiles: string[] = [];
 
     // Load static self-doc files (AGENTS.md, SOUL.md, etc.)
     for (const filename of SELFDOC_FILES) {
-      const content = readSelfDocFile(session, filename);
+      const content = await readSelfDocFile(session, filename);
       if (content) {
         const label = filename.replace(".md", "");
         parts.push(`## ${label}\n\n${content}`);
@@ -152,14 +149,14 @@ export const selfDocContextProvider: ContextProvider = {
     }
 
     // Load SELF.md - the main memory/identity file (from global or session)
-    const selfContent = readSelfFile(session);
+    const selfContent = await readSelfFile(session);
     if (selfContent) {
       parts.push(`## SELF (Long-term Memory)\n\n${selfContent}`);
       loadedFiles.push("memory/SELF.md");
     }
 
     // Load recent memory files (daily notes from global and session)
-    const memoryFiles = readRecentMemoryFiles(session);
+    const memoryFiles = await readRecentMemoryFiles(session);
     if (memoryFiles.length > 0) {
       parts.push("## Recent Memory (last 7 days)\n");
       for (const { date, content } of memoryFiles) {
@@ -187,28 +184,26 @@ export const selfDocContextProvider: ContextProvider = {
 };
 
 /**
- * Helper to create default self-doc files for a session
+ * Helper to create default self-doc files for a session (WOP-556)
+ * Inserts default templates into SQL instead of writing files.
  */
-export function createDefaultSelfDoc(
+export async function createDefaultSelfDoc(
   session: string,
   options?: {
     agentName?: string;
     userName?: string;
   },
-): void {
-  const sessionDir = join(SESSIONS_DIR, session);
-  if (!existsSync(sessionDir)) {
-    mkdirSync(sessionDir, { recursive: true });
-  }
+): Promise<void> {
+  await initSessionContextStorage();
 
-  const writeIfMissing = (filename: string, content: string) => {
-    const filePath = join(sessionDir, filename);
-    if (!existsSync(filePath)) {
-      writeFileSync(filePath, content);
+  const writeIfMissing = async (filename: string, content: string) => {
+    const existing = await getSessionContext(session, filename);
+    if (existing === null) {
+      await setSessionContext(session, filename, content, "session");
     }
   };
 
-  writeIfMissing(
+  await writeIfMissing(
     "IDENTITY.md",
     `# IDENTITY.md - About Yourself
 
@@ -228,7 +223,7 @@ remembers context across conversations, and can be extended through plugins.
 - Communicate via multiple channels (Discord, P2P, CLI)`,
   );
 
-  writeIfMissing(
+  await writeIfMissing(
     "AGENTS.md",
     `# AGENTS.md - Session Instructions
 
@@ -257,7 +252,7 @@ Do not ask permission to read these files. Just do it.
 - Clean up temporary files after use`,
   );
 
-  writeIfMissing(
+  await writeIfMissing(
     "USER.md",
     `# USER.md - About Your Human
 
