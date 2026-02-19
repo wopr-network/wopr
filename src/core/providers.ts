@@ -8,7 +8,7 @@ import { logger } from "../logger.js";
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -65,6 +65,9 @@ export class ProviderRegistry {
         this.credentials.set(cred.providerId, cred);
       }
 
+      // Fix permissions on existing credentials file (migration for pre-WOP-621 deployments)
+      await chmod(this.credentialsPath, 0o600).catch(() => {});
+
       this.loadedCredentials = true;
     } catch (error) {
       logger.error(`Failed to load provider credentials: ${error}`);
@@ -78,11 +81,11 @@ export class ProviderRegistry {
   async saveCredentials(): Promise<void> {
     const creds = Array.from(this.credentials.values());
 
-    // Ensure directory exists
+    // Ensure directory exists with restricted permissions
     const dir = join(homedir(), ".wopr");
-    await mkdir(dir, { recursive: true });
+    await mkdir(dir, { recursive: true, mode: 0o700 });
 
-    await writeFile(this.credentialsPath, JSON.stringify(creds, null, 2));
+    await writeFile(this.credentialsPath, JSON.stringify(creds, null, 2), { mode: 0o600 });
   }
 
   /**
