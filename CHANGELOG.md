@@ -34,6 +34,53 @@ documentation and configuration options.
 
 ---
 
+## [1.3.0](https://github.com/wopr-network/wopr/compare/wopr-v1.2.0...wopr-v1.3.0) (2026-02-19)
+
+
+### Features
+
+* add resolveCapability() and resolveAllProviders() to core (WOP-491) ([#783](https://github.com/wopr-network/wopr/issues/783)) ([368bdc4](https://github.com/wopr-network/wopr/commit/368bdc4f258ec0299031060a1366bee102a94d70))
+* generate OpenAPI specs and publish API reference (WOP-522) ([#814](https://github.com/wopr-network/wopr/issues/814)) ([1a0dd84](https://github.com/wopr-network/wopr/commit/1a0dd8489455a7490307063dd6c9fe5ee861fcbe))
+* migrate session context files to Storage API (WOP-556) ([#797](https://github.com/wopr-network/wopr/issues/797)) ([a58b060](https://github.com/wopr-network/wopr/commit/a58b06001cacbf3b1db0d2bf1d5103d23dd7af83))
+* **WOP-268:** add WebMCP provider model endpoints and extensions ([#799](https://github.com/wopr-network/wopr/issues/799)) ([071eff9](https://github.com/wopr-network/wopr/commit/071eff941234d2fd74dfb1c440527924e0085326))
+
+
+### Bug Fixes
+
+* add checkout step so agentic Claude can run git operations ([e4bd0ec](https://github.com/wopr-network/wopr/commit/e4bd0ec36c81f858aed3dcf75c8b54fbad781fe2))
+* add timeout to execSync calls in sandbox setup (WOP-613) ([#795](https://github.com/wopr-network/wopr/issues/795)) ([8246d0d](https://github.com/wopr-network/wopr/commit/8246d0de7dfd91dde73e22dede97d736ead97a47))
+* apply .filter(Boolean) to cleanupAllSandboxes() for consistency (WOP-612) ([106ad78](https://github.com/wopr-network/wopr/commit/106ad78dd6feac7b6d24358aaabd0ef9577204de))
+* correct phantom repo refs in capability catalog (WOP-616) ([87dc964](https://github.com/wopr-network/wopr/commit/87dc9645623eba7b26bceea5e756fb1d11f55515))
+* correct phantom repo refs in capability catalog (WOP-616) ([87dc964](https://github.com/wopr-network/wopr/commit/87dc9645623eba7b26bceea5e756fb1d11f55515))
+* correct phantom repo refs in capability-catalog (WOP-616) ([62519a9](https://github.com/wopr-network/wopr/commit/62519a98a6ba4007408d6601ec65b18010f51886))
+* destroySandbox() removes all containers not just first (WOP-612) ([f4f9ec7](https://github.com/wopr-network/wopr/commit/f4f9ec7afa7f9fc8af040ea74716917a3001dcd6))
+* destroySandbox() removes all containers not just first (WOP-612) ([f4f9ec7](https://github.com/wopr-network/wopr/commit/f4f9ec7afa7f9fc8af040ea74716917a3001dcd6))
+* destroySandbox() removes all containers not just first (WOP-612) ([d38ff97](https://github.com/wopr-network/wopr/commit/d38ff9785ac477581e66ce004555f16819b2a621))
+* replace hardcoded /data paths with WOPR_HOME-derived constants (WOP-615) ([8559720](https://github.com/wopr-network/wopr/commit/855972007fe27334039d9a3511ef9d9ef7ff5ad7))
+* resolve signal exit codes in sandbox containers (WOP-611) ([6da5511](https://github.com/wopr-network/wopr/commit/6da5511274b673ebd06969e77a935fb4ef3807cd))
+* resolve signal exit codes in sandbox containers (WOP-611) ([6da5511](https://github.com/wopr-network/wopr/commit/6da5511274b673ebd06969e77a935fb4ef3807cd))
+* resolve signal exit codes in sandbox containers (WOP-611) ([0e47fc6](https://github.com/wopr-network/wopr/commit/0e47fc604448eb86454212efd71b2524447cdd20))
+* set 0o600 permissions on all config/credential file writes (WOP-621) ([a416b11](https://github.com/wopr-network/wopr/commit/a416b1152cecfa60e5a07fb60534093ca62c0df4))
+* trigger on either reviewer, not both — 3min window for second reviewer ([d60a7c2](https://github.com/wopr-network/wopr/commit/d60a7c286a53c82aaf12e6bc30106a3a0755b98f))
+
+
+### Security
+
+* Change default enforcement mode from warn to enforce (WOP-623) ([#787](https://github.com/wopr-network/wopr/issues/787)) ([3fd73ac](https://github.com/wopr-network/wopr/commit/3fd73acf90265bff682c2aabc5af09d4d9bda050))
+* fail-closed on missing security context (WOP-610) ([#788](https://github.com/wopr-network/wopr/issues/788)) ([0c4ecf0](https://github.com/wopr-network/wopr/commit/0c4ecf0c8a76fd81a4fe92291fd7ab5e96756985))
+* restrict CORS to localhost origins (WOP-622) ([aa17526](https://github.com/wopr-network/wopr/commit/aa1752689745a4609c5d50f5de7b0cc4f2a6c700))
+
+
+### Documentation
+
+* add plugin development handbook (WOP-523) ([#798](https://github.com/wopr-network/wopr/issues/798)) ([43ff9b5](https://github.com/wopr-network/wopr/commit/43ff9b525f3bf3c6b1fae94d273d048efb4081a0))
+
+
+### Miscellaneous
+
+* apply pre-existing biome format fixes (WOP-612) ([b75527e](https://github.com/wopr-network/wopr/commit/b75527e6c57a768cd515533499956821d75c4487))
+* remove passive review workflow, keeping agentic claude-code.yml ([f047b68](https://github.com/wopr-network/wopr/commit/f047b68a0cc93e40476b0ee8c87d2f9a4fbe4ae7))
+
 ## [1.2.0](https://github.com/wopr-network/wopr/compare/wopr-v1.1.0...wopr-v1.2.0) (2026-02-18)
 
 
