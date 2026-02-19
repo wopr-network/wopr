@@ -432,7 +432,7 @@ export async function saveAuth(auth: AuthState): Promise<void> {
   } else {
     // Fallback to file (for backward compat during migration)
     const { writeFileSync } = await import("node:fs");
-    writeFileSync(AUTH_FILE, value);
+    writeFileSync(AUTH_FILE, value, { mode: 0o600 });
   }
 }
 
@@ -444,7 +444,7 @@ export async function clearAuth(): Promise<void> {
     // Fallback to file
     const { writeFileSync } = await import("node:fs");
     if (existsSync(AUTH_FILE)) {
-      writeFileSync(AUTH_FILE, "{}");
+      writeFileSync(AUTH_FILE, "{}", { mode: 0o600 });
     }
   }
 }
