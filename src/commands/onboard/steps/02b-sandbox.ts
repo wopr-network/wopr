@@ -27,7 +27,7 @@ async function checkSandboxImageExists(): Promise<boolean> {
   }
 }
 
-async function buildSandboxImage(): Promise<boolean> {
+export async function buildSandboxImage(): Promise<boolean> {
   try {
     const { execSync } = await import("node:child_process");
     const image = "wopr-sandbox:bookworm-slim";
@@ -38,8 +38,24 @@ async function buildSandboxImage(): Promise<boolean> {
     } catch {
       // Image doesn't exist, pull and tag
     }
-    execSync("docker pull debian:bookworm-slim", { stdio: "ignore", timeout: 300_000 });
-    execSync(`docker tag debian:bookworm-slim ${image}`, { stdio: "ignore", timeout: 300_000 });
+    try {
+      execSync("docker pull debian:bookworm-slim", { stdio: "ignore", timeout: 120_000 });
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException & { signal?: string | null };
+      if (e.signal === "SIGTERM") {
+        console.error("Docker pull timed out after 2 minutes. Check your network connection and try again.");
+      }
+      return false;
+    }
+    try {
+      execSync(`docker tag debian:bookworm-slim ${image}`, { stdio: "ignore", timeout: 120_000 });
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException & { signal?: string | null };
+      if (e.signal === "SIGTERM") {
+        console.error("Docker tag timed out after 2 minutes. Check your network connection and try again.");
+      }
+      return false;
+    }
     return true;
   } catch {
     return false;
