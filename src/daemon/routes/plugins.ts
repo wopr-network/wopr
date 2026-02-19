@@ -35,6 +35,9 @@ import {
 } from "../../plugins.js";
 import type { ConfigSchema, PluginInjectOptions } from "../../types.js";
 
+// Serializes concurrent config load-modify-save operations to prevent races
+let configWriteMutex: Promise<void> = Promise.resolve();
+
 // ============================================================================
 // Error classes
 // ============================================================================
@@ -689,14 +692,18 @@ pluginsRouter.put(
       }
     }
 
-    // Save to central config
-    await centralConfig.load();
-    const cfg = centralConfig.get() as unknown as PluginConfigData;
-    if (!cfg.plugins) cfg.plugins = {};
-    if (!cfg.plugins.data) cfg.plugins.data = {};
-    cfg.plugins.data[name] = newConfig;
-    centralConfig.setValue("plugins.data", cfg.plugins.data);
-    await centralConfig.save();
+    // Save to central config — serialized to prevent concurrent load/save races
+    const configWrite = configWriteMutex.then(async () => {
+      await centralConfig.load();
+      const cfg = centralConfig.get() as unknown as PluginConfigData;
+      if (!cfg.plugins) cfg.plugins = {};
+      if (!cfg.plugins.data) cfg.plugins.data = {};
+      cfg.plugins.data[name] = newConfig;
+      centralConfig.setValue("plugins.data", cfg.plugins.data);
+      await centralConfig.save();
+    });
+    configWriteMutex = configWrite;
+    await configWrite;
 
     return c.json({ name, config: newConfig, updated: true });
   },

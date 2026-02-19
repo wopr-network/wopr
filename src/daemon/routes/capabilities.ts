@@ -74,6 +74,10 @@ async function createInjectors() {
 // Router
 // ============================================================================
 
+// Per-plugin in-flight load promises — prevents double-initialization when
+// concurrent requests both pass the getLoadedPlugin() check simultaneously
+const pluginLoadingPromises: Map<string, Promise<void>> = new Map();
+
 export const capabilitiesRouter = new Hono();
 
 // Validation schemas
@@ -213,10 +217,23 @@ capabilitiesRouter.post(
           await centralConfig.save();
         }
 
-        // Hot-load the plugin if not already loaded
+        // Hot-load the plugin if not already loaded — deduplicated per plugin
+        // to prevent double-initialization when concurrent requests both pass
+        // the getLoadedPlugin() check before either call completes
         if (!getLoadedPlugin(plugin.name)) {
-          const injectors = await createInjectors();
-          await loadPlugin(plugin, injectors);
+          const existing = pluginLoadingPromises.get(plugin.name);
+          if (existing) {
+            await existing;
+          } else {
+            const loadPromise = (async () => {
+              const injectors = await createInjectors();
+              await loadPlugin(plugin, injectors);
+            })().finally(() => {
+              pluginLoadingPromises.delete(plugin.name);
+            });
+            pluginLoadingPromises.set(plugin.name, loadPromise);
+            await loadPromise;
+          }
         }
 
         activatedPlugins.push({ name: plugin.name, version: plugin.version });
