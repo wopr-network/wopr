@@ -110,8 +110,8 @@ const sessionSystemProvider: ContextProvider = {
   enabled: true,
   async getContext(session: string): Promise<ContextPart | null> {
     try {
-      const { getSessionContextAsync } = await import("./session-repository.js");
-      const context = await getSessionContextAsync(session);
+      const { getSessionContext } = await import("./session-context-repository.js");
+      const context = await getSessionContext(session, "SOUL.md");
       if (context) {
         return {
           content: context,

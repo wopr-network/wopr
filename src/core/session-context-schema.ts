@@ -26,7 +26,7 @@ export const sessionContextSchema = z.object({
   /** Markdown content of the file */
   content: z.string(),
   /** Whether this is a global or session-specific file */
-  source: z.string(), // "global" | "session"
+  source: z.enum(["global", "session"]),
   /** Creation timestamp (epoch ms) */
   createdAt: z.number(),
   /** Last update timestamp (epoch ms) */

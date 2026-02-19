@@ -35,7 +35,7 @@ vi.mock("../../src/logger.js", () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getStorage, resetStorage } from "../../src/storage/public.js";
 import type { StorageApi } from "../../src/storage/api/plugin-storage.js";
@@ -46,6 +46,7 @@ import {
   setSessionContext,
   listSessionContextFiles,
   deleteSessionContext,
+  migrateSessionContextFromFilesystem,
 } from "../../src/core/session-context-repository.js";
 
 // ---------------------------------------------------------------------------
@@ -194,6 +195,73 @@ describe("Session Context Repository (WOP-556)", () => {
     it("is a no-op for non-existent records", async () => {
       // Should not throw
       await expect(deleteSessionContext("mybot", "MISSING.md")).resolves.toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // migrateSessionContextFromFilesystem
+  // -------------------------------------------------------------------------
+
+  describe("migrateSessionContextFromFilesystem", () => {
+    const sessionsDir = join(TEST_DIR, "sessions");
+    const globalIdentityDir = join(TEST_DIR, "identity");
+
+    beforeEach(() => {
+      mkdirSync(sessionsDir, { recursive: true });
+      mkdirSync(globalIdentityDir, { recursive: true });
+    });
+
+    it("migrates session .md files into SQL", async () => {
+      const botDir = join(sessionsDir, "mybot");
+      mkdirSync(botDir, { recursive: true });
+      writeFileSync(join(botDir, "SOUL.md"), "# Soul content");
+      writeFileSync(join(botDir, "IDENTITY.md"), "# Identity content");
+
+      await migrateSessionContextFromFilesystem(sessionsDir, globalIdentityDir);
+
+      expect(await getSessionContext("mybot", "SOUL.md")).toBe("# Soul content");
+      expect(await getSessionContext("mybot", "IDENTITY.md")).toBe("# Identity content");
+    });
+
+    it("migrates global identity files under __global__", async () => {
+      writeFileSync(join(globalIdentityDir, "IDENTITY.md"), "# Global identity");
+
+      await migrateSessionContextFromFilesystem(sessionsDir, globalIdentityDir);
+
+      expect(await getSessionContext("__global__", "IDENTITY.md")).toBe("# Global identity");
+    });
+
+    it("migrates memory subdirectory files with memory/ prefix", async () => {
+      const botDir = join(sessionsDir, "mybot");
+      const memDir = join(botDir, "memory");
+      mkdirSync(memDir, { recursive: true });
+      writeFileSync(join(memDir, "2024-01-15.md"), "daily entry");
+
+      await migrateSessionContextFromFilesystem(sessionsDir, globalIdentityDir);
+
+      expect(await getSessionContext("mybot", "memory/2024-01-15.md")).toBe("daily entry");
+    });
+
+    it("is idempotent — second call does not overwrite existing SQL records", async () => {
+      const botDir = join(sessionsDir, "mybot");
+      mkdirSync(botDir, { recursive: true });
+      writeFileSync(join(botDir, "SOUL.md"), "# Original");
+
+      await migrateSessionContextFromFilesystem(sessionsDir, globalIdentityDir);
+
+      // Manually update the SQL record to simulate a newer value
+      await setSessionContext("mybot", "SOUL.md", "# Updated in SQL", "session");
+
+      // Run migration again — should NOT overwrite the updated value
+      await migrateSessionContextFromFilesystem(sessionsDir, globalIdentityDir);
+
+      expect(await getSessionContext("mybot", "SOUL.md")).toBe("# Updated in SQL");
+    });
+
+    it("is a no-op when sessionsDir and globalIdentityDir do not exist", async () => {
+      await expect(
+        migrateSessionContextFromFilesystem("/tmp/nonexistent-sessions", "/tmp/nonexistent-identity"),
+      ).resolves.toBeUndefined();
     });
   });
 });

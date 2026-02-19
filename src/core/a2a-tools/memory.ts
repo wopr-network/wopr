@@ -108,11 +108,11 @@ export function createMemoryTools(sessionName: string): unknown[] {
             content = await getSessionContext("__global__", file);
           }
         } else {
-          // Memory file: check as "memory/{file}" in global then session
+          // Memory file: check as "memory/{file}" in session first, then global
           const memoryFilename = file.includes("/") ? file : `memory/${file}`;
-          content = await getSessionContext("__global__", memoryFilename);
+          content = await getSessionContext(sessionName, memoryFilename);
           if (content === null) {
-            content = await getSessionContext(sessionName, memoryFilename);
+            content = await getSessionContext("__global__", memoryFilename);
           }
         }
 

@@ -16,19 +16,19 @@ import { logger } from "../logger.js";
 import { getStorage } from "../storage/index.js";
 import { type SessionContextRecord, sessionContextPluginSchema } from "./session-context-schema.js";
 
-let initialized = false;
+let initPromise: Promise<void> | null = null;
 
 /** Initialize schema — idempotent, call on first access */
 export async function initSessionContextStorage(): Promise<void> {
-  if (initialized) return;
-  const storage = getStorage();
-  await storage.register(sessionContextPluginSchema);
-  initialized = true;
+  if (!initPromise) {
+    initPromise = getStorage().register(sessionContextPluginSchema);
+  }
+  await initPromise;
 }
 
 /** Reset for testing */
 export function resetSessionContextStorageInit(): void {
-  initialized = false;
+  initPromise = null;
 }
 
 /** Build composite key from session name and filename */

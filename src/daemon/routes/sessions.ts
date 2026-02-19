@@ -322,6 +322,9 @@ Do not ask permission to read these files. Just do it.
 ## Project Context`,
   );
 
+  // Note: `path` field is intentionally omitted — files are stored in SQL (WOP-556),
+  // not on the filesystem, so there is no meaningful path to return. No client
+  // (src/client.ts initSessionDocs) or CLI consumer reads a `path` field.
   return c.json({
     session: name,
     created: createdFiles,
