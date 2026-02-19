@@ -155,6 +155,22 @@ describe("GET /providers/:id/models", () => {
     expect(body.error).toContain("notexist");
   });
 
+  it("returns 401 when no credential configured for api-key provider", async () => {
+    const reg = {
+      provider: mockProvider,
+      available: false,
+      lastChecked: 0,
+    };
+    vi.mocked(providerRegistry.getProvider).mockReturnValue(reg);
+    vi.mocked(providerRegistry.getCredential).mockReturnValue(undefined);
+    vi.mocked(getPluginExtension).mockReturnValue(undefined);
+
+    const res = await req("/testprovider/models");
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toContain("testprovider");
+  });
+
   it("returns plain model IDs when no extension registered", async () => {
     const reg = {
       provider: mockProvider,
@@ -162,7 +178,12 @@ describe("GET /providers/:id/models", () => {
       lastChecked: Date.now(),
     };
     vi.mocked(providerRegistry.getProvider).mockReturnValue(reg);
-    vi.mocked(providerRegistry.getCredential).mockReturnValue(undefined);
+    vi.mocked(providerRegistry.getCredential).mockReturnValue({
+      providerId: "testprovider",
+      type: "api-key",
+      credential: "test-key",
+      createdAt: Date.now(),
+    });
     vi.mocked(getPluginExtension).mockReturnValue(undefined);
 
     const res = await req("/testprovider/models");
@@ -208,7 +229,12 @@ describe("GET /providers/:id/models", () => {
     };
     const reg = { provider: failProvider, available: false, lastChecked: 0 };
     vi.mocked(providerRegistry.getProvider).mockReturnValue(reg);
-    vi.mocked(providerRegistry.getCredential).mockReturnValue(undefined);
+    vi.mocked(providerRegistry.getCredential).mockReturnValue({
+      providerId: "testprovider",
+      type: "api-key",
+      credential: "test-key",
+      createdAt: Date.now(),
+    });
     vi.mocked(getPluginExtension).mockReturnValue(undefined);
 
     const res = await req("/testprovider/models");

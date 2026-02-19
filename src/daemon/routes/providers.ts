@@ -99,6 +99,10 @@ providersRouter.get("/:id/models", async (c) => {
       });
     }
     const cred = providerRegistry.getCredential(id);
+    const credType = reg.provider.getCredentialType?.() ?? "api-key";
+    if (!cred && credType !== "oauth") {
+      return c.json({ error: `No credentials configured for provider: ${id}` }, 401);
+    }
     const client = await reg.provider.createClient(cred?.credential || "");
     const modelIds = await client.listModels();
     return c.json({
