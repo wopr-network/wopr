@@ -10,8 +10,18 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const TEST_WOPR_HOME = mkdtempSync(join(tmpdir(), "wopr-memory-paths-test-"));
-const TEST_SESSIONS_DIR = join(TEST_WOPR_HOME, "sessions");
+// vi.hoisted ensures these variables are initialized before vi.mock() factories run,
+// avoiding TDZ errors caused by Vitest's automatic mock hoisting.
+const { TEST_WOPR_HOME, TEST_SESSIONS_DIR } = vi.hoisted(() => {
+  const { mkdtempSync: mkdtemp } = require("node:fs");
+  const { tmpdir: tmp } = require("node:os");
+  const { join: j } = require("node:path");
+  const home = mkdtemp(j(tmp(), "wopr-memory-paths-test-"));
+  return {
+    TEST_WOPR_HOME: home,
+    TEST_SESSIONS_DIR: j(home, "sessions"),
+  };
+});
 
 // Mock paths module before importing anything else
 vi.mock("../../src/paths.js", () => ({
@@ -75,9 +85,16 @@ describe("discoverSessionMemoryDirs", () => {
 });
 
 describe("GLOBAL_IDENTITY_DIR default", () => {
-  it("derives from WOPR_HOME, not hardcoded /data/identity", async () => {
-    const { GLOBAL_IDENTITY_DIR } = await import("../../src/paths.js");
-    expect(GLOBAL_IDENTITY_DIR).toBe(join(TEST_WOPR_HOME, "identity"));
-    expect(GLOBAL_IDENTITY_DIR).not.toBe("/data/identity");
+  it("GLOBAL_IDENTITY_DIR derives from WOPR_HOME", async () => {
+    const originalWoprHome = process.env.WOPR_HOME;
+    process.env.WOPR_HOME = TEST_WOPR_HOME;
+    try {
+      await vi.resetModules();
+      const { GLOBAL_IDENTITY_DIR } = await vi.importActual<typeof import("../../src/paths.js")>("../../src/paths.js");
+      expect(GLOBAL_IDENTITY_DIR).toBe(join(TEST_WOPR_HOME, "identity"));
+    } finally {
+      process.env.WOPR_HOME = originalWoprHome;
+      await vi.resetModules();
+    }
   });
 });
