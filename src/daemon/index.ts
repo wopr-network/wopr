@@ -9,10 +9,12 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
+import { apiReference } from "@scalar/hono-api-reference";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
+import { openAPIRouteHandler } from "hono-openapi";
 // Core imports for daemon functionality
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { config as centralConfig } from "../core/config.js";
@@ -27,6 +29,9 @@ import { buildCorsOrigins } from "./cors.js";
 import { HealthMonitor } from "./health.js";
 import { bearerAuth, requireAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rate-limit.js";
+import { openApiDocumentation } from "./openapi/info.js";
+import { PluginManifestSchema } from "./openapi/manifest-schema.js";
+import { websocketDocs } from "./openapi/websocket-docs.js";
 import { checkReadiness, markStartupComplete } from "./readiness.js";
 import { restartOnIdleManager } from "./restart-on-idle.js";
 import { apiKeysRouter } from "./routes/api-keys.js";
@@ -138,6 +143,33 @@ export function createApp(healthMonitor?: HealthMonitor) {
   if (healthMonitor) {
     app.route("/healthz", createHealthzRouter(healthMonitor));
   }
+
+  // OpenAPI spec (unauthenticated — excluded from bearerAuth via SKIP_AUTH_PATHS)
+  app.get(
+    "/openapi.json",
+    openAPIRouteHandler(app, {
+      documentation: {
+        ...openApiDocumentation,
+        openapi: "3.1.0",
+      },
+    }),
+  );
+
+  // Scalar API reference UI (unauthenticated)
+  app.get(
+    "/docs",
+    apiReference({
+      theme: "saturn",
+      url: "/openapi.json",
+    }),
+  );
+
+  // WebSocket documentation (unauthenticated — not describable in OpenAPI 3.1 REST spec)
+  app.get("/openapi/websocket.json", (c) => c.json(websocketDocs));
+
+  // Plugin manifest JSON Schema (unauthenticated)
+  // Convert Zod schema to JSON Schema for external tooling / plugin authors
+  app.get("/openapi/plugin-manifest.schema.json", (c) => c.json(PluginManifestSchema.toJSONSchema()));
 
   // Global error handler (defense-in-depth: prevents error detail leaks)
   app.onError((err, c) => {

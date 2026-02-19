@@ -10,6 +10,7 @@
  */
 
 import { Hono } from "hono";
+import { describeRoute } from "hono-openapi";
 import { rateLimiter } from "hono-rate-limiter";
 import { z } from "zod";
 import { getCapabilityCatalogEntry, listCapabilityCatalog } from "../../core/capability-catalog.js";
@@ -85,211 +86,253 @@ const DeactivateSchema = z.object({
 });
 
 // GET /api/capabilities — List capabilities with activation status
-capabilitiesRouter.get("/", async (c) => {
-  const catalog = listCapabilityCatalog();
-  const installed = await listPlugins();
-  const installedNames = new Set(installed.map((p: InstalledPlugin) => p.name));
+capabilitiesRouter.get(
+  "/",
+  describeRoute({
+    tags: ["Capabilities"],
+    summary: "List capabilities with activation status",
+    responses: {
+      200: { description: "List of capabilities from the catalog with their activation status" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const catalog = listCapabilityCatalog();
+    const installed = await listPlugins();
+    const installedNames = new Set(installed.map((p: InstalledPlugin) => p.name));
 
-  const capabilities = catalog.map((entry) => {
-    const pluginStatuses = entry.plugins.map((ref) => {
-      const plugin = installed.find((p: InstalledPlugin) => p.name === ref.name);
+    const capabilities = catalog.map((entry) => {
+      const pluginStatuses = entry.plugins.map((ref) => {
+        const plugin = installed.find((p: InstalledPlugin) => p.name === ref.name);
+        return {
+          name: ref.name,
+          installed: installedNames.has(ref.name),
+          enabled: plugin?.enabled ?? false,
+          loaded: getLoadedPlugin(ref.name) !== undefined,
+        };
+      });
+
+      const active = pluginStatuses.every((s) => s.installed && s.enabled && s.loaded);
+
       return {
-        name: ref.name,
-        installed: installedNames.has(ref.name),
-        enabled: plugin?.enabled ?? false,
-        loaded: getLoadedPlugin(ref.name) !== undefined,
+        id: entry.id,
+        label: entry.label,
+        description: entry.description,
+        icon: entry.icon,
+        active,
+        plugins: pluginStatuses,
       };
     });
 
-    const active = pluginStatuses.every((s) => s.installed && s.enabled && s.loaded);
-
-    return {
-      id: entry.id,
-      label: entry.label,
-      description: entry.description,
-      icon: entry.icon,
-      active,
-      plugins: pluginStatuses,
-    };
-  });
-
-  return c.json({ capabilities });
-});
+    return c.json({ capabilities });
+  },
+);
 
 // POST /api/capabilities/activate — Activate a capability (install + configure + load)
-capabilitiesRouter.post("/activate", mutateRateLimit, async (c) => {
-  const parsed = ActivateSchema.safeParse(await c.req.json());
-  if (!parsed.success) {
-    return c.json({ error: parsed.error.issues[0].message }, 400);
-  }
+capabilitiesRouter.post(
+  "/activate",
+  describeRoute({
+    tags: ["Capabilities"],
+    summary: "Activate a capability",
+    description: "Zero-click activation: installs the required plugin(s), enables, configures, and hot-loads them.",
+    responses: {
+      200: { description: "Capability activated" },
+      400: { description: "Validation error" },
+      404: { description: "Unknown capability" },
+      500: { description: "Activation failed" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  mutateRateLimit,
+  async (c) => {
+    const parsed = ActivateSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.issues[0].message }, 400);
+    }
 
-  const { capability } = parsed.data;
-  const entry = getCapabilityCatalogEntry(capability);
-  if (!entry) {
-    return c.json({ error: `Unknown capability: ${capability}` }, 404);
-  }
+    const { capability } = parsed.data;
+    const entry = getCapabilityCatalogEntry(capability);
+    if (!entry) {
+      return c.json({ error: `Unknown capability: ${capability}` }, 404);
+    }
 
-  // Check if already fully active
-  const installed = await listPlugins();
-  const allActive = entry.plugins.every((ref) => {
-    const p = installed.find((ip: InstalledPlugin) => ip.name === ref.name);
-    return p?.enabled && getLoadedPlugin(ref.name) !== undefined;
-  });
+    // Check if already fully active
+    const installed = await listPlugins();
+    const allActive = entry.plugins.every((ref) => {
+      const p = installed.find((ip: InstalledPlugin) => ip.name === ref.name);
+      return p?.enabled && getLoadedPlugin(ref.name) !== undefined;
+    });
 
-  if (allActive) {
+    if (allActive) {
+      return c.json({
+        activated: true,
+        capability: entry.id,
+        message: entry.activatedMessage,
+        alreadyActive: true,
+      });
+    }
+
+    // Resolve the bot's platform token for WOPR-hosted config
+    const platformToken = process.env.WOPR_PLATFORM_TOKEN || (centralConfig.getValue("platform.token") as string) || "";
+
+    const activatedPlugins: Array<{ name: string; version: string }> = [];
+    const errors: Array<{ plugin: string; error: string }> = [];
+
+    for (const ref of entry.plugins) {
+      try {
+        // Check if already installed
+        let plugin = installed.find((p: InstalledPlugin) => p.name === ref.name) as InstalledPlugin | undefined;
+
+        if (!plugin) {
+          // Install the plugin
+          plugin = await installPlugin(ref.source);
+        }
+
+        // Enable if not enabled
+        if (!plugin.enabled) {
+          const enabled = await enablePlugin(plugin.name);
+          if (enabled === false) {
+            throw new Error(`Plugin ${plugin.name} could not be enabled — plugin record not found`);
+          }
+        }
+
+        // Set WOPR-hosted config (auto-configure to api.wopr.bot)
+        // Only set config if not already configured (don't overwrite existing user config)
+        await centralConfig.load();
+        const cfg = structuredClone(centralConfig.get()) as unknown as PluginConfigData;
+        if (!cfg.plugins) cfg.plugins = {};
+        if (!cfg.plugins.data) cfg.plugins.data = {};
+
+        // Only inject hosted config if the plugin has no existing config
+        if (!cfg.plugins.data[plugin.name]) {
+          cfg.plugins.data[plugin.name] = {
+            ...ref.hostedConfig,
+            ...(platformToken ? { platformToken } : {}),
+          };
+          centralConfig.setValue("plugins.data", cfg.plugins.data);
+          await centralConfig.save();
+        }
+
+        // Hot-load the plugin if not already loaded
+        if (!getLoadedPlugin(plugin.name)) {
+          const injectors = await createInjectors();
+          await loadPlugin(plugin, injectors);
+        }
+
+        activatedPlugins.push({ name: plugin.name, version: plugin.version });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error({ msg: "[capabilities] Activation failed for plugin", plugin: ref.name, error: message });
+        errors.push({ plugin: ref.name, error: message });
+      }
+    }
+
+    // Run provider health check after all plugins loaded
+    try {
+      await providerRegistry.checkHealth();
+    } catch (err) {
+      // Non-fatal — health check failure shouldn't block activation
+      logger.warn({
+        msg: "[capabilities] Provider health check failed after activation",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    if (errors.length > 0 && activatedPlugins.length === 0) {
+      // Total failure
+      return c.json(
+        {
+          activated: false,
+          capability: entry.id,
+          errors,
+        },
+        500,
+      );
+    }
+
     return c.json({
       activated: true,
       capability: entry.id,
       message: entry.activatedMessage,
-      alreadyActive: true,
+      plugins: activatedPlugins,
+      errors: errors.length > 0 ? errors : undefined,
     });
-  }
-
-  // Resolve the bot's platform token for WOPR-hosted config
-  const platformToken = process.env.WOPR_PLATFORM_TOKEN || (centralConfig.getValue("platform.token") as string) || "";
-
-  const activatedPlugins: Array<{ name: string; version: string }> = [];
-  const errors: Array<{ plugin: string; error: string }> = [];
-
-  for (const ref of entry.plugins) {
-    try {
-      // Check if already installed
-      let plugin = installed.find((p: InstalledPlugin) => p.name === ref.name) as InstalledPlugin | undefined;
-
-      if (!plugin) {
-        // Install the plugin
-        plugin = await installPlugin(ref.source);
-      }
-
-      // Enable if not enabled
-      if (!plugin.enabled) {
-        const enabled = await enablePlugin(plugin.name);
-        if (enabled === false) {
-          throw new Error(`Plugin ${plugin.name} could not be enabled — plugin record not found`);
-        }
-      }
-
-      // Set WOPR-hosted config (auto-configure to api.wopr.bot)
-      // Only set config if not already configured (don't overwrite existing user config)
-      await centralConfig.load();
-      const cfg = structuredClone(centralConfig.get()) as unknown as PluginConfigData;
-      if (!cfg.plugins) cfg.plugins = {};
-      if (!cfg.plugins.data) cfg.plugins.data = {};
-
-      // Only inject hosted config if the plugin has no existing config
-      if (!cfg.plugins.data[plugin.name]) {
-        cfg.plugins.data[plugin.name] = {
-          ...ref.hostedConfig,
-          ...(platformToken ? { platformToken } : {}),
-        };
-        centralConfig.setValue("plugins.data", cfg.plugins.data);
-        await centralConfig.save();
-      }
-
-      // Hot-load the plugin if not already loaded
-      if (!getLoadedPlugin(plugin.name)) {
-        const injectors = await createInjectors();
-        await loadPlugin(plugin, injectors);
-      }
-
-      activatedPlugins.push({ name: plugin.name, version: plugin.version });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error({ msg: "[capabilities] Activation failed for plugin", plugin: ref.name, error: message });
-      errors.push({ plugin: ref.name, error: message });
-    }
-  }
-
-  // Run provider health check after all plugins loaded
-  try {
-    await providerRegistry.checkHealth();
-  } catch (err) {
-    // Non-fatal — health check failure shouldn't block activation
-    logger.warn({
-      msg: "[capabilities] Provider health check failed after activation",
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-
-  if (errors.length > 0 && activatedPlugins.length === 0) {
-    // Total failure
-    return c.json(
-      {
-        activated: false,
-        capability: entry.id,
-        errors,
-      },
-      500,
-    );
-  }
-
-  return c.json({
-    activated: true,
-    capability: entry.id,
-    message: entry.activatedMessage,
-    plugins: activatedPlugins,
-    errors: errors.length > 0 ? errors : undefined,
-  });
-});
+  },
+);
 
 // POST /api/capabilities/deactivate — Deactivate a capability (unload + disable)
-capabilitiesRouter.post("/deactivate", mutateRateLimit, async (c) => {
-  const parsed = DeactivateSchema.safeParse(await c.req.json());
-  if (!parsed.success) {
-    return c.json({ error: parsed.error.issues[0].message }, 400);
-  }
-
-  const { capability } = parsed.data;
-  const entry = getCapabilityCatalogEntry(capability);
-  if (!entry) {
-    return c.json({ error: `Unknown capability: ${capability}` }, 404);
-  }
-
-  const deactivated: string[] = [];
-  const errors: Array<{ plugin: string; error: string }> = [];
-
-  for (const ref of entry.plugins) {
-    try {
-      await unloadPlugin(ref.name);
-      await disablePlugin(ref.name);
-      deactivated.push(ref.name);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error({ msg: "[capabilities] Deactivation failed for plugin", plugin: ref.name, error: message });
-      errors.push({ plugin: ref.name, error: message });
+capabilitiesRouter.post(
+  "/deactivate",
+  describeRoute({
+    tags: ["Capabilities"],
+    summary: "Deactivate a capability",
+    description: "Unloads and disables the plugin(s) powering the capability.",
+    responses: {
+      200: { description: "Capability deactivated" },
+      400: { description: "Validation error" },
+      404: { description: "Unknown capability" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  mutateRateLimit,
+  async (c) => {
+    const parsed = DeactivateSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.issues[0].message }, 400);
     }
-  }
 
-  // Build updated capabilities list for UI to refresh state (mirrors activate response)
-  const updatedInstalled = await listPlugins();
-  const updatedInstalledNames = new Set(updatedInstalled.map((p: InstalledPlugin) => p.name));
-  const catalog = listCapabilityCatalog();
-  const capabilities = catalog.map((cap) => {
-    const pluginStatuses = cap.plugins.map((ref) => {
-      const p = updatedInstalled.find((ip: InstalledPlugin) => ip.name === ref.name);
+    const { capability } = parsed.data;
+    const entry = getCapabilityCatalogEntry(capability);
+    if (!entry) {
+      return c.json({ error: `Unknown capability: ${capability}` }, 404);
+    }
+
+    const deactivated: string[] = [];
+    const errors: Array<{ plugin: string; error: string }> = [];
+
+    for (const ref of entry.plugins) {
+      try {
+        await unloadPlugin(ref.name);
+        await disablePlugin(ref.name);
+        deactivated.push(ref.name);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error({ msg: "[capabilities] Deactivation failed for plugin", plugin: ref.name, error: message });
+        errors.push({ plugin: ref.name, error: message });
+      }
+    }
+
+    // Build updated capabilities list for UI to refresh state (mirrors activate response)
+    const updatedInstalled = await listPlugins();
+    const updatedInstalledNames = new Set(updatedInstalled.map((p: InstalledPlugin) => p.name));
+    const catalog = listCapabilityCatalog();
+    const capabilities = catalog.map((cap) => {
+      const pluginStatuses = cap.plugins.map((ref) => {
+        const p = updatedInstalled.find((ip: InstalledPlugin) => ip.name === ref.name);
+        return {
+          name: ref.name,
+          installed: updatedInstalledNames.has(ref.name),
+          enabled: p?.enabled ?? false,
+          loaded: getLoadedPlugin(ref.name) !== undefined,
+        };
+      });
+      const active = pluginStatuses.every((s) => s.installed && s.enabled && s.loaded);
       return {
-        name: ref.name,
-        installed: updatedInstalledNames.has(ref.name),
-        enabled: p?.enabled ?? false,
-        loaded: getLoadedPlugin(ref.name) !== undefined,
+        id: cap.id,
+        label: cap.label,
+        description: cap.description,
+        icon: cap.icon,
+        active,
+        plugins: pluginStatuses,
       };
     });
-    const active = pluginStatuses.every((s) => s.installed && s.enabled && s.loaded);
-    return {
-      id: cap.id,
-      label: cap.label,
-      description: cap.description,
-      icon: cap.icon,
-      active,
-      plugins: pluginStatuses,
-    };
-  });
 
-  return c.json({
-    deactivated: true,
-    capability: entry.id,
-    plugins: deactivated,
-    errors: errors.length > 0 ? errors : undefined,
-    capabilities,
-  });
-});
+    return c.json({
+      deactivated: true,
+      capability: entry.id,
+      plugins: deactivated,
+      errors: errors.length > 0 ? errors : undefined,
+      capabilities,
+    });
+  },
+);

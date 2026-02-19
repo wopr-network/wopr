@@ -20,7 +20,18 @@ import { ensureToken } from "../auth-token.js";
 
 // WebSocket upgrade paths skip bearer auth — authentication happens
 // at the WebSocket message level via first-message ticket exchange
-const SKIP_AUTH_PATHS = new Set(["/health", "/ready", "/ws", "/api/ws", "/healthz", "/healthz/history"]);
+const SKIP_AUTH_PATHS = new Set([
+  "/health",
+  "/ready",
+  "/ws",
+  "/api/ws",
+  "/healthz",
+  "/healthz/history",
+  "/openapi.json",
+  "/docs",
+  "/openapi/websocket.json",
+  "/openapi/plugin-manifest.schema.json",
+]);
 
 /** Map an API key scope to its corresponding auth role. */
 function scopeToRole(scope: string): string {

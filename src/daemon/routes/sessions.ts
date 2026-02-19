@@ -4,6 +4,7 @@
 
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
+import { describeRoute } from "hono-openapi";
 import {
   deleteSession,
   getSessionContext,
@@ -21,226 +22,334 @@ import { broadcastInjection, broadcastStream } from "../ws.js";
 export const sessionsRouter = new Hono();
 
 // List all sessions
-sessionsRouter.get("/", async (c) => {
-  const sessions = await listSessions();
-  return c.json({ sessions });
-});
+sessionsRouter.get(
+  "/",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "List all sessions",
+    responses: {
+      200: { description: "List of sessions" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const sessions = await listSessions();
+    return c.json({ sessions });
+  },
+);
 
 // Get session details
-sessionsRouter.get("/:name", async (c) => {
-  const name = c.req.param("name");
-  validateSessionName(name);
-  const sessions = await getSessions();
-  const context = await getSessionContext(name);
+sessionsRouter.get(
+  "/:name",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "Get session details",
+    responses: {
+      200: { description: "Session details" },
+      404: { description: "Session not found" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    validateSessionName(name);
+    const sessions = await getSessions();
+    const context = await getSessionContext(name);
 
-  if (!sessions[name] && !context) {
-    return c.json({ error: "Session not found" }, 404);
-  }
+    if (!sessions[name] && !context) {
+      return c.json({ error: "Session not found" }, 404);
+    }
 
-  return c.json({
-    name,
-    id: sessions[name] || null,
-    context: context || null,
-  });
-});
+    return c.json({
+      name,
+      id: sessions[name] || null,
+      context: context || null,
+    });
+  },
+);
 
 // Get conversation history
-sessionsRouter.get("/:name/conversation", async (c) => {
-  const name = c.req.param("name");
-  validateSessionName(name);
-  const limitParam = c.req.query("limit");
-  const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+sessionsRouter.get(
+  "/:name/conversation",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "Get conversation history",
+    responses: {
+      200: { description: "Conversation history entries" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    validateSessionName(name);
+    const limitParam = c.req.query("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
-  const entries = await readConversationLog(name, limit);
+    const entries = await readConversationLog(name, limit);
 
-  return c.json({
-    name,
-    entries,
-    count: entries.length,
-  });
-});
+    return c.json({
+      name,
+      entries,
+      count: entries.length,
+    });
+  },
+);
 
 // Create session
-sessionsRouter.post("/", async (c) => {
-  const body = await c.req.json();
-  const { name, context } = body;
-
-  if (!name) {
-    return c.json({ error: "Name is required" }, 400);
-  }
-
-  validateSessionName(name);
-
-  const defaultContext = context || `You are WOPR session "${name}".`;
-  await setSessionContext(name, defaultContext);
-
-  return c.json(
-    {
-      name,
-      context: defaultContext,
-      created: true,
+sessionsRouter.post(
+  "/",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "Create session",
+    responses: {
+      201: { description: "Session created" },
+      400: { description: "Validation error" },
+      401: { description: "Unauthorized" },
     },
-    201,
-  );
-});
+  }),
+  async (c) => {
+    const body = await c.req.json();
+    const { name, context } = body;
+
+    if (!name) {
+      return c.json({ error: "Name is required" }, 400);
+    }
+
+    validateSessionName(name);
+
+    const defaultContext = context || `You are WOPR session "${name}".`;
+    await setSessionContext(name, defaultContext);
+
+    return c.json(
+      {
+        name,
+        context: defaultContext,
+        created: true,
+      },
+      201,
+    );
+  },
+);
 
 // Update session context
-sessionsRouter.put("/:name", async (c) => {
-  const name = c.req.param("name");
-  validateSessionName(name);
-  const body = await c.req.json();
-  const { context } = body;
+sessionsRouter.put(
+  "/:name",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "Update session context",
+    responses: {
+      200: { description: "Session updated" },
+      400: { description: "Validation error" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    validateSessionName(name);
+    const body = await c.req.json();
+    const { context } = body;
 
-  if (!context) {
-    return c.json({ error: "Context is required" }, 400);
-  }
+    if (!context) {
+      return c.json({ error: "Context is required" }, 400);
+    }
 
-  await setSessionContext(name, context);
+    await setSessionContext(name, context);
 
-  return c.json({
-    name,
-    context,
-    updated: true,
-  });
-});
+    return c.json({
+      name,
+      context,
+      updated: true,
+    });
+  },
+);
 
 // Delete session
-sessionsRouter.delete("/:name", async (c) => {
-  const name = c.req.param("name");
-  validateSessionName(name);
-  await deleteSession(name, "api_delete");
-  return c.json({ deleted: true });
-});
+sessionsRouter.delete(
+  "/:name",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "Delete session",
+    responses: {
+      200: { description: "Session deleted" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    validateSessionName(name);
+    await deleteSession(name, "api_delete");
+    return c.json({ deleted: true });
+  },
+);
 
 // Inject message - returns streaming response via SSE
-sessionsRouter.post("/:name/inject", async (c) => {
-  const name = c.req.param("name");
-  validateSessionName(name);
-  const body = await c.req.json();
-  const { message, from = "api" } = body;
+sessionsRouter.post(
+  "/:name/inject",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "Inject message into session",
+    description:
+      "Injects a message into the session and returns the AI response. Supports SSE streaming via Accept: text/event-stream header.",
+    responses: {
+      200: { description: "AI response (or SSE stream when Accept: text/event-stream)" },
+      400: { description: "Validation error" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    validateSessionName(name);
+    const body = await c.req.json();
+    const { message, from = "api" } = body;
 
-  if (!message) {
-    return c.json({ error: "Message is required" }, 400);
-  }
+    if (!message) {
+      return c.json({ error: "Message is required" }, 400);
+    }
 
-  // Check if client wants streaming
-  const acceptSSE = c.req.header("Accept")?.includes("text/event-stream");
+    // Check if client wants streaming
+    const acceptSSE = c.req.header("Accept")?.includes("text/event-stream");
 
-  if (acceptSSE) {
-    // Streaming response via SSE
-    return stream(c, async (stream) => {
-      c.header("Content-Type", "text/event-stream");
-      c.header("Cache-Control", "no-cache");
-      c.header("Connection", "keep-alive");
+    if (acceptSSE) {
+      // Streaming response via SSE
+      return stream(c, async (stream) => {
+        c.header("Content-Type", "text/event-stream");
+        c.header("Cache-Control", "no-cache");
+        c.header("Connection", "keep-alive");
 
+        const result = await inject(name, message, {
+          silent: true,
+          from,
+          // SECURITY: API requests come from daemon with owner trust level
+          // (daemon is local, authenticated implicitly)
+          source: createInjectionSource("daemon"),
+          onStream: (msg) => {
+            // Send SSE event
+            const data = JSON.stringify({
+              type: msg.type,
+              content: msg.content,
+              toolName: msg.toolName,
+            });
+            stream.write(`data: ${data}\n\n`);
+
+            // Broadcast to WebSocket clients
+            broadcastStream(name, from, msg);
+          },
+        });
+
+        // Send completion event
+        stream.write(
+          `data: ${JSON.stringify({
+            type: "done",
+            sessionId: result.sessionId,
+          })}\n\n`,
+        );
+
+        // Broadcast injection completion
+        broadcastInjection(name, from, message, result.response);
+      });
+    } else {
+      // Non-streaming response
       const result = await inject(name, message, {
         silent: true,
         from,
         // SECURITY: API requests come from daemon with owner trust level
-        // (daemon is local, authenticated implicitly)
         source: createInjectionSource("daemon"),
         onStream: (msg) => {
-          // Send SSE event
-          const data = JSON.stringify({
-            type: msg.type,
-            content: msg.content,
-            toolName: msg.toolName,
-          });
-          stream.write(`data: ${data}\n\n`);
-
-          // Broadcast to WebSocket clients
           broadcastStream(name, from, msg);
         },
       });
 
-      // Send completion event
-      stream.write(
-        `data: ${JSON.stringify({
-          type: "done",
-          sessionId: result.sessionId,
-        })}\n\n`,
-      );
-
-      // Broadcast injection completion
       broadcastInjection(name, from, message, result.response);
-    });
-  } else {
-    // Non-streaming response
-    const result = await inject(name, message, {
-      silent: true,
-      from,
-      // SECURITY: API requests come from daemon with owner trust level
-      source: createInjectionSource("daemon"),
-      onStream: (msg) => {
-        broadcastStream(name, from, msg);
-      },
-    });
 
-    broadcastInjection(name, from, message, result.response);
+      return c.json({
+        session: name,
+        sessionId: result.sessionId,
+        response: result.response,
+      });
+    }
+  },
+);
+
+// Log message without triggering a response
+sessionsRouter.post(
+  "/:name/log",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "Log message without triggering a response",
+    responses: {
+      200: { description: "Message logged" },
+      400: { description: "Validation error" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    validateSessionName(name);
+    const body = await c.req.json();
+    const { message, from = "api" } = body;
+
+    if (!message) {
+      return c.json({ error: "Message is required" }, 400);
+    }
+
+    await logMessage(name, message, { from });
 
     return c.json({
       session: name,
-      sessionId: result.sessionId,
-      response: result.response,
+      logged: true,
     });
-  }
-});
-
-// Log message without triggering a response
-sessionsRouter.post("/:name/log", async (c) => {
-  const name = c.req.param("name");
-  validateSessionName(name);
-  const body = await c.req.json();
-  const { message, from = "api" } = body;
-
-  if (!message) {
-    return c.json({ error: "Message is required" }, 400);
-  }
-
-  await logMessage(name, message, { from });
-
-  return c.json({
-    session: name,
-    logged: true,
-  });
-});
+  },
+);
 
 // Initialize self-documentation files in SQL (SOUL.md, AGENTS.md, etc.) — WOP-556
-sessionsRouter.post("/:name/init-docs", async (c) => {
-  const name = c.req.param("name");
-  validateSessionName(name);
-  const body = await c.req.json();
-  const { agentName, userName } = body;
+sessionsRouter.post(
+  "/:name/init-docs",
+  describeRoute({
+    tags: ["Sessions"],
+    summary: "Initialize self-documentation files",
+    description:
+      "Creates default documentation files (IDENTITY.md, AGENTS.md, USER.md, MEMORY.md) in SQL storage for the session.",
+    responses: {
+      200: { description: "Documentation files initialized" },
+      404: { description: "Session not found" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+    validateSessionName(name);
+    const body = await c.req.json();
+    const { agentName, userName } = body;
 
-  // Check session exists
-  const sessions = await getSessions();
-  const context = await getSessionContext(name);
-  if (!sessions[name] && !context) {
-    return c.json({ error: "Session not found" }, 404);
-  }
-
-  const {
-    getSessionContext: getSqlContext,
-    setSessionContext: setSqlContext,
-    initSessionContextStorage,
-  } = await import("../../core/session-context-repository.js");
-
-  await initSessionContextStorage();
-
-  const createdFiles: string[] = [];
-
-  const writeIfMissing = async (filename: string, content: string) => {
-    const existing = await getSqlContext(name, filename);
-    if (existing === null) {
-      await setSqlContext(name, filename, content, "session");
-      createdFiles.push(filename);
+    // Check session exists
+    const sessions = await getSessions();
+    const context = await getSessionContext(name);
+    if (!sessions[name] && !context) {
+      return c.json({ error: "Session not found" }, 404);
     }
-  };
 
-  // IDENTITY.md - Agent self-definition
-  await writeIfMissing(
-    "IDENTITY.md",
-    `# IDENTITY.md - About Yourself
+    const {
+      getSessionContext: getSqlContext,
+      setSessionContext: setSqlContext,
+      initSessionContextStorage,
+    } = await import("../../core/session-context-repository.js");
+
+    await initSessionContextStorage();
+
+    const createdFiles: string[] = [];
+
+    const writeIfMissing = async (filename: string, content: string) => {
+      const existing = await getSqlContext(name, filename);
+      if (existing === null) {
+        await setSqlContext(name, filename, content, "session");
+        createdFiles.push(filename);
+      }
+    };
+
+    // IDENTITY.md - Agent self-definition
+    await writeIfMissing(
+      "IDENTITY.md",
+      `# IDENTITY.md - About Yourself
 
 ## Identity
 **Name:** ${agentName || `${name} Assistant`}
@@ -257,12 +366,12 @@ remembers context across conversations, and can be extended through plugins.
 - Read and write files
 - Search and analyze code
 - Communicate via multiple channels`,
-  );
+    );
 
-  // AGENTS.md - Session instructions
-  await writeIfMissing(
-    "AGENTS.md",
-    `# AGENTS.md - Session Instructions
+    // AGENTS.md - Session instructions
+    await writeIfMissing(
+      "AGENTS.md",
+      `# AGENTS.md - Session Instructions
 
 ## Every Session
 
@@ -287,12 +396,12 @@ Do not ask permission to read these files. Just do it.
 - Use search to find relevant code before modifying
 - Batch related file operations when possible
 - Clean up temporary files after use`,
-  );
+    );
 
-  // USER.md - User profile
-  await writeIfMissing(
-    "USER.md",
-    `# USER.md - About Your Human
+    // USER.md - User profile
+    await writeIfMissing(
+      "USER.md",
+      `# USER.md - About Your Human
 
 ## Profile
 **Name:** ${userName || "Unknown"}
@@ -306,12 +415,12 @@ Do not ask permission to read these files. Just do it.
 
 ## Important Facts
 - *To be filled in as learned*`,
-  );
+    );
 
-  // MEMORY.md - Long-term memory (empty initially)
-  await writeIfMissing(
-    "MEMORY.md",
-    `# MEMORY.md - Long-term Memories
+    // MEMORY.md - Long-term memory (empty initially)
+    await writeIfMissing(
+      "MEMORY.md",
+      `# MEMORY.md - Long-term Memories
 
 ## Important Decisions
 
@@ -320,13 +429,14 @@ Do not ask permission to read these files. Just do it.
 ## User Preferences (persisted facts)
 
 ## Project Context`,
-  );
+    );
 
-  // Note: `path` field is intentionally omitted — files are stored in SQL (WOP-556),
-  // not on the filesystem, so there is no meaningful path to return. No client
-  // (src/client.ts initSessionDocs) or CLI consumer reads a `path` field.
-  return c.json({
-    session: name,
-    created: createdFiles,
-  });
-});
+    // Note: `path` field is intentionally omitted — files are stored in SQL (WOP-556),
+    // not on the filesystem, so there is no meaningful path to return. No client
+    // (src/client.ts initSessionDocs) or CLI consumer reads a `path` field.
+    return c.json({
+      session: name,
+      created: createdFiles,
+    });
+  },
+);
