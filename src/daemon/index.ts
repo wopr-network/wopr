@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
+import { buildCorsOrigins } from "./cors.js";
 // Core imports for daemon functionality
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { config as centralConfig } from "../core/config.js";
@@ -81,8 +82,8 @@ export interface DaemonConfig {
 export function createApp(healthMonitor?: HealthMonitor) {
   const app = new Hono();
 
-  // Middleware
-  app.use("*", cors());
+  // Middleware — restrict CORS to known localhost origins (WOP-622)
+  app.use("*", cors({ origin: buildCorsOrigins(), credentials: true }));
   app.use("*", logger());
   app.use("*", rateLimit());
   app.use("*", bearerAuth());
