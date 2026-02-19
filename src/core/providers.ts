@@ -197,7 +197,8 @@ export class ProviderRegistry {
   }
 
   /**
-   * Get the currently active (first available) provider
+   * Get the currently active (first available) provider.
+   * Returns null if no providers are registered or none are available.
    */
   getActiveProvider(): { id: string; name: string; defaultModel: string } | null {
     for (const reg of this.providers.values()) {
@@ -208,14 +209,6 @@ export class ProviderRegistry {
           defaultModel: reg.provider.defaultModel,
         };
       }
-    }
-    const first = this.providers.values().next().value;
-    if (first) {
-      return {
-        id: first.provider.id,
-        name: first.provider.name,
-        defaultModel: first.provider.defaultModel,
-      };
     }
     return null;
   }
