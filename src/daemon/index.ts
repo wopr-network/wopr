@@ -13,7 +13,6 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { logger } from "hono/logger";
-import { buildCorsOrigins } from "./cors.js";
 // Core imports for daemon functionality
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { config as centralConfig } from "../core/config.js";
@@ -24,6 +23,7 @@ import { logger as winstonLogger } from "../logger.js";
 import { LOG_FILE, PID_FILE } from "../paths.js";
 import { loadAllPlugins, shutdownAllPlugins } from "../plugins.js";
 import { ensureToken } from "./auth-token.js";
+import { buildCorsOrigins } from "./cors.js";
 import { HealthMonitor } from "./health.js";
 import { bearerAuth, requireAuth } from "./middleware/auth.js";
 import { rateLimit } from "./middleware/rate-limit.js";
@@ -217,6 +217,15 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await initRegistriesStorage();
   await migrateRegistriesToSql();
   daemonLog("Registries storage initialized");
+
+  // Initialize session context storage and migrate from filesystem (WOP-556)
+  daemonLog("Initializing session context storage...");
+  const { initSessionContextStorage } = await import("../core/session-context-repository.js");
+  const { migrateSessionContextFromFilesystem } = await import("../core/session-context-repository.js");
+  const { SESSIONS_DIR: sDir, GLOBAL_IDENTITY_DIR: gDir } = await import("../paths.js");
+  await initSessionContextStorage();
+  await migrateSessionContextFromFilesystem(sDir, gDir);
+  daemonLog("Session context storage initialized");
 
   // Ensure bearer token exists for API authentication
   ensureToken();

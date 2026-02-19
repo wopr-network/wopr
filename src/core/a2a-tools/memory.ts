@@ -1,30 +1,24 @@
 /**
  * Memory tools: memory_read, memory_write, memory_search, memory_get, self_reflect
+ * WOP-556: SQL-backed via session-context-repository
  */
 
 import {
+  getSessionContext,
+  initSessionContextStorage,
+  listSessionContextFiles,
+  setSessionContext,
+} from "../session-context-repository.js";
+import {
   canIndexSession,
   eventBus,
-  existsSync,
-  GLOBAL_IDENTITY_DIR,
-  GLOBAL_MEMORY_DIR,
   getContext,
   getSecurityConfig,
   getSessionIndexable,
-  join,
-  listAllMemoryFiles,
   logger,
-  mkdirSync,
   parseTemporalFilter,
-  readdirSync,
-  readFileSync,
-  resolveMemoryFile,
-  resolveRootFile,
-  SESSIONS_DIR,
-  statSync,
   tool,
   withSecurityCheck,
-  writeFileSync,
   z,
 } from "./_base.js";
 
@@ -46,66 +40,86 @@ export function createMemoryTools(sessionName: string): unknown[] {
       },
       async (args: { file?: string; from?: number; lines?: number; days?: number }) => {
         const { file, days = 7, from, lines: lineCount } = args;
-        const sessionDir = join(SESSIONS_DIR, sessionName);
+
+        await initSessionContextStorage();
 
         if (!file) {
-          const files: string[] = listAllMemoryFiles(sessionDir);
-          for (const f of ["IDENTITY.md", "MEMORY.md", "USER.md"]) {
-            const resolved = resolveRootFile(sessionDir, f);
-            if (resolved.exists && !files.includes(f)) files.push(f);
+          // List all available memory files from SQL
+          const sessionFiles = await listSessionContextFiles(sessionName);
+          const globalFiles = await listSessionContextFiles("__global__");
+
+          const allFiles = new Set<string>();
+          for (const f of [...sessionFiles, ...globalFiles]) {
+            allFiles.add(f);
           }
+
+          const fileList = [...allFiles];
           return {
             content: [
               {
                 type: "text",
-                text: files.length > 0 ? `Available memory files:\n${files.join("\n")}` : "No memory files found.",
+                text:
+                  fileList.length > 0 ? `Available memory files:\n${fileList.join("\n")}` : "No memory files found.",
               },
             ],
           };
         }
 
         if (file === "recent" || file === "daily") {
-          const dailyFiles: { name: string; path: string }[] = [];
-          if (existsSync(GLOBAL_MEMORY_DIR)) {
-            for (const f of readdirSync(GLOBAL_MEMORY_DIR).filter((f: string) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))) {
-              dailyFiles.push({ name: f, path: join(GLOBAL_MEMORY_DIR, f) });
+          // Get all daily memory files from SQL (global + session)
+          const entries: { name: string; content: string }[] = [];
+          const seen = new Set<string>();
+
+          const addDailyFiles = async (sn: string) => {
+            const files = await listSessionContextFiles(sn);
+            for (const filename of files) {
+              if (!filename.match(/^memory\/\d{4}-\d{2}-\d{2}\.md$/)) continue;
+              const baseName = filename.slice("memory/".length);
+              if (seen.has(baseName)) continue;
+              const content = await getSessionContext(sn, filename);
+              if (content !== null) {
+                entries.push({ name: baseName, content });
+                seen.add(baseName);
+              }
             }
-          }
-          const sessionMemoryDir = join(sessionDir, "memory");
-          if (existsSync(sessionMemoryDir)) {
-            readdirSync(sessionMemoryDir)
-              .filter((f: string) => f.match(/^\d{4}-\d{2}-\d{2}\.md$/))
-              .forEach((f: string) => {
-                const idx = dailyFiles.findIndex((d) => d.name === f);
-                if (idx >= 0) dailyFiles[idx].path = join(sessionMemoryDir, f);
-                else dailyFiles.push({ name: f, path: join(sessionMemoryDir, f) });
-              });
-          }
-          dailyFiles.sort((a, b) => a.name.localeCompare(b.name));
-          const recent = dailyFiles.slice(-days);
+          };
+
+          await addDailyFiles("__global__");
+          await addDailyFiles(sessionName);
+
+          entries.sort((a, b) => a.name.localeCompare(b.name));
+          const recent = entries.slice(-days);
+
           if (recent.length === 0) return { content: [{ type: "text", text: "No daily memory files yet." }] };
           const contents = recent
-            .map(({ name, path }) => {
-              const content = readFileSync(path, "utf-8");
-              return `## ${name.replace(".md", "")}\n\n${content}`;
-            })
+            .map(({ name, content }) => `## ${name.replace(".md", "")}\n\n${content}`)
             .join("\n\n---\n\n");
           return { content: [{ type: "text", text: contents }] };
         }
 
+        // Resolve specific file
         const rootFiles = ["IDENTITY.md", "MEMORY.md", "USER.md", "AGENTS.md"];
-        let filePath: string;
+        let content: string | null = null;
+
         if (rootFiles.includes(file)) {
-          const resolved = resolveRootFile(sessionDir, file);
-          if (!resolved.exists) return { content: [{ type: "text", text: `File not found: ${file}` }], isError: true };
-          filePath = resolved.path;
+          // Try session first, then global
+          content = await getSessionContext(sessionName, file);
+          if (content === null) {
+            content = await getSessionContext("__global__", file);
+          }
         } else {
-          const resolved = resolveMemoryFile(sessionDir, file);
-          if (!resolved.exists) return { content: [{ type: "text", text: `File not found: ${file}` }], isError: true };
-          filePath = resolved.path;
+          // Memory file: check as "memory/{file}" in session first, then global
+          const memoryFilename = file.includes("/") ? file : `memory/${file}`;
+          content = await getSessionContext(sessionName, memoryFilename);
+          if (content === null) {
+            content = await getSessionContext("__global__", memoryFilename);
+          }
         }
 
-        const content = readFileSync(filePath, "utf-8");
+        if (content === null) {
+          return { content: [{ type: "text", text: `File not found: ${file}` }], isError: true };
+        }
+
         if (from !== undefined && from > 0) {
           const allLines = content.split("\n");
           const startIdx = Math.max(0, from - 1);
@@ -146,18 +160,28 @@ export function createMemoryTools(sessionName: string): unknown[] {
       async (args: { file: string; content: string; append?: boolean }) => {
         return withSecurityCheck("memory_write", sessionName, async () => {
           const { file, content, append } = args;
-          const sessionDir = join(SESSIONS_DIR, sessionName);
-          const memoryDir = join(sessionDir, "memory");
-          if (!existsSync(memoryDir)) mkdirSync(memoryDir, { recursive: true });
+          await initSessionContextStorage();
+
           let filename = file;
           if (file === "today") filename = `${new Date().toISOString().split("T")[0]}.md`;
+
           const rootFiles = ["IDENTITY.md", "MEMORY.md", "USER.md", "AGENTS.md"];
-          const filePath = rootFiles.includes(filename) ? join(sessionDir, filename) : join(memoryDir, filename);
+          const isRootFile = rootFiles.includes(filename);
+
+          // For root files, store without "memory/" prefix; daily logs under "memory/"
+          const storageFilename = isRootFile ? filename : `memory/${filename}`;
+
           const shouldAppend = append !== undefined ? append : filename.match(/^\d{4}-\d{2}-\d{2}\.md$/);
-          if (shouldAppend && existsSync(filePath)) {
-            const existing = readFileSync(filePath, "utf-8");
-            writeFileSync(filePath, `${existing}\n\n${content}`);
-          } else writeFileSync(filePath, content);
+
+          let finalContent = content;
+          if (shouldAppend) {
+            const existing = await getSessionContext(sessionName, storageFilename);
+            if (existing !== null) {
+              finalContent = `${existing}\n\n${content}`;
+            }
+          }
+
+          await setSessionContext(sessionName, storageFilename, finalContent, "session");
           return { content: [{ type: "text", text: `${shouldAppend ? "Appended to" : "Wrote"} ${filename}` }] };
         });
       },
@@ -209,7 +233,7 @@ export function createMemoryTools(sessionName: string): unknown[] {
           );
           let results = hookPayload.results;
           if (!results) {
-            // No plugin handled memory:search — fall through to grep fallback
+            // No plugin handled memory:search — fall through to keyword fallback
             throw new Error("No memory plugin available");
           }
           results = results
@@ -238,53 +262,38 @@ export function createMemoryTools(sessionName: string): unknown[] {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logger.warn(`Vector search failed, falling back to keyword search: ${message}`);
-          const sessionDir = join(SESSIONS_DIR, sessionName);
-          const sessionMemoryDir = join(sessionDir, "memory");
-          const filesToSearch: { path: string; source: string }[] = [];
-          for (const f of ["MEMORY.md", "IDENTITY.md", "USER.md", "AGENTS.md", "PRIVATE.md", "SELF.md"]) {
-            const globalPath = join(GLOBAL_IDENTITY_DIR, f);
-            if (existsSync(globalPath)) filesToSearch.push({ path: globalPath, source: `global/${f}` });
-            const sessionPath = join(sessionDir, f);
-            if (existsSync(sessionPath)) filesToSearch.push({ path: sessionPath, source: `session/${f}` });
-          }
-          if (existsSync(GLOBAL_MEMORY_DIR)) {
-            for (const f of readdirSync(GLOBAL_MEMORY_DIR).filter((f: string) => f.endsWith(".md")))
-              filesToSearch.push({ path: join(GLOBAL_MEMORY_DIR, f), source: `global/memory/${f}` });
-          }
-          if (existsSync(sessionMemoryDir)) {
-            for (const f of readdirSync(sessionMemoryDir).filter((f: string) => f.endsWith(".md")))
-              filesToSearch.push({ path: join(sessionMemoryDir, f), source: `session/memory/${f}` });
-          }
-          const sessionsBase = SESSIONS_DIR;
-          if (existsSync(sessionsBase)) {
-            try {
-              for (const entry of readdirSync(sessionsBase)) {
-                const entryPath = join(sessionsBase, entry);
-                try {
-                  if (!statSync(entryPath).isDirectory()) continue;
-                } catch {
-                  continue;
-                }
-                const memDir = join(entryPath, "memory");
-                if (memDir === sessionMemoryDir || !existsSync(memDir)) continue;
-                try {
-                  for (const f of readdirSync(memDir).filter((f: string) => f.endsWith(".md")))
-                    filesToSearch.push({ path: join(memDir, f), source: `sessions/${entry}/memory/${f}` });
-                } catch {}
+
+          // SQL-based keyword search fallback
+          await initSessionContextStorage();
+
+          const sessionNames = ["__global__", sessionName];
+          const filesToSearch: { content: string; source: string }[] = [];
+
+          for (const sn of sessionNames) {
+            const files = await listSessionContextFiles(sn);
+            for (const filename of files) {
+              const fileContent = await getSessionContext(sn, filename);
+              if (fileContent !== null) {
+                const label = sn === "__global__" ? `global/${filename}` : `session/${filename}`;
+                filesToSearch.push({ content: fileContent, source: label });
               }
-            } catch {}
+            }
           }
+
           const filteredFilesToSearch = filesToSearch.filter(({ source }) => {
             const sessionMatch = source.match(/^sessions\/(.+?)\/memory\//);
             if (!sessionMatch) return true;
             return canIndexSession(sessionName, sessionMatch[1], indexablePatterns);
           });
+
           if (filteredFilesToSearch.length === 0)
             return { content: [{ type: "text", text: "No memory files found." }] };
+
           const queryTerms = query
             .toLowerCase()
             .split(/\s+/)
             .filter((t: string) => t.length > 2);
+
           const searchResults: Array<{
             relPath: string;
             lineStart: number;
@@ -292,9 +301,9 @@ export function createMemoryTools(sessionName: string): unknown[] {
             snippet: string;
             score: number;
           }> = [];
-          for (const { path: filePath, source } of filteredFilesToSearch) {
-            const content = readFileSync(filePath, "utf-8");
-            const lines = content.split("\n");
+
+          for (const { content: fileContent, source } of filteredFilesToSearch) {
+            const lines = fileContent.split("\n");
             const chunkSize = 5;
             for (let i = 0; i < lines.length; i += chunkSize) {
               const chunk = lines.slice(i, i + chunkSize).join("\n");
@@ -316,6 +325,7 @@ export function createMemoryTools(sessionName: string): unknown[] {
                 });
             }
           }
+
           const maxPossibleScore = queryTerms.length * 3;
           for (const r of searchResults) r.score = maxPossibleScore > 0 ? r.score / maxPossibleScore : 0;
           searchResults.sort((a, b) => b.score - a.score);
@@ -346,13 +356,19 @@ export function createMemoryTools(sessionName: string): unknown[] {
       },
       async (args: { path: string; from?: number; lines?: number }) => {
         const { path: relPath, from, lines: lineCount } = args;
-        const sessionDir = join(SESSIONS_DIR, sessionName);
-        const memoryDir = join(sessionDir, "memory");
-        let filePath = join(sessionDir, relPath);
-        if (!existsSync(filePath)) filePath = join(memoryDir, relPath);
-        if (!existsSync(filePath))
-          return { content: [{ type: "text", text: `File not found: ${relPath}` }], isError: true };
-        const content = readFileSync(filePath, "utf-8");
+        await initSessionContextStorage();
+
+        // Try to resolve: session first, then global, then as memory/ prefix
+        let content: string | null = null;
+        for (const sn of [sessionName, "__global__"]) {
+          content = await getSessionContext(sn, relPath);
+          if (content !== null) break;
+          content = await getSessionContext(sn, `memory/${relPath}`);
+          if (content !== null) break;
+        }
+
+        if (content === null) return { content: [{ type: "text", text: `File not found: ${relPath}` }], isError: true };
+
         const allLines = content.split("\n");
         if (from !== undefined && from > 0) {
           const startIdx = Math.max(0, from - 1);
@@ -402,41 +418,47 @@ export function createMemoryTools(sessionName: string): unknown[] {
           const { reflection, tattoo, section } = args;
           if (!reflection && !tattoo)
             return { content: [{ type: "text", text: "Provide 'reflection' or 'tattoo'" }], isError: true };
-          const sessionDir = join(SESSIONS_DIR, sessionName);
-          const memoryDir = join(sessionDir, "memory");
-          const selfPath = join(memoryDir, "SELF.md");
-          if (!existsSync(memoryDir)) mkdirSync(memoryDir, { recursive: true });
-          if (!existsSync(selfPath)) writeFileSync(selfPath, "# SELF.md — Private Reflections\n\n");
-          const existing = readFileSync(selfPath, "utf-8");
+
+          await initSessionContextStorage();
+
+          const selfFilename = "memory/SELF.md";
+          let existing = await getSessionContext(sessionName, selfFilename);
+          if (existing === null) {
+            existing = "# SELF.md — Private Reflections\n\n";
+          }
+
           const today = new Date().toISOString().split("T")[0];
+
           if (tattoo) {
             const lines = existing.split("\n");
             const tattooSection = lines.findIndex((l: string) => l.includes("## Tattoos"));
+            let updated: string;
             if (tattooSection === -1) {
               const titleLine = lines.findIndex((l: string) => l.startsWith("# "));
-              writeFileSync(
-                selfPath,
-                [
-                  ...lines.slice(0, titleLine + 1),
-                  `\n## Tattoos\n\n- "${tattoo}"\n`,
-                  ...lines.slice(titleLine + 1),
-                ].join("\n"),
-              );
+              updated = [
+                ...lines.slice(0, titleLine + 1),
+                `\n## Tattoos\n\n- "${tattoo}"\n`,
+                ...lines.slice(titleLine + 1),
+              ].join("\n");
             } else {
               const beforeTattoo = lines.slice(0, tattooSection + 1);
               const afterTattoo = lines.slice(tattooSection + 1);
               const insertPoint = afterTattoo.findIndex((l: string) => l.startsWith("## "));
               if (insertPoint === -1) afterTattoo.push(`- "${tattoo}"`);
               else afterTattoo.splice(insertPoint, 0, `- "${tattoo}"`);
-              writeFileSync(selfPath, [...beforeTattoo, ...afterTattoo].join("\n"));
+              updated = [...beforeTattoo, ...afterTattoo].join("\n");
             }
+            await setSessionContext(sessionName, selfFilename, updated, "session");
             return { content: [{ type: "text", text: `Tattoo added: "${tattoo}"` }] };
           }
+
           if (reflection) {
             const sectionHeader = section || today;
-            writeFileSync(selfPath, `${existing}\n---\n\n## ${sectionHeader}\n\n${reflection}\n`);
+            const updated = `${existing}\n---\n\n## ${sectionHeader}\n\n${reflection}\n`;
+            await setSessionContext(sessionName, selfFilename, updated, "session");
             return { content: [{ type: "text", text: `Reflection added under "${sectionHeader}"` }] };
           }
+
           return { content: [{ type: "text", text: "Nothing to add" }] };
         });
       },

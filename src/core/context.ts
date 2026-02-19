@@ -17,9 +17,6 @@ import { logger } from "../logger.js";
  *   });
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { SESSIONS_DIR } from "../paths.js";
 import { getChannel } from "../plugins.js";
 import type { ChannelRef } from "../types.js";
 import { config } from "./config.js";
@@ -105,27 +102,31 @@ export function getRegisteredProviders(): ContextProvider[] {
 // ============================================================================
 
 /**
- * Default system prompt from session context file
+ * Default system prompt from session context (SQL via Storage API, WOP-556)
  */
 const sessionSystemProvider: ContextProvider = {
   name: "session_system",
   priority: 0,
   enabled: true,
   async getContext(session: string): Promise<ContextPart | null> {
-    const contextFile = join(SESSIONS_DIR, `${session}.md`);
-    if (!existsSync(contextFile)) {
-      return {
-        content: `You are WOPR session "${session}".`,
-        role: "system",
-        metadata: { source: "default", priority: 0 },
-      };
+    try {
+      const { getSessionContext } = await import("./session-context-repository.js");
+      const context = await getSessionContext(session, "SOUL.md");
+      if (context) {
+        return {
+          content: context,
+          role: "system",
+          metadata: { source: "session_sql", priority: 0 },
+        };
+      }
+    } catch (err) {
+      logger.warn(`[context] Failed to read session context from SQL: ${err}`);
     }
 
-    const content = readFileSync(contextFile, "utf-8");
     return {
-      content,
+      content: `You are WOPR session "${session}".`,
       role: "system",
-      metadata: { source: "session_file", priority: 0, path: contextFile },
+      metadata: { source: "default", priority: 0 },
     };
   },
 };
