@@ -66,6 +66,57 @@ providersRouter.post("/health", async (c) => {
   });
 });
 
+// GET /providers/active — MUST be before /:id/models to avoid param capture
+providersRouter.get("/active", (c) => {
+  const resolved = providerRegistry.getActiveProvider();
+  if (!resolved) {
+    return c.json({ provider: null, model: null });
+  }
+  return c.json({
+    provider: resolved.id,
+    providerName: resolved.name,
+    model: resolved.defaultModel,
+  });
+});
+
+// GET /providers/:id/models — list available models for a specific provider
+providersRouter.get("/:id/models", async (c) => {
+  const id = c.req.param("id");
+  const reg = providerRegistry.getProvider(id);
+  if (!reg) {
+    return c.json({ error: `Provider not found: ${id}` }, 404);
+  }
+  try {
+    const { getPluginExtension } = await import("../../plugins/extensions.js");
+    const ext = getPluginExtension<{ getModelInfo?: () => Promise<unknown[]> }>(`provider-${id}`);
+    if (ext?.getModelInfo) {
+      const enriched = await ext.getModelInfo();
+      return c.json({
+        providerId: id,
+        providerName: reg.provider.name,
+        defaultModel: reg.provider.defaultModel,
+        models: enriched,
+      });
+    }
+    const cred = providerRegistry.getCredential(id);
+    const credType = reg.provider.getCredentialType?.() ?? "api-key";
+    if (!cred && credType !== "oauth") {
+      return c.json({ error: `No credentials configured for provider: ${id}` }, 401);
+    }
+    const client = await reg.provider.createClient(cred?.credential || "");
+    const modelIds = await client.listModels();
+    return c.json({
+      providerId: id,
+      providerName: reg.provider.name,
+      defaultModel: reg.provider.defaultModel,
+      models: modelIds.map((mid: string) => ({ id: mid, name: mid })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 500);
+  }
+});
+
 // Get all config schemas (for provider/plugin configuration UI)
 providersRouter.get("/schemas", (c) => {
   const schemas = listConfigSchemas();
