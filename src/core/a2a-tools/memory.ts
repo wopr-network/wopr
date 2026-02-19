@@ -255,7 +255,7 @@ export function createMemoryTools(sessionName: string): unknown[] {
             for (const f of readdirSync(sessionMemoryDir).filter((f: string) => f.endsWith(".md")))
               filesToSearch.push({ path: join(sessionMemoryDir, f), source: `session/memory/${f}` });
           }
-          const sessionsBase = "/data/sessions";
+          const sessionsBase = SESSIONS_DIR;
           if (existsSync(sessionsBase)) {
             try {
               for (const entry of readdirSync(sessionsBase)) {
