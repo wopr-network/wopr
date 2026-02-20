@@ -34,6 +34,18 @@ documentation and configuration options.
 
 ---
 
+## [1.3.1](https://github.com/wopr-network/wopr/compare/wopr-v1.3.0...wopr-v1.3.1) (2026-02-20)
+
+
+### Documentation
+
+* add session memory recall instruction ([#1018](https://github.com/wopr-network/wopr/issues/1018)) ([ea2078f](https://github.com/wopr-network/wopr/commit/ea2078fc9de6a2e7c75022a8cf9c06ef0d4d5629))
+
+
+### Miscellaneous
+
+* enable wopr-hooks claude plugin ([#1016](https://github.com/wopr-network/wopr/issues/1016)) ([b07fe74](https://github.com/wopr-network/wopr/commit/b07fe741b871cc464bb95bf0395fbfd56038bec4))
+
 ## [1.3.0](https://github.com/wopr-network/wopr/compare/wopr-v1.2.0...wopr-v1.3.0) (2026-02-19)
 
 
