@@ -116,10 +116,12 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     await addInstalledPlugin(installed);
     return installed;
   } else {
-    // npm package - normalize to wopr-plugin-<name> format (accept wopr-<name> too)
-    const shortName = source.replace(/^wopr-plugin-/, "").replace(/^wopr-/, "");
-    const npmPackage =
-      source.startsWith("wopr-") && !source.startsWith("wopr-plugin-") ? source : `wopr-plugin-${shortName}`;
+    // npm package - normalize to @wopr-network/wopr-plugin-<name> format (accept wopr-<name> too)
+    const shortName = source
+      .replace(/^@wopr-network\//, "")
+      .replace(/^wopr-plugin-/, "")
+      .replace(/^wopr-/, "");
+    const npmPackage = `@wopr-network/wopr-plugin-${shortName}`;
     if (!SAFE_PKG.test(npmPackage)) throw new Error(`Invalid npm package name: ${npmPackage}`);
     const pluginDir = join(PLUGINS_DIR, shortName);
     mkdirSync(pluginDir, { recursive: true });
