@@ -595,6 +595,16 @@ describe("Storage Module (WOP-545)", () => {
       const all = await repo.findMany();
       expect(all).toHaveLength(0);
     });
+
+    it("should return value from repo.transaction() (WOP-836)", async () => {
+      const repo = storage.getRepository<TestRecord>("test", "users");
+      const result = await repo.transaction(async (trxRepo) => {
+        const inserted = await trxRepo.insert({ id: "1", name: "Alice", age: 30 });
+        return inserted;
+      });
+      expect(result.id).toBe("1");
+      expect(result.name).toBe("Alice");
+    });
   });
 
   describe("9. JSON column round-trip", () => {
