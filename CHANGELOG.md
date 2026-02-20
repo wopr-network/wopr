@@ -34,6 +34,13 @@ documentation and configuration options.
 
 ---
 
+## [1.3.3](https://github.com/wopr-network/wopr/compare/wopr-v1.3.2...wopr-v1.3.3) (2026-02-20)
+
+
+### Bug Fixes
+
+* use scoped package names in npm install path (WOP-819) ([#1025](https://github.com/wopr-network/wopr/issues/1025)) ([a20da26](https://github.com/wopr-network/wopr/commit/a20da264eb5fafd33203023172b2f0cbf174c475))
+
 ## [1.3.2](https://github.com/wopr-network/wopr/compare/wopr-v1.3.1...wopr-v1.3.2) (2026-02-20)
 
 
