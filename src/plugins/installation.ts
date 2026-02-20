@@ -116,10 +116,13 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     await addInstalledPlugin(installed);
     return installed;
   } else {
-    // npm package - normalize to wopr-plugin-<name> format (accept wopr-<name> too)
-    const shortName = source.replace(/^wopr-plugin-/, "").replace(/^wopr-/, "");
-    const npmPackage =
-      source.startsWith("wopr-") && !source.startsWith("wopr-plugin-") ? source : `wopr-plugin-${shortName}`;
+    // npm package - normalize to @wopr-network/plugin-<name> format
+    const shortName = source
+      .replace(/^@wopr-network\//, "")
+      .replace(/^plugin-/, "")
+      .replace(/^wopr-plugin-/, "")
+      .replace(/^wopr-/, "");
+    const npmPackage = `@wopr-network/plugin-${shortName}`;
     if (!SAFE_PKG.test(npmPackage)) throw new Error(`Invalid npm package name: ${npmPackage}`);
     const pluginDir = join(PLUGINS_DIR, shortName);
     mkdirSync(pluginDir, { recursive: true });
@@ -127,8 +130,8 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     // Use npm to install
     execFileSync("npm", ["install", npmPackage], { cwd: pluginDir, stdio: "inherit" });
 
-    // Read installed package metadata
-    const pkgPath = join(pluginDir, "node_modules", npmPackage, "package.json");
+    // Read installed package metadata (scoped packages are nested: node_modules/@scope/name)
+    const pkgPath = join(pluginDir, "node_modules", "@wopr-network", `plugin-${shortName}`, "package.json");
     const pkg = existsSync(pkgPath) ? JSON.parse(readFileSync(pkgPath, "utf-8")) : {};
 
     const installed: InstalledPlugin = {
@@ -136,7 +139,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
       version: pkg.version || "0.0.0",
       description: pkg.description,
       source: "npm",
-      path: join(pluginDir, "node_modules", npmPackage),
+      path: join(pluginDir, "node_modules", "@wopr-network", `plugin-${shortName}`),
       enabled: false,
       installedAt: Date.now(),
     };
