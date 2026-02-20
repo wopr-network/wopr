@@ -34,6 +34,13 @@ documentation and configuration options.
 
 ---
 
+## [1.3.2](https://github.com/wopr-network/wopr/compare/wopr-v1.3.1...wopr-v1.3.2) (2026-02-20)
+
+
+### Tests
+
+* add return value test for repo.transaction() (WOP-836) ([#1019](https://github.com/wopr-network/wopr/issues/1019)) ([dc2ffcc](https://github.com/wopr-network/wopr/commit/dc2ffcc8b59528d6844cf659e269c4523e5f17bd))
+
 ## [1.3.1](https://github.com/wopr-network/wopr/compare/wopr-v1.3.0...wopr-v1.3.1) (2026-02-20)
 
 
