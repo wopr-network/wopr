@@ -6,12 +6,12 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { logger } from "../logger.js";
 import type { InstalledPlugin } from "../types.js";
 import { ensurePluginSchema, getPluginRepo } from "./plugin-storage.js";
-import { PLUGINS_DIR } from "./state.js";
+import { PLUGINS_DIR, WOPR_HOME } from "./state.js";
 
 export interface InstallResult {
   name: string;
@@ -27,6 +27,52 @@ const SAFE_PKG = /^[@a-zA-Z0-9._/-]+$/;
 function assertSafeName(value: string, label: string): void {
   if (!SAFE_NAME.test(value)) {
     throw new Error(`Invalid ${label}: ${value}`);
+  }
+}
+
+/**
+ * Validate that a resolved local plugin path is safe to symlink.
+ *
+ * Guards against path traversal (CWE-22) by requiring:
+ * 1. The path must exist and be a directory (not a file or symlink to a file).
+ * 2. The path must resolve (after following symlinks) to a location that is
+ *    NOT inside WOPR_HOME — this prevents circular symlinks and access to
+ *    config/secrets stored under ~/.wopr/.
+ *
+ * Note: There is an inherent TOCTOU race between these checks and the
+ * subsequent symlinkSync call. For a local CLI tool this is acceptable —
+ * the user running the CLI already has direct filesystem access.
+ */
+function assertSafePluginSource(resolved: string): void {
+  // 1. Must exist
+  if (!existsSync(resolved)) {
+    throw new Error(`Local plugin path does not exist: ${resolved}`);
+  }
+
+  // 2. Must be a directory (not a regular file, socket, etc.)
+  const stat = lstatSync(resolved);
+  if (!stat.isDirectory() && !stat.isSymbolicLink()) {
+    throw new Error(`Local plugin path is not a directory: ${resolved}`);
+  }
+
+  // If it's a symlink, resolve it and check the target is a directory
+  let realPath: string;
+  try {
+    realPath = realpathSync(resolved);
+  } catch {
+    throw new Error(`Cannot resolve local plugin path (broken symlink?): ${resolved}`);
+  }
+
+  const realStat = lstatSync(realPath);
+  if (!realStat.isDirectory()) {
+    throw new Error(`Local plugin path does not resolve to a directory: ${resolved} -> ${realPath}`);
+  }
+
+  // 3. Must not be inside WOPR_HOME (prevents symlinking config, secrets, DB)
+  const normalizedReal = realPath.endsWith("/") ? realPath : `${realPath}/`;
+  const normalizedWoprHome = WOPR_HOME.endsWith("/") ? WOPR_HOME : `${WOPR_HOME}/`;
+  if (normalizedReal.startsWith(normalizedWoprHome) || realPath === WOPR_HOME) {
+    throw new Error(`Local plugin path must not be inside WOPR_HOME (${WOPR_HOME}): ${resolved}`);
   }
 }
 
@@ -47,7 +93,9 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     if (existsSync(pluginDir)) {
       execFileSync("git", ["pull"], { cwd: pluginDir, stdio: "inherit" });
     } else {
-      execFileSync("git", ["clone", `https://github.com/${parts[0]}/${parts[1]}`, pluginDir], { stdio: "inherit" });
+      execFileSync("git", ["clone", `https://github.com/${parts[0]}/${parts[1]}`, pluginDir], {
+        stdio: "inherit",
+      });
     }
 
     // Install dependencies if package.json exists
@@ -81,7 +129,12 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
   } else if (source.startsWith("./") || source.startsWith("/") || source.startsWith("~/")) {
     // Local path
     const resolved = resolve(source.replace("~", process.env.HOME || "~"));
-    const pluginDir = join(PLUGINS_DIR, resolved.split("/").pop() || "plugin");
+    assertSafePluginSource(resolved);
+    const dirName = resolved.split("/").pop() || "plugin";
+    if (!SAFE_NAME.test(dirName)) {
+      throw new Error(`Invalid local plugin directory name: ${dirName}`);
+    }
+    const pluginDir = join(PLUGINS_DIR, dirName);
 
     // Symlink (no shell -- avoids injection via path)
     if (!existsSync(pluginDir)) {
