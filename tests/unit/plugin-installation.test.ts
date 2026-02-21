@@ -25,6 +25,11 @@ vi.mock("../../src/logger.js", () => ({
   },
 }));
 
+// Mock node:child_process so npm/git never actually run during tests
+vi.mock("node:child_process", () => ({
+  execFileSync: vi.fn(() => Buffer.from("")),
+}));
+
 // We'll hold our temp dirs so they can be cleaned up
 let testWoprHome: string;
 let testPluginsDir: string;
@@ -79,6 +84,9 @@ beforeEach(async () => {
   // Re-apply mocks after resetModules
   vi.mock("../../src/logger.js", () => ({
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+  }));
+  vi.mock("node:child_process", () => ({
+    execFileSync: vi.fn(() => Buffer.from("")),
   }));
   vi.mock("../../src/plugins/state.js", () => ({
     get WOPR_HOME() {
@@ -228,14 +236,7 @@ describe("installPlugin — valid local plugin directory", () => {
       JSON.stringify({ name: "my-plugin", version: "1.0.0" }),
     );
 
-    // Mock execFileSync (npm install) so we don't actually run npm
-    const { execFileSync } = await import("node:child_process");
-    vi.spyOn({ execFileSync }, "execFileSync").mockImplementation(() => Buffer.from(""));
-
-    // We also need to mock node:child_process at module level
-    // The module is already loaded; we need to intercept at the fs level instead.
-    // Since symlinkSync is a real fs call and we created real dirs, let it run.
-
+    // node:child_process is mocked at module level — npm install will not actually run
     const result = (await installPlugin(pluginSrc)) as { name: string; source: string };
 
     expect(result.name).toBe("my-plugin");
