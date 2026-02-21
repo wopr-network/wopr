@@ -1,97 +1,15 @@
 /**
  * Observability API routes
  *
- * Provides endpoints for metrics, logs, and health monitoring.
+ * Provides endpoints for logs and health monitoring.
+ * Metrics routes are now provided by @wopr-network/wopr-plugin-metrics.
  */
 
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
-import { getStorage } from "../../storage/index.js";
-import {
-  type GetLogsOptions,
-  getInstanceLogs,
-  healthMonitor,
-  type LogLevel,
-  MetricsStore,
-} from "../observability/index.js";
+import { type GetLogsOptions, getInstanceLogs, healthMonitor, type LogLevel } from "../observability/index.js";
 
 export const observabilityRouter = new Hono();
-
-// Lazily initialize the metrics store
-let metricsStore: MetricsStore | null = null;
-
-async function getMetricsStore(): Promise<MetricsStore> {
-  if (!metricsStore) {
-    const storage = getStorage();
-    metricsStore = await MetricsStore.create(storage);
-  }
-  return metricsStore;
-}
-
-// --- Metrics Routes ---
-
-// GET /observability/metrics — platform-wide metrics summary
-observabilityRouter.get(
-  "/metrics",
-  describeRoute({
-    tags: ["Observability"],
-    summary: "Platform-wide metrics summary",
-    responses: {
-      200: { description: "Aggregated platform metrics" },
-      401: { description: "Unauthorized" },
-    },
-  }),
-  async (c) => {
-    const store = await getMetricsStore();
-    const summary = await store.getPlatformSummary();
-    return c.json(summary);
-  },
-);
-
-// GET /observability/instances/:id/metrics — per-instance metrics
-observabilityRouter.get(
-  "/instances/:id/metrics",
-  describeRoute({
-    tags: ["Observability"],
-    summary: "Per-instance metrics summary",
-    responses: {
-      200: { description: "Instance metrics" },
-      401: { description: "Unauthorized" },
-    },
-  }),
-  async (c) => {
-    const instanceId = c.req.param("id");
-    const store = await getMetricsStore();
-    const summary = await store.getInstanceSummary(instanceId);
-    return c.json(summary);
-  },
-);
-
-// POST /observability/metrics — record a metric data point
-observabilityRouter.post(
-  "/metrics",
-  describeRoute({
-    tags: ["Observability"],
-    summary: "Record a metric data point",
-    responses: {
-      201: { description: "Metric recorded" },
-      400: { description: "name and value are required" },
-      401: { description: "Unauthorized" },
-    },
-  }),
-  async (c) => {
-    const body = await c.req.json();
-    const { name, value, instance_id, tags } = body;
-
-    if (!name || value === undefined) {
-      return c.json({ error: "name and value are required" }, 400);
-    }
-
-    const store = await getMetricsStore();
-    await store.record(name, value, instance_id ?? null, tags ?? {});
-    return c.json({ recorded: true }, 201);
-  },
-);
 
 // --- Logs Routes ---
 
