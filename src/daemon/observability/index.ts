@@ -21,10 +21,3 @@ export {
   recordLog,
   type StructuredLogEntry,
 } from "./logger.js";
-export {
-  type InstanceMetricsSummary,
-  type MetricRecord,
-  MetricsStore,
-  type MetricsSummary,
-  metricsPluginSchema,
-} from "./metrics.js";

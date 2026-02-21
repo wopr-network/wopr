@@ -402,6 +402,12 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     daemonLog("Canvas REST routes mounted from plugin");
   }
 
+  const maybeMetricsRouter = getPluginExtension("metrics:router");
+  if (maybeMetricsRouter) {
+    app.route("/observability", maybeMetricsRouter as Hono);
+    daemonLog("Metrics REST routes mounted from plugin");
+  }
+
   // Wire WebSocket publish into canvas plugin if loaded
   const maybeCanvasSetPublish = getPluginExtension<(fn: typeof publishToTopic) => void>("canvas:setPublish");
   if (maybeCanvasSetPublish) {
