@@ -34,6 +34,23 @@ documentation and configuration options.
 
 ---
 
+## [1.3.4](https://github.com/wopr-network/wopr/compare/wopr-v1.3.3...wopr-v1.3.4) (2026-02-21)
+
+
+### Bug Fixes
+
+* restore stable promotion workflow (WOP-735, WOP-736) ([#1039](https://github.com/wopr-network/wopr/issues/1039)) ([f68d695](https://github.com/wopr-network/wopr/commit/f68d69545a0b699574e12d74032d5e1071257744))
+
+
+### Code Refactoring
+
+* extract metrics to wopr-plugin-metrics (WOP-553) ([#1065](https://github.com/wopr-network/wopr/issues/1065)) ([0cf5060](https://github.com/wopr-network/wopr/commit/0cf5060c5b70eb2f1c31ae240aee8a880a40b14e))
+
+
+### Security
+
+* validate local plugin source path before symlink creation (WOP-743) ([#1070](https://github.com/wopr-network/wopr/issues/1070)) ([c421be4](https://github.com/wopr-network/wopr/commit/c421be4db63d4ecc4bace39358a604534e29d6c8))
+
 ## [1.3.3](https://github.com/wopr-network/wopr/compare/wopr-v1.3.2...wopr-v1.3.3) (2026-02-20)
 
 
