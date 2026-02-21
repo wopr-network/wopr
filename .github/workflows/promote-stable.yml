@@ -42,23 +42,13 @@ jobs:
           docker run -d --name "$CONTAINER_NAME" \
             ghcr.io/wopr-network/${{ matrix.image }}:latest
 
-          # Get container IP on the bridge network.
-          # This avoids DinD networking issues where host port mappings are
-          # unreachable from inside a containerised GitHub Actions runner.
-          CONTAINER_IP=$(docker inspect -f '{{.NetworkSettings.Networks.bridge.IPAddress}}' "$CONTAINER_NAME")
-          if [ -z "$CONTAINER_IP" ]; then
-            echo "ERROR: Could not resolve container IP for $CONTAINER_NAME"
-            docker logs "$CONTAINER_NAME" 2>&1 | tail -20
-            docker rm -f "$CONTAINER_NAME" > /dev/null 2>&1 || true
-            echo "result=fail" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "Container IP: $CONTAINER_IP"
-
-          # Wait up to 60s for the health endpoint to respond
+          # Poll health from INSIDE the container using wget (busybox default on
+          # Alpine -- works on both wopr and wopr-slim images without extra deps).
+          # This avoids DinD networking issues: runner and smoke containers are
+          # siblings sharing a Docker daemon but in separate network namespaces,
+          # so bridge IPs are unreachable from the runner container.
           HEALTHY=false
-          HEALTH_URL="http://${CONTAINER_IP}:7437/health"
-          echo "Polling ${HEALTH_URL} ..."
+          echo "Polling health from inside container (docker exec wget) ..."
           for i in $(seq 1 30); do
             # Check container is still running
             if ! docker ps --filter "name=$CONTAINER_NAME" --format '{{.Status}}' | grep -q "Up"; then
@@ -66,7 +56,8 @@ jobs:
               docker logs "$CONTAINER_NAME" 2>&1 | tail -40
               break
             fi
-            if curl -sf --max-time 5 --connect-timeout 3 "$HEALTH_URL" > /dev/null 2>&1; then
+            if docker exec "$CONTAINER_NAME" \
+              wget -q -O /dev/null --timeout=5 "http://localhost:7437/health" 2>/dev/null; then
               HEALTHY=true
               break
             fi

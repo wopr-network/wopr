@@ -14,7 +14,7 @@ FROM node:24-alpine AS build
 WORKDIR /app
 
 # Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 # Copy lockfile + manifest first for layer caching
 COPY package.json pnpm-lock.yaml ./
@@ -33,7 +33,10 @@ FROM node:24-alpine AS deps
 
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# build-base + python3 needed for better-sqlite3 native addon (node-gyp)
+RUN apk add --no-cache build-base python3
+
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 COPY package.json pnpm-lock.yaml ./
 
