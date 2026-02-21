@@ -74,7 +74,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         id: trivy
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ghcr.io/wopr-network/${{ matrix.image }}:sha-${{ steps.short-sha.outputs.sha }}
           scan-type: image
