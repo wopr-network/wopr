@@ -45,7 +45,7 @@
     "@scalar/hono-api-reference": "^0.9.41",
     "better-sqlite3": "^12.6.2",
     "drizzle-orm": "^0.39.3",
-    "hono": "^4.11.9",
+    "hono": "^4.11.10",
     "hono-openapi": "^1.2.0",
     "hono-rate-limiter": "^0.5.3",
     "hyperswarm": "^4.16.0",
