@@ -34,6 +34,13 @@ documentation and configuration options.
 
 ---
 
+## [1.3.6](https://github.com/wopr-network/wopr/compare/wopr-v1.3.5...wopr-v1.3.6) (2026-02-22)
+
+
+### Security
+
+* wrap plugin A2A tools with withSecurityCheck (WOP-919) ([#1125](https://github.com/wopr-network/wopr/issues/1125)) ([e774c0c](https://github.com/wopr-network/wopr/commit/e774c0c2da5c933439495f786cd2af812e0a5994))
+
 ## [1.3.5](https://github.com/wopr-network/wopr/compare/wopr-v1.3.4...wopr-v1.3.5) (2026-02-22)
 
 
