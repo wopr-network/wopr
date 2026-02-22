@@ -34,6 +34,13 @@ documentation and configuration options.
 
 ---
 
+## [1.3.7](https://github.com/wopr-network/wopr/compare/wopr-v1.3.6...wopr-v1.3.7) (2026-02-22)
+
+
+### Tests
+
+* **wop-954:** unit tests for DrizzleRepository — 51 tests covering gaps ([#1155](https://github.com/wopr-network/wopr/issues/1155)) ([3bc1627](https://github.com/wopr-network/wopr/commit/3bc1627ec5f2ca35b65d74f6a44eff4cb06ee03a))
+
 ## [1.3.6](https://github.com/wopr-network/wopr/compare/wopr-v1.3.5...wopr-v1.3.6) (2026-02-22)
 
 
