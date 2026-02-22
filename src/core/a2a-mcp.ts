@@ -27,6 +27,7 @@ import {
   setSessionFunctions,
   type ToolContext,
   unregisterA2ATool,
+  withSecurityCheck,
 } from "./a2a-tools/index.js";
 import { config as centralConfig } from "./config.js";
 
@@ -88,16 +89,18 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     ...createCapabilityDiscoveryTools(sessionName),
   ];
 
-  // Add plugin tools
+  // Add plugin tools — wrapped with security checks
   const makeContext = (): ToolContext => ({ sessionName });
   for (const [, pluginTool] of pluginTools) {
     tools.push(
       tool(pluginTool.name, pluginTool.description, pluginTool.schema.shape, async (args) => {
-        const result = await pluginTool.handler(args, makeContext());
-        if (typeof result === "string") {
-          return { content: [{ type: "text", text: result }] };
-        }
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        return withSecurityCheck(pluginTool.name, sessionName, async () => {
+          const result = await pluginTool.handler(args, makeContext());
+          if (typeof result === "string") {
+            return { content: [{ type: "text", text: result }] };
+          }
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        });
       }),
     );
   }
