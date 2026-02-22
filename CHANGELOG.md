@@ -34,6 +34,14 @@ documentation and configuration options.
 
 ---
 
+## [1.3.5](https://github.com/wopr-network/wopr/compare/wopr-v1.3.4...wopr-v1.3.5) (2026-02-22)
+
+
+### Miscellaneous
+
+* **deps:** bump aquasecurity/trivy-action in /.github/workflows ([#1074](https://github.com/wopr-network/wopr/issues/1074)) ([775fa8b](https://github.com/wopr-network/wopr/commit/775fa8b60732929f06562b3517b324860d274238))
+* **deps:** bump hono from 4.11.9 to 4.11.10 ([#1075](https://github.com/wopr-network/wopr/issues/1075)) ([7f6b53b](https://github.com/wopr-network/wopr/commit/7f6b53b689406c7ed42e333bfd4ab345b45fc24c))
+
 ## [1.3.4](https://github.com/wopr-network/wopr/compare/wopr-v1.3.3...wopr-v1.3.4) (2026-02-21)
 
 
