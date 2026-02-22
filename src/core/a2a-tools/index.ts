@@ -14,6 +14,7 @@ export {
   setSessionFunctions,
   type ToolContext,
   unregisterA2ATool,
+  withSecurityCheck,
 } from "./_base.js";
 export { createCapabilityDiscoveryTools } from "./capability-discovery.js";
 export { createConfigTools } from "./config.js";
