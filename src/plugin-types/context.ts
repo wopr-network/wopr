@@ -211,6 +211,7 @@ export interface WOPRPluginContext {
 
   // A2A tools
   registerA2AServer?(config: A2AServerConfig): void;
+  unregisterA2AServer?(config: A2AServerConfig): void;
 
   // Logging
   log: PluginLogger;

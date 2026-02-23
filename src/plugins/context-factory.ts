@@ -6,6 +6,7 @@
  */
 
 import { join } from "node:path";
+import { unregisterA2ATool } from "../core/a2a-mcp.js";
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
 import { resolveAllProviders, resolveCapability } from "../core/capability-resolver.js";
@@ -250,6 +251,13 @@ export function createPluginContext(
     // A2A tools - plugins register MCP tools for agent-to-agent communication
     registerA2AServer(config: import("../plugin-types/a2a.js").A2AServerConfig) {
       registerA2AServerImpl(config);
+    },
+
+    // Cleanup A2A tools on plugin shutdown
+    unregisterA2AServer(config: import("../plugin-types/a2a.js").A2AServerConfig) {
+      for (const tool of config.tools) {
+        unregisterA2ATool(tool.name);
+      }
     },
 
     log: createPluginLogger(plugin.name),
