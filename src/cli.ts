@@ -19,7 +19,6 @@ import { pluginCommand } from "./commands/plugin.js";
 import { tryPluginCommand } from "./commands/plugin-commands.js";
 import { providersCommand } from "./commands/providers.js";
 import { sessionCommand } from "./commands/session.js";
-import { skillCommand } from "./commands/skill.js";
 
 const [, , command, subcommand, ...args] = process.argv;
 
@@ -28,8 +27,6 @@ const [, , command, subcommand, ...args] = process.argv;
     await providersCommand(subcommand, args);
   } else if (command === "session") {
     await sessionCommand(subcommand, args);
-  } else if (command === "skill") {
-    await skillCommand(subcommand, args);
   } else if (command === "cron") {
     await cronCommand(subcommand, args);
   } else if (command === "config") {

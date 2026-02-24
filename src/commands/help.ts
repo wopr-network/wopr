@@ -21,16 +21,16 @@ Usage:
   wopr session set-provider <name> <id> [--model name] [--fallback chain]  Update session provider
   wopr session init-docs <name>          Initialize SOUL.md, AGENTS.md, USER.md for session
 
-  wopr skill list                        List installed skills
-  wopr skill install <url|slug> [name]   Install skill from URL or registry
-  wopr skill create <name> [desc]        Create a new skill
-  wopr skill remove <name>               Remove a skill
-  wopr skill search <query>              Search registries for skills
-  wopr skill cache clear                 Clear registry cache
+  wopr skill list                        List installed skills           (requires wopr-plugin-skills)
+  wopr skill install <url|slug> [name]   Install skill from URL or registry (requires wopr-plugin-skills)
+  wopr skill create <name> [desc]        Create a new skill               (requires wopr-plugin-skills)
+  wopr skill remove <name>               Remove a skill                   (requires wopr-plugin-skills)
+  wopr skill search <query>              Search registries for skills     (requires wopr-plugin-skills)
+  wopr skill cache clear                 Clear registry cache             (requires wopr-plugin-skills)
 
-  wopr skill registry list               List configured registries
-  wopr skill registry add <name> <url>   Add a skill registry
-  wopr skill registry remove <name>      Remove a registry
+  wopr skill registry list               List configured registries       (requires wopr-plugin-skills)
+  wopr skill registry add <name> <url>   Add a skill registry             (requires wopr-plugin-skills)
+  wopr skill registry remove <name>      Remove a registry                (requires wopr-plugin-skills)
 
   wopr cron add <name> <sched> <sess> <msg>  Add scheduled injection [--now] [--once]
   wopr cron once <time> <session> <message>  One-time job (time: now, +5m, +1h, 09:00)
@@ -97,6 +97,7 @@ Supported Providers:
   codex                                  OpenAI Codex agent for coding tasks
 
 Install plugins for additional functionality:
+  wopr plugin install wopr-plugin-skills  Skill management (install, create, search skills)
   wopr plugin install wopr-plugin-p2p    P2P networking, identity, and peer management
   wopr plugin install wopr-plugin-discord Discord bot integration
 `);
