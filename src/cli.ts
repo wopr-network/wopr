@@ -10,7 +10,6 @@
 import { authCommand } from "./commands/auth.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
-import { cronCommand } from "./commands/cron.js";
 import { daemonCommand } from "./commands/daemon.js";
 import { help } from "./commands/help.js";
 import { initCommand } from "./commands/init.js";
@@ -27,8 +26,6 @@ const [, , command, subcommand, ...args] = process.argv;
     await providersCommand(subcommand, args);
   } else if (command === "session") {
     await sessionCommand(subcommand, args);
-  } else if (command === "cron") {
-    await cronCommand(subcommand, args);
   } else if (command === "config") {
     await configCommand(subcommand, args);
   } else if (command === "daemon") {
