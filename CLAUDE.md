@@ -74,6 +74,17 @@ Issue descriptions start with `**Repo:** wopr-network/wopr` (required for CodeRa
 - `npm run check` must pass before every commit (lint + type check)
 - Daemon is Hono-based (not Express). WebSocket via `@hono/node-ws`.
 
+## Marketing Context (Read Before Writing Any User-Facing Words)
+
+Before writing any copy, changelog entry, feature description, error message, onboarding text, README section, or any string a human will read — consult these three Linear documents:
+
+- **What We're Building and Why**: https://linear.app/wopr/document/wopr-what-were-building-and-why-d5fdeda00d27
+- **Voice & Framing — How We Talk About WOPR**: https://linear.app/wopr/document/voice-and-framing-how-we-talk-about-wopr-e061b58bd3f7
+- **Story Bank — Things WOPR Actually Did**: https://linear.app/wopr/document/story-bank-things-wopr-actually-did-093e59d3c986
+- **Audiences — Who We're Talking To**: https://linear.app/wopr/document/audiences-who-were-talking-to-6bf24f81a0e9
+
+The short version: never sell the feature, sell what happened. "Voice support" is wrong. "It called me on my drive home to talk about a revenue stream it created" is right.
+
 ## Session Memory
 
 At the start of every WOPR session, **read `~/.wopr-memory.md` if it exists.** It contains recent session context: which repos were active, what branches are in flight, and how many uncommitted changes exist. Use it to orient quickly without re-investigating.
