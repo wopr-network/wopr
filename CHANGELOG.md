@@ -34,6 +34,19 @@ documentation and configuration options.
 
 ---
 
+## [1.3.9](https://github.com/wopr-network/wopr/compare/wopr-v1.3.8...wopr-v1.3.9) (2026-02-24)
+
+
+### Code Refactoring
+
+* remove built-in skill command, now in wopr-plugin-skills (WOP-737) ([#1190](https://github.com/wopr-network/wopr/issues/1190)) ([0cdcda1](https://github.com/wopr-network/wopr/commit/0cdcda15c75e7d0b985cd3835939c88a42b932f3))
+* remove hardcoded cron CLI, delegate to wopr-plugin-cron (WOP-738) ([#1191](https://github.com/wopr-network/wopr/issues/1191)) ([e241ea2](https://github.com/wopr-network/wopr/commit/e241ea248d16753f42844a1e0c71e4453bc5f31b))
+
+
+### Miscellaneous
+
+* **deps:** bump drizzle-orm from 0.39.3 to 0.45.1 ([#1163](https://github.com/wopr-network/wopr/issues/1163)) ([2af2417](https://github.com/wopr-network/wopr/commit/2af2417b32bc48ca30a63b5eaa996fcf30e5e48d))
+
 ## [1.3.8](https://github.com/wopr-network/wopr/compare/wopr-v1.3.7...wopr-v1.3.8) (2026-02-24)
 
 
