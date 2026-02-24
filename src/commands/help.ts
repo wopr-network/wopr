@@ -97,8 +97,9 @@ Supported Providers:
   codex                                  OpenAI Codex agent for coding tasks
 
 Install plugins for additional functionality:
+  wopr plugin install wopr-plugin-cron    Scheduled injection management (cron jobs)
   wopr plugin install wopr-plugin-skills  Skill management (install, create, search skills)
-  wopr plugin install wopr-plugin-p2p    P2P networking, identity, and peer management
+  wopr plugin install wopr-plugin-p2p     P2P networking, identity, and peer management
   wopr plugin install wopr-plugin-discord Discord bot integration
 `);
   process.exit(0);
