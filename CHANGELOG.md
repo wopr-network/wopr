@@ -34,6 +34,19 @@ documentation and configuration options.
 
 ---
 
+## [1.3.8](https://github.com/wopr-network/wopr/compare/wopr-v1.3.7...wopr-v1.3.8) (2026-02-24)
+
+
+### Bug Fixes
+
+* add unregisterA2AServer for plugin cleanup (Fixes WOP-971) ([#1174](https://github.com/wopr-network/wopr/issues/1174)) ([554ab79](https://github.com/wopr-network/wopr/commit/554ab7903c3eca5497531387df7d82ae95a3a09c))
+
+
+### Miscellaneous
+
+* **ci:** bump actions/github-script from 7 to 8 ([#1158](https://github.com/wopr-network/wopr/issues/1158)) ([6c6bc4f](https://github.com/wopr-network/wopr/commit/6c6bc4f47b180c074df09889780de769ce2a5276))
+* **ci:** bump actions/upload-artifact from 4 to 6 ([#1157](https://github.com/wopr-network/wopr/issues/1157)) ([b675ce3](https://github.com/wopr-network/wopr/commit/b675ce35c65b2e197fd93597c4e92c8ca4f6b1a3))
+
 ## [1.3.7](https://github.com/wopr-network/wopr/compare/wopr-v1.3.6...wopr-v1.3.7) (2026-02-22)
 
 
