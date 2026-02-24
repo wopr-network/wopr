@@ -32,11 +32,11 @@ Usage:
   wopr skill registry add <name> <url>   Add a skill registry             (requires wopr-plugin-skills)
   wopr skill registry remove <name>      Remove a registry                (requires wopr-plugin-skills)
 
-  wopr cron add <name> <sched> <sess> <msg>  Add scheduled injection [--now] [--once]
-  wopr cron once <time> <session> <message>  One-time job (time: now, +5m, +1h, 09:00)
-  wopr cron now <session> <message>          Run immediately (no scheduling)
-  wopr cron remove <name>                    Remove a cron
-  wopr cron list                             List crons
+  wopr cron add <name> <sched> <sess> <msg>  Add scheduled injection [--now] [--once]  (requires wopr-plugin-cron)
+  wopr cron once <time> <session> <message>  One-time job (time: now, +5m, +1h, 09:00) (requires wopr-plugin-cron)
+  wopr cron now <session> <message>          Run immediately (no scheduling)            (requires wopr-plugin-cron)
+  wopr cron remove <name>                    Remove a cron                              (requires wopr-plugin-cron)
+  wopr cron list                             List crons                                 (requires wopr-plugin-cron)
 
   wopr config get [key]                      Show config (all or specific key)
   wopr config set <key> <value>              Set config value (e.g., daemon.port)
@@ -97,8 +97,9 @@ Supported Providers:
   codex                                  OpenAI Codex agent for coding tasks
 
 Install plugins for additional functionality:
+  wopr plugin install wopr-plugin-cron    Scheduled injection management (cron jobs)
   wopr plugin install wopr-plugin-skills  Skill management (install, create, search skills)
-  wopr plugin install wopr-plugin-p2p    P2P networking, identity, and peer management
+  wopr plugin install wopr-plugin-p2p     P2P networking, identity, and peer management
   wopr plugin install wopr-plugin-discord Discord bot integration
 `);
   process.exit(0);
