@@ -891,6 +891,7 @@ export interface WOPRPluginContext {
   // A2A (Agent-to-Agent) tools - plugins register MCP tools
   // Example: P2P plugin registers p2p_join_topic, p2p_send_message, etc.
   registerA2AServer?(config: A2AServerConfig): void;
+  unregisterA2AServer?(config: A2AServerConfig): void;
 
   // Logging
   log: PluginLogger;
