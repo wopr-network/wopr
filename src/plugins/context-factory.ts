@@ -256,7 +256,10 @@ export function createPluginContext(
     // Cleanup A2A tools on plugin shutdown
     unregisterA2AServer(config: import("../plugin-types/a2a.js").A2AServerConfig) {
       for (const tool of config.tools) {
-        unregisterA2ATool(tool.name);
+        const removed = unregisterA2ATool(tool.name);
+        if (!removed) {
+          logger.warn(`unregisterA2ATool: tool not found`, { toolId: tool.name });
+        }
       }
     },
 
