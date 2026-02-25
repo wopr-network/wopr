@@ -22,7 +22,7 @@ import {
 } from "../plugins/requirements.js";
 import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContext } from "../types.js";
 import { createPluginContext } from "./context-factory.js";
-import { getInstalledPlugins } from "./installation.js";
+import { enablePlugin, getInstalledPlugins, installPlugin } from "./installation.js";
 import { configSchemas, loadedPlugins, pluginManifests, pluginStates } from "./state.js";
 
 /** Options for loading plugins */
@@ -35,6 +35,8 @@ export interface LoadPluginOptions {
   promptInstall?: (message: string) => Promise<boolean>;
   /** Skip plugin init (for CLI commands that just need the plugin module) */
   skipInit?: boolean;
+  /** @internal Tracks plugins currently being resolved to detect circular dependencies */
+  _resolving?: Set<string>;
 }
 
 export async function loadPlugin(
@@ -72,6 +74,16 @@ export async function loadPlugin(
     if (manifest.configSchema) {
       configSchemas.set(installed.name, manifest.configSchema as unknown as import("../types.js").ConfigSchema);
     }
+  }
+
+  // ── Step 1.5: Resolve manifest dependencies ──
+  if (manifest?.dependencies?.length) {
+    logger.info(
+      `[plugins] Resolving ${manifest.dependencies.length} dependencies for ${installed.name}: ${manifest.dependencies.join(", ")}`,
+    );
+    const resolving = options._resolving ?? new Set<string>();
+    resolving.add(installed.name);
+    await resolveDependencies(manifest.dependencies, injectors, { ...options, _resolving: resolving });
   }
 
   // ── Step 2: Validate requirements (manifest takes priority over legacy) ──
@@ -226,6 +238,100 @@ export function readPluginManifest(pluginPath: string, pkg?: any): PluginManifes
   }
 
   return undefined;
+}
+
+/**
+ * Normalize a dependency name to the short form used as InstalledPlugin.name.
+ * Strips @wopr-network/plugin-, @wopr-network/, and wopr-plugin- prefixes.
+ */
+export function normalizeDependencyName(dep: string): string {
+  return dep
+    .replace(/^@wopr-network\/plugin-/, "")
+    .replace(/^@wopr-network\//, "")
+    .replace(/^wopr-plugin-/, "");
+}
+
+/**
+ * Resolve and auto-install manifest.dependencies before a plugin initializes.
+ *
+ * For each dependency:
+ * 1. If already loaded, skip.
+ * 2. If in the resolving set, throw (circular dependency).
+ * 3. If not installed, call installPlugin() then enablePlugin().
+ * 4. If installed but disabled, call enablePlugin().
+ * 5. Load the dependency via loadPlugin() (which recurses for transitive deps).
+ */
+export async function resolveDependencies(
+  dependencies: string[] | undefined,
+  injectors: {
+    inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
+    getSessions: () => string[];
+  },
+  options: LoadPluginOptions,
+): Promise<void> {
+  if (!dependencies || dependencies.length === 0) return;
+
+  const resolving = options._resolving ?? new Set<string>();
+
+  let installed = await getInstalledPlugins();
+
+  for (const dep of dependencies) {
+    const shortName = normalizeDependencyName(dep);
+
+    // Already loaded — nothing to do
+    if (loadedPlugins.has(shortName)) {
+      logger.info(`[plugins] Dependency ${shortName} already loaded`);
+      continue;
+    }
+
+    // Circular dependency detection
+    if (resolving.has(shortName)) {
+      throw new Error(
+        `Circular dependency detected: ${shortName} is already being resolved. ` +
+          `Chain: ${[...resolving].join(" -> ")} -> ${shortName}`,
+      );
+    }
+
+    const found = installed.find((p) => p.name === shortName);
+
+    if (!found) {
+      // Not installed — install it
+      logger.info(`[plugins] Installing missing dependency: ${dep}`);
+      let newPlugin: InstalledPlugin;
+      try {
+        newPlugin = await installPlugin(dep);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to install dependency ${shortName} (${dep}): ${msg}`);
+      }
+
+      // Enable it (state is persisted by enablePlugin — no local mutation needed)
+      await enablePlugin(newPlugin.name);
+
+      // Refresh the installed list so subsequent deps see the new plugin
+      installed = await getInstalledPlugins();
+
+      // Load it (recursive — will resolve its own deps)
+      logger.info(`[plugins] Loading dependency: ${newPlugin.name}`);
+      resolving.add(shortName);
+      await loadPlugin(newPlugin, injectors, { ...options, _resolving: resolving });
+      resolving.delete(shortName);
+    } else if (!found.enabled) {
+      // Installed but disabled — enable and load (state is persisted by enablePlugin)
+      logger.info(`[plugins] Enabling disabled dependency: ${shortName}`);
+      await enablePlugin(shortName);
+
+      resolving.add(shortName);
+      await loadPlugin(found, injectors, { ...options, _resolving: resolving });
+      resolving.delete(shortName);
+    } else {
+      // Installed and enabled but not yet loaded — load it
+      logger.info(`[plugins] Loading dependency: ${shortName}`);
+      resolving.add(shortName);
+      await loadPlugin(found, injectors, { ...options, _resolving: resolving });
+      resolving.delete(shortName);
+    }
+  }
 }
 
 /**
