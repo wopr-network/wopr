@@ -131,6 +131,20 @@ export interface SetupStep {
  * the basic WOPRPlugin interface to support WaaS marketplace and
  * auto-configuration features.
  */
+
+/**
+ * Marketplace metadata for plugin discovery and presentation.
+ * Used by the platform UI to render plugin detail pages.
+ */
+export interface MarketplaceMetadata {
+  /**
+   * Relative path to the plugin's pitch markdown file (e.g., "./SUPERPOWER.md").
+   * The platform renders this file as the marketplace detail page.
+   * Falls back to manifest.description if the file is absent.
+   */
+  pitch?: string;
+}
+
 export interface PluginManifest {
   /** Plugin package name (e.g., "@wopr-network/plugin-discord") */
   name: string;
@@ -199,6 +213,9 @@ export interface PluginManifest {
 
   /** Lifecycle behavior declarations */
   lifecycle?: PluginLifecycle;
+
+  /** Marketplace presentation metadata */
+  marketplace?: MarketplaceMetadata;
 }
 
 /**

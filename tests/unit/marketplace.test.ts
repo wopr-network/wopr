@@ -40,6 +40,15 @@ const installedPlugins = [
     enabled: false,
     installedAt: 1700000001000,
   },
+  {
+    name: "voice-superpower",
+    version: "1.0.0",
+    description: "Voice superpower",
+    source: "npm",
+    path: "/plugins/voice-superpower",
+    enabled: true,
+    installedAt: 1700000002000,
+  },
 ];
 
 const discordManifest = {
@@ -83,10 +92,28 @@ const discordManifest = {
   conflicts: null,
   minCoreVersion: "1.0.0",
   lifecycle: { hotReload: true, shutdownBehavior: "graceful" },
+  marketplace: {
+    pitch: "./SUPERPOWER.md",
+  },
+};
+
+const voiceSuperpowerManifest = {
+  name: "voice-superpower",
+  version: "1.0.0",
+  description: "Give your bot a voice",
+  author: "WOPR Team",
+  capabilities: ["voice", "persona"],
+  category: "superpower",
+  tags: ["voice", "tts", "stt"],
+  marketplace: {
+    pitch: "./SUPERPOWER.md",
+  },
+  dependencies: ["@wopr-network/plugin-tts", "@wopr-network/plugin-stt"],
 };
 
 const mockManifests = new Map<string, any>();
 mockManifests.set("discord", discordManifest);
+mockManifests.set("voice-superpower", voiceSuperpowerManifest);
 
 const mockLoadedPlugins = new Map<string, any>();
 mockLoadedPlugins.set("discord", { plugin: {}, context: {} });
@@ -97,6 +124,7 @@ vi.mock("../../src/plugins.js", () => ({
   getAllPluginManifests: vi.fn(() => mockManifests),
   readPluginManifest: vi.fn((path: string) => {
     if (path.includes("discord")) return mockManifests.get("discord");
+    if (path.includes("voice-superpower")) return mockManifests.get("voice-superpower");
     return undefined;
   }),
   getLoadedPlugin: vi.fn((name: string) => mockLoadedPlugins.get(name)),
@@ -201,6 +229,24 @@ describe("GET /api/marketplace", () => {
 
     expect(body.plugins).toHaveLength(1);
   });
+
+  it("should include marketplace metadata in browse results", async () => {
+    const res = await app.request("/api/marketplace");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const discord = body.plugins.find((p: any) => p.name === "discord");
+    expect(discord.manifest.marketplace).toEqual({ pitch: "./SUPERPOWER.md" });
+  });
+
+  it("should filter by superpower category", async () => {
+    const res = await app.request("/api/marketplace?category=superpower");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.plugins.length).toBe(1);
+    expect(body.plugins[0].name).toBe("voice-superpower");
+    expect(body.plugins[0].manifest.category).toBe("superpower");
+    expect(body.plugins[0].manifest.marketplace).toEqual({ pitch: "./SUPERPOWER.md" });
+  });
 });
 
 describe("GET /api/marketplace/:name", () => {
@@ -240,6 +286,13 @@ describe("GET /api/marketplace/:name", () => {
     expect(body.name).toBe("openai");
     expect(body.manifest).toBeNull();
     expect(body.installed).toBe(true);
+  });
+
+  it("should include marketplace metadata in detail response", async () => {
+    const res = await app.request("/api/marketplace/discord");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.marketplace).toEqual({ pitch: "./SUPERPOWER.md" });
   });
 });
 

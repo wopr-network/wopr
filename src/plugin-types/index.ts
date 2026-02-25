@@ -91,6 +91,7 @@ export type {
   CapabilityRequirement,
   InstallMethod,
   ManifestProviderEntry,
+  MarketplaceMetadata,
   NetworkRequirements,
   PluginCapability,
   PluginCategory,
