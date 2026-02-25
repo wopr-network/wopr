@@ -121,4 +121,9 @@ export const PluginManifestSchema = z.object({
   dependencies: z.array(z.string()).optional(),
   conflicts: z.array(z.string()).optional(),
   lifecycle: PluginLifecycleSchema.optional(),
+  marketplace: z
+    .object({
+      pitch: z.string().optional(),
+    })
+    .optional(),
 });

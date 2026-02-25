@@ -140,6 +140,42 @@ describe("readPluginManifest", () => {
     const manifest = readPluginManifest("/nonexistent/path", undefined);
     expect(manifest).toBeUndefined();
   });
+
+  it("should read marketplace metadata from manifest", () => {
+    const mockPkg = {
+      wopr: {
+        name: "test-superpower",
+        version: "1.0.0",
+        description: "A superpower plugin",
+        capabilities: ["voice", "persona"],
+        category: "superpower",
+        marketplace: {
+          pitch: "./SUPERPOWER.md",
+        },
+        dependencies: ["@wopr-network/plugin-tts", "@wopr-network/plugin-stt"],
+      },
+    };
+
+    const result = readPluginManifest("/fake/path", mockPkg);
+    expect(result).toBeDefined();
+    expect(result!.category).toBe("superpower");
+    expect(result!.marketplace).toEqual({ pitch: "./SUPERPOWER.md" });
+  });
+
+  it("should handle manifest without marketplace field", () => {
+    const mockPkg = {
+      wopr: {
+        name: "test-utility",
+        version: "1.0.0",
+        description: "A utility plugin",
+        capabilities: ["tool"],
+      },
+    };
+
+    const result = readPluginManifest("/fake/path", mockPkg);
+    expect(result).toBeDefined();
+    expect(result!.marketplace).toBeUndefined();
+  });
 });
 
 // ============================================================================

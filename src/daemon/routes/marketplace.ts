@@ -108,30 +108,34 @@ marketplaceRouter.get(
               author: manifest.author,
               license: manifest.license,
               homepage: manifest.homepage,
+              marketplace: manifest.marketplace,
             }
           : null,
       });
     }
 
     // 2. Append discoverable plugins from npm/GitHub (not installed)
-    try {
-      const discovered = await searchPlugins(query);
-      for (const d of discovered) {
-        if (seen.has(d.name)) continue;
-        seen.add(d.name);
-        results.push({
-          name: d.name,
-          version: d.version || "unknown",
-          description: d.description || null,
-          source: d.source,
-          installed: d.installed || false,
-          enabled: false,
-          loaded: false,
-          manifest: null,
-        });
+    // Skip if category or capability filter is active — discovered plugins have no manifest to filter on
+    if (!category && !capability) {
+      try {
+        const discovered = await searchPlugins(query);
+        for (const d of discovered) {
+          if (seen.has(d.name)) continue;
+          seen.add(d.name);
+          results.push({
+            name: d.name,
+            version: d.version || "unknown",
+            description: d.description || null,
+            source: d.source,
+            installed: d.installed || false,
+            enabled: false,
+            loaded: false,
+            manifest: null,
+          });
+        }
+      } catch {
+        // Search failed (offline, etc.) — return installed-only results
       }
-    } catch {
-      // Search failed (offline, etc.) — return installed-only results
     }
 
     return c.json({
@@ -231,6 +235,7 @@ marketplaceRouter.get(
       conflicts: manifest.conflicts || null,
       minCoreVersion: manifest.minCoreVersion || null,
       lifecycle: manifest.lifecycle || null,
+      marketplace: manifest.marketplace || null,
     });
   },
 );
