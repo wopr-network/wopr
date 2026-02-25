@@ -1,12 +1,11 @@
 # Stage 1: Build
-FROM node:24-alpine AS builder
+FROM node:24-bookworm-slim AS builder
 
 WORKDIR /app
 
-# build-base + python3 needed for better-sqlite3 native addon (node-gyp)
-RUN apk add --no-cache build-base python3
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential python3 && rm -rf /var/lib/apt/lists/*
 
-# Install pnpm
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 # Copy package files
@@ -24,7 +23,7 @@ RUN pnpm run build
 RUN pnpm prune --prod
 
 # Stage 2: Runtime
-FROM node:24-alpine
+FROM node:24-bookworm-slim
 
 # Patch npm's bundled transitive deps and install pnpm via npm (not corepack)
 # Installing via npm avoids the corepack cache with its bundled vulnerable node-tar
@@ -32,8 +31,10 @@ RUN npm install -g npm@latest pnpm@latest
 
 WORKDIR /app
 
-# Runtime system deps only — no build-base, no python3
-RUN apk add --no-cache git sudo curl ca-certificates jq docker-cli su-exec
+# Runtime system deps only — no build-essential, no python3
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git sudo curl ca-certificates jq docker.io && \
+    rm -rf /var/lib/apt/lists/*
 
 # Make node user a passwordless sudoer
 RUN echo "node ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers

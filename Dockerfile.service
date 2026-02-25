@@ -1,15 +1,15 @@
 # Slim multi-tenant service image for WOPR bots
 # - Multi-stage build: build deps stay out of runtime image
-# - Alpine base for minimal footprint
+# - Debian bookworm-slim base for glibc + apt compatibility
 # - Production deps only, non-root user
 # - V8 heap capped at 96MB per container
 #
-# Target: < 150MB image, < 100MB idle memory
+# Target: < 200MB image, < 100MB idle memory
 #
 # For self-hosted power-user image, see Dockerfile
 
 # --- Build stage ---
-FROM node:24-alpine AS build
+FROM node:24-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -29,12 +29,13 @@ COPY src/ ./src/
 RUN pnpm run build
 
 # --- Production deps stage ---
-FROM node:24-alpine AS deps
+FROM node:24-bookworm-slim AS deps
 
 WORKDIR /app
 
-# build-base + python3 needed for better-sqlite3 native addon (node-gyp)
-RUN apk add --no-cache build-base python3
+# build-essential + python3 needed for better-sqlite3 native addon (node-gyp)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential python3 && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
@@ -44,10 +45,10 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
 # Remove corepack cache — not needed after install, must not leak into runtime
-RUN rm -rf /root/.cache/node/corepack /root/.local/share/pnpm
+RUN rm -rf /root/.cache
 
 # --- Runtime stage ---
-FROM node:24-alpine
+FROM node:24-bookworm-slim
 
 WORKDIR /app
 
@@ -59,7 +60,9 @@ WORKDIR /app
 # Patch npm's bundled transitive deps (tar, minimatch CVEs)
 RUN npm install -g npm@latest
 
-RUN apk add --no-cache git ca-certificates jq tini
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates jq tini && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy production node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
