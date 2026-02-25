@@ -242,14 +242,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
     startupWarnings.push(msg);
   }
 
-  // Initialize registries storage and migrate from JSON
-  daemonLog("Initializing registries storage...");
-  const { initRegistriesStorage } = await import("../core/registries-repository.js");
-  const { migrateRegistriesToSql } = await import("../core/registries-migrate.js");
-  await initRegistriesStorage();
-  await migrateRegistriesToSql();
-  daemonLog("Registries storage initialized");
-
   // Initialize session context storage and migrate from filesystem (WOP-556)
   daemonLog("Initializing session context storage...");
   const { initSessionContextStorage } = await import("../core/session-context-repository.js");
