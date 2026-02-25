@@ -2,3 +2,9 @@
 # These are in Node.js's internal npm, not our application code
 CVE-2026-25547
 CVE-2026-24842
+
+# Go stdlib CVE in the node:24-alpine base image Go toolchain.
+# This is not our application code — we have no Go in this project.
+# The vulnerable binary is part of Alpine's build toolchain bundled in the base image.
+# Cannot be fixed by upgrading our dependencies.
+CVE-2024-24790
