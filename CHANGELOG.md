@@ -34,6 +34,13 @@ documentation and configuration options.
 
 ---
 
+## [1.4.1](https://github.com/wopr-network/wopr/compare/wopr-v1.4.0...wopr-v1.4.1) (2026-02-25)
+
+
+### Miscellaneous
+
+* migrate base image from Alpine to Debian bookworm-slim (WOP-1039) ([#1254](https://github.com/wopr-network/wopr/issues/1254)) ([6c17a00](https://github.com/wopr-network/wopr/commit/6c17a00366aad37ee01e76214195448f7dfb7f0d))
+
 ## [1.4.0](https://github.com/wopr-network/wopr/compare/wopr-v1.3.10...wopr-v1.4.0) (2026-02-25)
 
 
