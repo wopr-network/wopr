@@ -43,6 +43,9 @@ COPY package.json pnpm-lock.yaml ./
 # Production deps only -- no devDependencies
 RUN pnpm install --frozen-lockfile --prod
 
+# Remove corepack cache — not needed after install, must not leak into runtime
+RUN rm -rf /root/.cache/node/corepack /root/.local/share/pnpm
+
 # --- Runtime stage ---
 FROM node:24-alpine
 
@@ -53,6 +56,9 @@ WORKDIR /app
 #   ca-certificates - HTTPS
 #   jq           - bundled plugin registration script
 #   tini         - proper PID 1 / signal handling
+# Patch npm's bundled transitive deps (tar, minimatch CVEs)
+RUN npm install -g npm@latest
+
 RUN apk add --no-cache git ca-certificates jq tini
 
 # Copy production node_modules from deps stage
