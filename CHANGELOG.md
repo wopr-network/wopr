@@ -34,6 +34,19 @@ documentation and configuration options.
 
 ---
 
+## [1.4.0](https://github.com/wopr-network/wopr/compare/wopr-v1.3.10...wopr-v1.4.0) (2026-02-25)
+
+
+### Features
+
+* add superpower category and marketplace metadata to PluginManifest (WOP-1010) ([#1242](https://github.com/wopr-network/wopr/issues/1242)) ([ba51588](https://github.com/wopr-network/wopr/commit/ba5158804e24ad56cf1e222756da1b4f02965334))
+* **plugins:** resolve and auto-install manifest.dependencies on plugin load (WOP-1014) ([#1233](https://github.com/wopr-network/wopr/issues/1233)) ([a2c6548](https://github.com/wopr-network/wopr/commit/a2c6548bb1499d8db8d1cae87c337eb21eb85ac5))
+
+
+### Code Refactoring
+
+* **core:** remove leaked registry storage from core (WOP-962) ([#1234](https://github.com/wopr-network/wopr/issues/1234)) ([1635676](https://github.com/wopr-network/wopr/commit/163567692c23a92b8d195be44a54fb7f0da7f0ed))
+
 ## [1.3.10](https://github.com/wopr-network/wopr/compare/wopr-v1.3.9...wopr-v1.3.10) (2026-02-25)
 
 
