@@ -273,6 +273,8 @@ export async function resolveDependencies(
 
   const resolving = options._resolving ?? new Set<string>();
 
+  let installed = await getInstalledPlugins();
+
   for (const dep of dependencies) {
     const shortName = normalizeDependencyName(dep);
 
@@ -290,8 +292,6 @@ export async function resolveDependencies(
       );
     }
 
-    // Find in installed plugins
-    const installed = await getInstalledPlugins();
     const found = installed.find((p) => p.name === shortName);
 
     if (!found) {
@@ -305,9 +305,11 @@ export async function resolveDependencies(
         throw new Error(`Failed to install dependency ${shortName} (${dep}): ${msg}`);
       }
 
-      // Enable it
+      // Enable it (state is persisted by enablePlugin — no local mutation needed)
       await enablePlugin(newPlugin.name);
-      newPlugin.enabled = true;
+
+      // Refresh the installed list so subsequent deps see the new plugin
+      installed = await getInstalledPlugins();
 
       // Load it (recursive — will resolve its own deps)
       logger.info(`[plugins] Loading dependency: ${newPlugin.name}`);
@@ -315,10 +317,9 @@ export async function resolveDependencies(
       await loadPlugin(newPlugin, injectors, { ...options, _resolving: resolving });
       resolving.delete(shortName);
     } else if (!found.enabled) {
-      // Installed but disabled — enable and load
+      // Installed but disabled — enable and load (state is persisted by enablePlugin)
       logger.info(`[plugins] Enabling disabled dependency: ${shortName}`);
       await enablePlugin(shortName);
-      found.enabled = true;
 
       resolving.add(shortName);
       await loadPlugin(found, injectors, { ...options, _resolving: resolving });
