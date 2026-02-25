@@ -34,6 +34,19 @@ documentation and configuration options.
 
 ---
 
+## [1.3.10](https://github.com/wopr-network/wopr/compare/wopr-v1.3.9...wopr-v1.3.10) (2026-02-25)
+
+
+### Bug Fixes
+
+* **docker:** multi-stage build — remove pnpm corepack cache from runtime image ([7e3de22](https://github.com/wopr-network/wopr/commit/7e3de22e56aa639b75d2f863fbfa922b438b5665))
+* **docker:** slim image — update npm to patch bundled tar/minimatch CVEs, clear corepack cache in deps stage ([7569af2](https://github.com/wopr-network/wopr/commit/7569af227ba15feb647b0d591bdb598642dcd299))
+
+
+### Miscellaneous
+
+* ignore CVE-2024-24790 — Go stdlib in node:24-alpine base image, not our code ([707712a](https://github.com/wopr-network/wopr/commit/707712a2c1cc9231e0763cd02265dfe5439339a1))
+
 ## [1.3.9](https://github.com/wopr-network/wopr/compare/wopr-v1.3.8...wopr-v1.3.9) (2026-02-24)
 
 
