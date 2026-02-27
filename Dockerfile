@@ -33,7 +33,7 @@ WORKDIR /app
 
 # Runtime system deps only — no build-essential, no python3
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git sudo curl ca-certificates jq docker.io && \
+    git sudo curl ca-certificates jq docker.io gosu && \
     rm -rf /var/lib/apt/lists/*
 
 # Make node user a passwordless sudoer

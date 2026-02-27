@@ -61,7 +61,7 @@ WORKDIR /app
 RUN npm install -g npm@latest
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ca-certificates jq tini && \
+    git ca-certificates curl jq tini && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy production node_modules from deps stage
