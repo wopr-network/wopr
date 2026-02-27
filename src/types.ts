@@ -933,7 +933,26 @@ export interface WOPRPluginContext {
 
   /** Register a health probe for a capability provider this plugin provides */
   registerHealthProbe?(capability: string, providerId: string, probe: () => Promise<boolean>): void;
+
+  // Setup context providers - plugins provide AI instructions for their own setup flow
+  registerSetupContextProvider(fn: SetupContextProvider): void;
 }
+
+/**
+ * Input provided to a setup context provider so it can generate
+ * context-aware setup instructions.
+ */
+export interface SetupContextInput {
+  pluginId: string;
+  configSchema: ConfigSchema;
+  partialConfig: Record<string, unknown>;
+}
+
+/**
+ * A function that returns setup instructions to prepend to the
+ * system prompt during plugin configuration.
+ */
+export type SetupContextProvider = (input: SetupContextInput) => string;
 
 export interface PluginLogger {
   info(message: string, ...args: unknown[]): void;

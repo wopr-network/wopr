@@ -37,6 +37,7 @@ import type {
   ContextProvider,
   InstalledPlugin,
   PluginInjectOptions,
+  SetupContextProvider,
   UiComponentExtension,
   WebUiExtension,
   WOPRPluginContext,
@@ -57,6 +58,7 @@ import {
   configSchemas,
   PLUGINS_DIR,
   providerPlugins,
+  setupContextProviders,
   uiComponents,
   webUiExtensions,
 } from "./state.js";
@@ -296,6 +298,10 @@ export function createPluginContext(
 
     registerHealthProbe(capability: string, providerId: string, probe: () => Promise<boolean>): void {
       getCapabilityHealthProber().registerProbe(capability, providerId, probe);
+    },
+
+    registerSetupContextProvider(fn: SetupContextProvider): void {
+      setupContextProviders.set(pluginName, fn);
     },
 
     // Storage API - plugin-extensible database storage

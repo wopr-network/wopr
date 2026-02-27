@@ -13,6 +13,7 @@ import type {
   ChannelAdapter,
   ConfigSchema,
   ContextProvider,
+  SetupContextProvider,
   UiComponentExtension,
   WebUiExtension,
   WOPRPlugin,
@@ -55,6 +56,9 @@ export const pluginStates: Map<string, PluginRuntimeState> = new Map();
  * Key format: "pluginName.extensionName" -> extension object
  */
 export const pluginExtensions: Map<string, unknown> = new Map();
+
+/** Setup context providers (pluginName -> provider function) */
+export const setupContextProviders: Map<string, SetupContextProvider> = new Map();
 
 export function channelKey(channel: { type: string; id: string }): string {
   return `${channel.type}:${channel.id}`;
