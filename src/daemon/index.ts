@@ -251,6 +251,11 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   await migrateSessionContextFromFilesystem(sDir, gDir);
   daemonLog("Session context storage initialized");
 
+  // Initialize context system with default providers
+  const { initContextSystem } = await import("../core/context.js");
+  await initContextSystem();
+  daemonLog("Context system initialized");
+
   // Ensure bearer token exists for API authentication
   ensureToken();
   daemonLog("Bearer token ready for API authentication");
