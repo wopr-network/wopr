@@ -42,13 +42,13 @@ jobs:
           docker run -d --name "$CONTAINER_NAME" \
             ghcr.io/wopr-network/${{ matrix.image }}:latest
 
-          # Poll health from INSIDE the container using curl (installed in both
-          # wopr and wopr-slim Debian bookworm-slim images).
+          # Poll health from INSIDE the container using Node's built-in fetch().
+          # Both wopr and wopr-slim are Node 24 Debian images — no wget/curl needed.
           # This avoids DinD networking issues: runner and smoke containers are
           # siblings sharing a Docker daemon but in separate network namespaces,
           # so bridge IPs are unreachable from the runner container.
           HEALTHY=false
-          echo "Polling health from inside container (docker exec curl) ..."
+          echo "Polling health from inside container (docker exec node fetch) ..."
           for i in $(seq 1 30); do
             # Check container is still running
             if ! docker ps --filter "name=$CONTAINER_NAME" --format '{{.Status}}' | grep -q "Up"; then
@@ -57,7 +57,7 @@ jobs:
               break
             fi
             if docker exec "$CONTAINER_NAME" \
-              curl -sf --max-time 5 "http://localhost:7437/health" > /dev/null 2>&1; then
+              node -e "fetch('http://localhost:7437/health').then(r=>{if(!r.ok)throw 1}).catch(()=>process.exit(1))" 2>/dev/null; then
               HEALTHY=true
               break
             fi
