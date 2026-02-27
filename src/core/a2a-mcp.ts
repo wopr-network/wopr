@@ -78,8 +78,7 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
 
   logger.info(`[a2a-mcp] Building MCP server with ${pluginTools.size} plugin tools`);
 
-  // biome-ignore lint/suspicious/noExplicitAny: SDK tool definitions have complex generic types
-  const tools: any[] = [
+  const tools: unknown[] = [
     ...createSessionTools(sessionName),
     ...createConfigTools(sessionName),
     ...createMemoryTools(sessionName),
@@ -108,7 +107,8 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
   const server = createSdkMcpServer({
     name: "wopr-a2a",
     version: "1.0.0",
-    tools,
+    // biome-ignore lint/suspicious/noExplicitAny: createXTools() return unknown[] matching the SDK's SdkMcpToolDefinition<any>[] parameter
+    tools: tools as Parameters<typeof createSdkMcpServer>[0]["tools"],
   });
 
   setCachedServer(server);

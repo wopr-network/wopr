@@ -257,7 +257,10 @@ export interface WOPREventBus {
 // ============================================================================
 
 // General-purpose callable type for handler/wrapper tracking.
-// biome-ignore lint/suspicious/noExplicitAny: WeakMap keys require contravariant parameter types; unknown[] is too narrow for generic EventHandler<T>
+// This `any` is unavoidable: WeakMap<AnyFunction, ...> requires parameter contravariance.
+// Using `unknown[]` would make this type incompatible with typed EventHandler<T> callbacks
+// because (...args: unknown[]) => unknown is NOT assignable from (payload: SomeEvent) => void.
+// biome-ignore lint/suspicious/noExplicitAny: WeakMap keys require contravariant parameter types
 type AnyFunction = (...args: any[]) => any;
 
 class WOPREventBusImpl implements WOPREventBus {

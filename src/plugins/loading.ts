@@ -216,11 +216,11 @@ export async function loadPlugin(
  * Read a plugin manifest from package.json "wopr" field or wopr-plugin.json.
  * Returns undefined if no manifest is found (backward compat).
  */
-// biome-ignore lint/suspicious/noExplicitAny: package.json shape is untyped
-export function readPluginManifest(pluginPath: string, pkg?: any): PluginManifest | undefined {
+export function readPluginManifest(pluginPath: string, pkg?: Record<string, unknown>): PluginManifest | undefined {
   // 1. Check package.json "wopr" field (top-level manifest)
-  if (pkg?.wopr?.name && pkg.wopr.capabilities) {
-    return pkg.wopr as PluginManifest;
+  const wopr = pkg?.wopr as Record<string, unknown> | undefined;
+  if (wopr?.name && wopr.capabilities) {
+    return wopr as unknown as PluginManifest;
   }
 
   // 2. Check standalone wopr-plugin.json
