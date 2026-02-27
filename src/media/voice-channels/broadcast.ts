@@ -10,9 +10,17 @@ const DEFAULT_OPUS_CONFIG: Required<OpusConfig> = {
   frameDurationMs: 20,
 };
 
+/** @internal For testing only: signature of the encoder factory */
+export type OpusEncoderFactory = (config: Required<OpusConfig>) => {
+  encode: (pcm: Buffer) => Buffer;
+  destroy: () => void;
+};
+
 export interface BroadcasterOptions {
   participants: VoiceParticipant[];
   opusConfig?: OpusConfig;
+  /** @internal For testing only: inject a custom encoder factory instead of loading @discordjs/opus */
+  _encoderFactory?: OpusEncoderFactory;
 }
 
 export interface Broadcaster {
@@ -69,17 +77,18 @@ export function createBroadcaster(options: BroadcasterOptions): Broadcaster {
     ...DEFAULT_OPUS_CONFIG,
     ...options.opusConfig,
   };
+  const encoderFactory = options._encoderFactory ?? loadOpusEncoder;
   const participants = new Map<string, VoiceParticipant>();
   let destroyed = false;
-  let opusEncoder: ReturnType<typeof loadOpusEncoder> | null = null;
+  let opusEncoder: ReturnType<OpusEncoderFactory> | null = null;
 
   for (const p of options.participants) {
     participants.set(p.id, p);
   }
 
-  function ensureOpusEncoder(): ReturnType<typeof loadOpusEncoder> {
+  function ensureOpusEncoder(): ReturnType<OpusEncoderFactory> {
     if (!opusEncoder) {
-      opusEncoder = loadOpusEncoder(config);
+      opusEncoder = encoderFactory(config);
     }
     return opusEncoder;
   }
@@ -87,25 +96,30 @@ export function createBroadcaster(options: BroadcasterOptions): Broadcaster {
   function broadcast(pcmAudio: Buffer): void {
     if (destroyed || participants.size === 0) return;
 
-    let opusAudio: Buffer | undefined;
-    let needsOpus = false;
+    // Snapshot before iteration so send() callbacks that call addParticipant/removeParticipant
+    // don't affect this broadcast frame's recipient list or needsOpus decision
+    const snapshot = Array.from(participants.values());
 
-    for (const p of participants.values()) {
-      if (p.encoding === "opus") {
-        needsOpus = true;
-        break;
+    let opusAudio: Buffer | undefined;
+    const needsOpus = snapshot.some((p) => p.encoding === "opus");
+
+    if (needsOpus) {
+      try {
+        const enc = ensureOpusEncoder();
+        opusAudio = enc.encode(pcmAudio);
+      } catch {
+        // Opus encoder unavailable or encoding failed — PCM participants still receive audio,
+        // Opus participants are silently skipped for this frame
       }
     }
 
-    if (needsOpus) {
-      const enc = ensureOpusEncoder();
-      opusAudio = enc.encode(pcmAudio);
-    }
-
-    for (const p of participants.values()) {
+    for (const p of snapshot) {
       try {
-        if (p.encoding === "opus" && opusAudio !== undefined) {
-          p.send(opusAudio);
+        if (p.encoding === "opus") {
+          // Only send to Opus participants if encoding succeeded
+          if (opusAudio !== undefined) {
+            p.send(opusAudio);
+          }
         } else {
           // PCM passthrough — zero-copy, same Buffer reference
           p.send(pcmAudio);
@@ -117,6 +131,7 @@ export function createBroadcaster(options: BroadcasterOptions): Broadcaster {
   }
 
   function addParticipant(participant: VoiceParticipant): void {
+    if (destroyed) return;
     participants.set(participant.id, participant);
   }
 
