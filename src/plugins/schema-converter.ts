@@ -16,7 +16,7 @@ import type { A2AServerConfig } from "../types.js";
  */
 export function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodTypeAny {
   if (!schema || typeof schema !== "object") {
-    return z.any();
+    return z.unknown();
   }
 
   const type = schema.type as string;
@@ -39,7 +39,7 @@ export function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodTypeAny {
       zodSchema = z.boolean();
       break;
     case "array":
-      zodSchema = items ? z.array(jsonSchemaToZod(items)) : z.array(z.any());
+      zodSchema = items ? z.array(jsonSchemaToZod(items)) : z.array(z.unknown());
       break;
     case "object":
       if (properties) {
@@ -59,11 +59,11 @@ export function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodTypeAny {
         }
         zodSchema = z.object(shape);
       } else {
-        zodSchema = z.record(z.string(), z.any());
+        zodSchema = z.record(z.string(), z.unknown());
       }
       break;
     default:
-      zodSchema = z.any();
+      zodSchema = z.unknown();
   }
 
   if (description) {
