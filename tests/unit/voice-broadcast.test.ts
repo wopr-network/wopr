@@ -45,7 +45,7 @@ describe("createBroadcaster", () => {
     expect(received[0]).toBe(pcmData);
   });
 
-  it("encodes audio to Opus for Opus participants", () => {
+  it("encodes audio to Opus for Opus participants via injected encoder factory", () => {
     const received: Buffer[] = [];
     const participant: VoiceParticipant = {
       id: "opus-user",
@@ -53,19 +53,27 @@ describe("createBroadcaster", () => {
       send: (audio) => received.push(audio),
     };
 
-    const broadcaster = createBroadcaster({ participants: [participant] });
-    // 20ms of 48kHz stereo 16-bit PCM = 48000 * 2 channels * 2 bytes * 0.02s = 3840 bytes
-    const pcmData = Buffer.alloc(3840);
+    // Simulate encoder that produces compressed output (smaller than input)
+    const fakeOpusOutput = Buffer.from([0x01, 0x02, 0x03]); // 3 bytes, much less than 3840
+    const mockFactory = () => ({
+      encode: (_pcm: Buffer) => fakeOpusOutput,
+      destroy: () => {},
+    });
+
+    const broadcaster = createBroadcaster({
+      participants: [participant],
+      _encoderFactory: mockFactory,
+    });
+    const pcmData = Buffer.alloc(3840); // 20ms of 48kHz stereo 16-bit PCM
     broadcaster.broadcast(pcmData);
 
     expect(received).toHaveLength(1);
-    // Opus output is smaller than PCM input
-    expect(received[0].length).toBeLessThan(pcmData.length);
-    // Opus output is a Buffer
+    // Opus participant received the encoder's output, not the raw PCM
+    expect(received[0]).toBe(fakeOpusOutput);
     expect(Buffer.isBuffer(received[0])).toBe(true);
   });
 
-  it("broadcasts to mixed PCM and Opus participants simultaneously", () => {
+  it("broadcasts to mixed PCM and Opus participants simultaneously via injected encoder factory", () => {
     const pcmReceived: Buffer[] = [];
     const opusReceived: Buffer[] = [];
 
@@ -80,15 +88,24 @@ describe("createBroadcaster", () => {
       send: (audio) => opusReceived.push(audio),
     };
 
-    const broadcaster = createBroadcaster({ participants: [pcmUser, opusUser] });
+    const fakeOpusOutput = Buffer.from([0x01, 0x02, 0x03]);
+    const mockFactory = () => ({
+      encode: (_pcm: Buffer) => fakeOpusOutput,
+      destroy: () => {},
+    });
+
+    const broadcaster = createBroadcaster({
+      participants: [pcmUser, opusUser],
+      _encoderFactory: mockFactory,
+    });
     const pcmData = Buffer.alloc(3840);
     broadcaster.broadcast(pcmData);
 
     expect(pcmReceived).toHaveLength(1);
     expect(opusReceived).toHaveLength(1);
-    // PCM gets raw buffer, Opus gets encoded (smaller)
+    // PCM gets raw buffer (zero-copy), Opus gets encoder output
     expect(pcmReceived[0]).toBe(pcmData);
-    expect(opusReceived[0].length).toBeLessThan(pcmData.length);
+    expect(opusReceived[0]).toBe(fakeOpusOutput);
   });
 
   it("handles empty participant list as a no-op", () => {
