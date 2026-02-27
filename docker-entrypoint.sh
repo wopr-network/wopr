@@ -58,7 +58,7 @@ export NODE_OPTIONS="--max-old-space-size=4096"
 if [ "$1" = "node" ] && echo "$@" | grep -q "daemon run"; then
   # Restart loop for daemon: exit code 75 = restart requested by restart-on-idle
   while true; do
-    su-exec node "$@"
+    gosu node "$@"
     EXIT_CODE=$?
 
     if [ "$EXIT_CODE" -ne 75 ]; then
@@ -72,5 +72,5 @@ if [ "$1" = "node" ] && echo "$@" | grep -q "daemon run"; then
   done
 else
   # Not daemon command - run normally without restart loop
-  exec su-exec node "$@"
+  exec gosu node "$@"
 fi
