@@ -15,7 +15,7 @@ import {
 import type { ProviderConfig } from "../types/provider.js";
 import type { ChannelRef, ConversationEntry, StreamMessage } from "../types.js";
 import { getA2AMcpServer, isA2AEnabled, setSessionFunctions } from "./a2a-mcp.js";
-import { assembleContext, initContextSystem, type MessageInfo } from "./context.js";
+import { assembleContext, type MessageInfo } from "./context.js";
 import {
   emitMutableIncoming,
   emitMutableOutgoing,
@@ -45,10 +45,6 @@ export {
   type ToolContext,
   unregisterA2ATool,
 } from "./a2a-mcp.js";
-
-// Initialize context system with defaults (async)
-initContextSystem();
-// Don't block - let it initialize in background
 
 // Export functions for A2A MCP server (deferred to avoid circular imports)
 // This is called after module initialization
