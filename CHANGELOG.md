@@ -34,6 +34,26 @@ documentation and configuration options.
 
 ---
 
+## [1.5.0](https://github.com/wopr-network/wopr/compare/wopr-v1.4.1...wopr-v1.5.0) (2026-02-27)
+
+
+### Features
+
+* add voice channel broadcast with PCM/Opus encoding (WOP-965) ([#1276](https://github.com/wopr-network/wopr/issues/1276)) ([d4a3826](https://github.com/wopr-network/wopr/commit/d4a3826df29544f1291405af9bfdd26680c2b9ac))
+* setup context provider registration, injection, and tests (WOP-1054) ([#1272](https://github.com/wopr-network/wopr/issues/1272)) ([343883e](https://github.com/wopr-network/wopr/commit/343883e253d46d4bfbec21c1f7ef1a704e2fb1c8))
+
+
+### Bug Fixes
+
+* remove circular init side-effect, call initContextSystem explicitly in daemon startup ([#1300](https://github.com/wopr-network/wopr/issues/1300)) ([193a838](https://github.com/wopr-network/wopr/commit/193a838742f4a9a01e76ccc8ca827c88c1807b92))
+* replace su-exec with gosu and wget with curl for Debian compatibility (WOP-944) ([#1275](https://github.com/wopr-network/wopr/issues/1275)) ([301e51d](https://github.com/wopr-network/wopr/commit/301e51da9a1672fdce20980c648abe5a4c2fc759))
+* use node fetch for promotion smoke test health check (WOP-943) ([#1277](https://github.com/wopr-network/wopr/issues/1277)) ([5e6470a](https://github.com/wopr-network/wopr/commit/5e6470a2b5a0b2f276d89f2df94ab1f3e6f42f8a))
+
+
+### Code Refactoring
+
+* eliminate any type annotations in wopr core (WOP-745) ([#1274](https://github.com/wopr-network/wopr/issues/1274)) ([d0c6354](https://github.com/wopr-network/wopr/commit/d0c6354545bde20b41d24304d90278ace6aaa9df))
+
 ## [1.4.1](https://github.com/wopr-network/wopr/compare/wopr-v1.4.0...wopr-v1.4.1) (2026-02-25)
 
 
