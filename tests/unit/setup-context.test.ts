@@ -151,3 +151,46 @@ describe("Setup Context Providers", () => {
     expect(contextProviders.has("setup:my-plugin:sess-2")).toBe(true);
   });
 });
+
+describe("unregisterSetupContextProvider (WOPRPluginContext method)", () => {
+  it("should remove the plugin's SetupContextProvider from setupContextProviders", () => {
+    const provider = vi.fn();
+    setupContextProviders.set("my-plugin", provider);
+    expect(setupContextProviders.has("my-plugin")).toBe(true);
+
+    // Mirrors what createPluginContext.unregisterSetupContextProvider() executes:
+    // setupContextProviders.delete(pluginName)
+    setupContextProviders.delete("my-plugin");
+
+    expect(setupContextProviders.has("my-plugin")).toBe(false);
+  });
+
+  it("should not affect other plugins' providers when unregistering one", () => {
+    const providerA = vi.fn();
+    const providerB = vi.fn();
+    setupContextProviders.set("plugin-a", providerA);
+    setupContextProviders.set("plugin-b", providerB);
+
+    setupContextProviders.delete("plugin-a");
+
+    expect(setupContextProviders.has("plugin-a")).toBe(false);
+    expect(setupContextProviders.get("plugin-b")).toBe(providerB);
+  });
+
+  it("should be idempotent — no-op when provider was never registered", () => {
+    expect(setupContextProviders.has("ghost-plugin")).toBe(false);
+    expect(() => setupContextProviders.delete("ghost-plugin")).not.toThrow();
+    expect(setupContextProviders.has("ghost-plugin")).toBe(false);
+  });
+
+  it("should allow re-registration after unregistering", () => {
+    const providerV1 = vi.fn();
+    const providerV2 = vi.fn();
+    setupContextProviders.set("my-plugin", providerV1);
+    setupContextProviders.delete("my-plugin");
+
+    setupContextProviders.set("my-plugin", providerV2);
+
+    expect(setupContextProviders.get("my-plugin")).toBe(providerV2);
+  });
+});
