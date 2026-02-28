@@ -936,6 +936,7 @@ export interface WOPRPluginContext {
 
   // Setup context providers - plugins provide AI instructions for their own setup flow
   registerSetupContextProvider(fn: SetupContextProvider): void;
+  unregisterSetupContextProvider(): void;
 }
 
 /**
