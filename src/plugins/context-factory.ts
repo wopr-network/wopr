@@ -304,6 +304,10 @@ export function createPluginContext(
       setupContextProviders.set(pluginName, fn);
     },
 
+    unregisterSetupContextProvider(): void {
+      setupContextProviders.delete(pluginName);
+    },
+
     // Storage API - plugin-extensible database storage
     storage: getStorage(),
   };
