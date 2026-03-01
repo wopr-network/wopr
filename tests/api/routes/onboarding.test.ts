@@ -27,6 +27,7 @@ describe("onboardingRoutes", () => {
 
     const mockService = {
       createSession: vi.fn().mockResolvedValue(makeSession()),
+      getSession: vi.fn().mockResolvedValue(makeSession()),
       getHistory: vi.fn().mockResolvedValue([{ ts: 1, from: "user", content: "hi", type: "text" }]),
       inject: vi.fn().mockResolvedValue("response"),
       upgradeAnonymousToUser: vi.fn().mockReturnValue(makeSession()),
@@ -100,6 +101,7 @@ describe("onboardingRoutes", () => {
     vi.resetModules();
     const mockService = {
       createSession: vi.fn(),
+      getSession: vi.fn().mockResolvedValue(null),
       getHistory: vi.fn().mockRejectedValue(new Error("Session not found: missing")),
       inject: vi.fn(),
       upgradeAnonymousToUser: vi.fn(),
