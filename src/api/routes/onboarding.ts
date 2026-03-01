@@ -144,6 +144,14 @@ onboardingRoutes.post("/session/:id/upgrade", async (c) => {
     return c.json({ error: "x-anonymous-id header required" }, 400);
   }
 
+  // Ownership check: verify the session identified by :id belongs to the caller's anonymousId.
+  // Use 404 (not 403) to avoid leaking session existence.
+  const id = c.req.param("id");
+  const existing = await service.getSession(id);
+  if (!existing || existing.anonymousId !== anonymousId) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
   try {
     const session = await service.upgradeAnonymousToUser(anonymousId, userId);
     if (!session) {

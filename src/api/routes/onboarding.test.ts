@@ -104,6 +104,47 @@ describe("GET /api/onboarding/session/:id/history", () => {
   });
 });
 
+describe("POST /api/onboarding/session/:id/upgrade", () => {
+  it("returns 404 when x-anonymous-id does not match the session identified by :id (IDOR)", async () => {
+    // IDOR: attacker passes their own anonymousId but victim's session :id.
+    // getSession returns the victim's session (anonymousId: "anon-victim").
+    // Without an ownership check the code would proceed with upgradeAnonymousToUser.
+    const victimSession = fakeSession({ userId: null, anonymousId: "anon-victim" });
+    const { app, mockService } = buildApp(victimSession, "user-attacker");
+    // Simulate attacker's own session upgrading if called (should NOT happen)
+    mockService.upgradeAnonymousToUser.mockResolvedValue(
+      fakeSession({ userId: "user-attacker", anonymousId: "anon-attacker" }),
+    );
+    const res = await app.request("/api/onboarding/session/sess-1/upgrade", {
+      method: "POST",
+      headers: { "x-anonymous-id": "anon-attacker" },
+    });
+    expect(res.status).toBe(404);
+    // upgradeAnonymousToUser must never be called when ownership check fails
+    expect(mockService.upgradeAnonymousToUser).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when session does not exist", async () => {
+    const { app } = buildApp(null, "user-owner");
+    const res = await app.request("/api/onboarding/session/nonexistent/upgrade", {
+      method: "POST",
+      headers: { "x-anonymous-id": "anon-123" },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("allows upgrade when x-anonymous-id matches the session identified by :id", async () => {
+    const session = fakeSession({ userId: null, anonymousId: "anon-123" });
+    const { app, mockService } = buildApp(session, "user-owner");
+    mockService.upgradeAnonymousToUser.mockResolvedValue({ ...session, userId: "user-owner" });
+    const res = await app.request("/api/onboarding/session/sess-1/upgrade", {
+      method: "POST",
+      headers: { "x-anonymous-id": "anon-123" },
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("POST /api/onboarding/session/:id/graduate", () => {
   it("returns 404 when authenticated user does NOT own the session", async () => {
     const session = fakeSession({ userId: "user-owner" });
