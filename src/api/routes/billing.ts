@@ -13,6 +13,7 @@ import { createPayRamClient, loadPayRamConfig } from "../../monetization/payram/
 import type { PayRamWebhookPayload } from "../../monetization/payram/types.js";
 import { handlePayRamWebhook } from "../../monetization/payram/webhook.js";
 import type { IWebhookSeenRepository } from "../../monetization/webhook-seen-repository.js";
+import { assertSafeRedirectUrl } from "../../security/redirect-allowlist.js";
 import { getClientIpFromContext } from "../middleware/get-client-ip.js";
 import type { ISigPenaltyRepository } from "../sig-penalty-repository.js";
 
@@ -156,6 +157,13 @@ billingRoutes.post("/credits/checkout", adminAuth, async (c) => {
   const { tenant, priceId, successUrl, cancelUrl } = parsed.data;
 
   try {
+    assertSafeRedirectUrl(successUrl);
+    assertSafeRedirectUrl(cancelUrl);
+  } catch {
+    return c.json({ error: "Invalid redirect URL" }, 400);
+  }
+
+  try {
     // StripePaymentProcessor resolves the priceId to the matching credit tier internally.
     const session = await processor.createCheckoutSession({
       tenant,
@@ -193,6 +201,12 @@ billingRoutes.post("/portal", adminAuth, async (c) => {
   }
 
   const { tenant, returnUrl } = parsed.data;
+
+  try {
+    assertSafeRedirectUrl(returnUrl);
+  } catch {
+    return c.json({ error: "Invalid redirect URL" }, 400);
+  }
 
   if (!processor.supportsPortal()) {
     return c.json({ error: "Billing portal not supported by current payment processor" }, 501);

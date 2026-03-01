@@ -26,6 +26,7 @@ import type { IPaymentProcessor } from "../../monetization/payment-processor.js"
 import type { PayRamChargeStore } from "../../monetization/payram/charge-store.js";
 import { createPayRamCheckout, MIN_PAYMENT_USD } from "../../monetization/payram/checkout.js";
 import type { PromotionEngine } from "../../monetization/promotions/engine.js";
+import { assertSafeRedirectUrl } from "../../security/redirect-allowlist.js";
 import { protectedProcedure, publicProcedure, router } from "../init.js";
 
 // ---------------------------------------------------------------------------
@@ -261,6 +262,12 @@ export const billingRouter = router({
       if (input.tenant && input.tenant !== (ctx.tenantId ?? ctx.user.id)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
       }
+      try {
+        assertSafeRedirectUrl(input.successUrl);
+        assertSafeRedirectUrl(input.cancelUrl);
+      } catch {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid redirect URL" });
+      }
       const { processor } = deps();
       const session = await processor.createCheckoutSession({
         tenant,
@@ -301,6 +308,11 @@ export const billingRouter = router({
       const tenant = input.tenant ?? ctx.tenantId ?? ctx.user.id;
       if (input.tenant && input.tenant !== (ctx.tenantId ?? ctx.user.id)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+      }
+      try {
+        assertSafeRedirectUrl(input.returnUrl);
+      } catch {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid redirect URL" });
       }
       const { processor } = deps();
       if (!processor.supportsPortal()) {

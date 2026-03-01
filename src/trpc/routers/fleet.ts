@@ -26,6 +26,7 @@ import type { ICreditLedger as CreditLedger } from "../../monetization/credits/c
 import { checkInstanceQuota, DEFAULT_INSTANCE_LIMITS } from "../../monetization/quotas/quota-check.js";
 import { createVpsCheckoutSession } from "../../monetization/stripe/checkout.js";
 import { createStripeClient, loadStripeConfig } from "../../monetization/stripe/client.js";
+import { assertSafeRedirectUrl } from "../../security/redirect-allowlist.js";
 import { protectedProcedure, router, tenantProcedure } from "../init.js";
 
 // ---------------------------------------------------------------------------
@@ -759,6 +760,21 @@ export const fleetRouter = router({
       const baseUrl = process.env.PLATFORM_UI_URL ?? "https://app.wopr.bot";
       const successUrl = input.successUrl ?? `${baseUrl}/dashboard/bots/${input.id}?vps=activated`;
       const cancelUrl = input.cancelUrl ?? `${baseUrl}/dashboard/bots/${input.id}`;
+
+      if (input.successUrl) {
+        try {
+          assertSafeRedirectUrl(input.successUrl);
+        } catch {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid redirect URL" });
+        }
+      }
+      if (input.cancelUrl) {
+        try {
+          assertSafeRedirectUrl(input.cancelUrl);
+        } catch {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid redirect URL" });
+        }
+      }
 
       const session = await createVpsCheckoutSession(createStripeClient(stripeConfig), tenantStore, {
         tenant: ctx.tenantId,
