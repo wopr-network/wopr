@@ -154,6 +154,10 @@ export class OnboardingService {
     return response;
   }
 
+  async getSession(sessionId: string): Promise<OnboardingSession | null> {
+    return this.repo.getById(sessionId);
+  }
+
   async upgradeAnonymousToUser(anonymousId: string, userId: string): Promise<OnboardingSession | null> {
     return this.repo.upgradeAnonymousToUser(anonymousId, userId);
   }

@@ -99,6 +99,29 @@ onboardingRoutes.post("/session/handoff", async (c) => {
 onboardingRoutes.get("/session/:id/history", async (c) => {
   const service = getService();
   const id = c.req.param("id");
+
+  // Ownership check: fetch session and verify caller identity
+  const session = await service.getSession(id);
+  if (!session) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  const userId = c.get("user")?.id as string | undefined;
+  const anonymousId = c.req.header("x-anonymous-id") ?? undefined;
+
+  // If the session belongs to a registered user, only a matching authenticated userId grants access.
+  // If the session is anonymous (no userId), only a matching anonymousId from an unauthenticated
+  // caller grants access. An authenticated user must never satisfy the anonymous branch, which
+  // would allow IDOR via a forged x-anonymous-id header.
+  const ownerMatch =
+    session.userId !== null
+      ? userId === session.userId
+      : !userId && !!anonymousId && anonymousId === session.anonymousId;
+
+  if (!ownerMatch) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
   const limitParam = c.req.query("limit");
   const limitRaw = limitParam ? Number(limitParam) : 50;
   const limit = Number.isNaN(limitRaw) ? 50 : Math.min(200, Math.max(1, limitRaw));
@@ -128,6 +151,14 @@ onboardingRoutes.post("/session/:id/upgrade", async (c) => {
     return c.json({ error: "x-anonymous-id header required" }, 400);
   }
 
+  // Ownership check: verify the session identified by :id belongs to the caller's anonymousId.
+  // Use 404 (not 403) to avoid leaking session existence.
+  const id = c.req.param("id");
+  const existing = await service.getSession(id);
+  if (!existing || existing.anonymousId !== anonymousId) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
   try {
     const session = await service.upgradeAnonymousToUser(anonymousId, userId);
     if (!session) {
@@ -145,11 +176,18 @@ onboardingRoutes.post("/session/:id/graduate", async (c) => {
   if (!userId) {
     return c.json({ error: "Authentication required" }, 401);
   }
+
+  const sessionId = c.req.param("id");
+
+  // Ownership check
+  const session = await getService().getSession(sessionId);
+  if (!session || session.userId !== userId) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
   if (!_graduationService) {
     return c.json({ error: "Graduation service not available" }, 503);
   }
-
-  const sessionId = c.req.param("id");
   let body: Record<string, unknown>;
   try {
     body = (await c.req.json()) as Record<string, unknown>;
