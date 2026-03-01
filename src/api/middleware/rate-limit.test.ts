@@ -520,6 +520,127 @@ describe("WOP-1092: setup-intent and crypto checkout rate limits", () => {
 });
 
 // ---------------------------------------------------------------------------
+// WOP-1220: tRPC endpoint rate limits
+// ---------------------------------------------------------------------------
+
+describe("WOP-1220: tRPC endpoint rate limits", () => {
+  let repo: IRateLimitRepository;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    await truncateAllTables(pool);
+    repo = new DrizzleRateLimitRepository(db);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function buildPlatformApp() {
+    const app = new Hono();
+    app.use("*", rateLimitByRoute(platformRateLimitRules, platformDefaultLimit, repo));
+    // Mount dummy handlers for tRPC paths
+    app.post("/trpc/billing.creditsCheckout", (c) => c.json({ ok: true }));
+    app.post("/trpc/billing.cryptoCheckout", (c) => c.json({ ok: true }));
+    app.post("/trpc/billing.applyCoupon", (c) => c.json({ ok: true }));
+    app.post("/trpc/billing.portalSession", (c) => c.json({ ok: true }));
+    app.post("/trpc/profile.changePassword", (c) => c.json({ ok: true }));
+    app.post("/trpc/org.changeRole", (c) => c.json({ ok: true }));
+    app.post("/trpc/fleet.createInstance", (c) => c.json({ ok: true }));
+    app.post("/trpc/admin.changeRole", (c) => c.json({ ok: true }));
+    app.get("/trpc/billing.creditsBalance", (c) => c.json({ ok: true }));
+    return app;
+  }
+
+  it("includes tRPC billing checkout rule with max 10", () => {
+    const rule = platformRateLimitRules.find((r) => r.pathPrefix === "/trpc/billing.creditsCheckout");
+    expect(rule).toBeDefined();
+    expect(rule?.method).toBe("POST");
+    expect(rule?.config.max).toBe(10);
+    expect(rule?.scope).toBe("trpc:billing-checkout");
+  });
+
+  it("includes tRPC applyCoupon rule with max 5", () => {
+    const rule = platformRateLimitRules.find((r) => r.pathPrefix === "/trpc/billing.applyCoupon");
+    expect(rule).toBeDefined();
+    expect(rule?.method).toBe("POST");
+    expect(rule?.config.max).toBe(5);
+  });
+
+  it("includes tRPC changePassword rule with max 5 per 15min", () => {
+    const rule = platformRateLimitRules.find((r) => r.pathPrefix === "/trpc/profile.changePassword");
+    expect(rule).toBeDefined();
+    expect(rule?.config.max).toBe(5);
+    expect(rule?.config.windowMs).toBe(15 * 60 * 1000);
+  });
+
+  it("tRPC billing.creditsCheckout returns 429 after 10 requests", async () => {
+    const app = buildPlatformApp();
+    for (let i = 0; i < 10; i++) {
+      expect((await app.request(postReq("/trpc/billing.creditsCheckout"))).status).toBe(200);
+    }
+    expect((await app.request(postReq("/trpc/billing.creditsCheckout"))).status).toBe(429);
+  });
+
+  it("tRPC billing.applyCoupon returns 429 after 5 requests", async () => {
+    const app = buildPlatformApp();
+    for (let i = 0; i < 5; i++) {
+      expect((await app.request(postReq("/trpc/billing.applyCoupon"))).status).toBe(200);
+    }
+    expect((await app.request(postReq("/trpc/billing.applyCoupon"))).status).toBe(429);
+  });
+
+  it("tRPC profile.changePassword returns 429 after 5 requests", async () => {
+    const app = buildPlatformApp();
+    for (let i = 0; i < 5; i++) {
+      expect((await app.request(postReq("/trpc/profile.changePassword"))).status).toBe(200);
+    }
+    expect((await app.request(postReq("/trpc/profile.changePassword"))).status).toBe(429);
+  });
+
+  it("tRPC fleet.createInstance returns 429 after 10 requests", async () => {
+    const app = buildPlatformApp();
+    for (let i = 0; i < 10; i++) {
+      expect((await app.request(postReq("/trpc/fleet.createInstance"))).status).toBe(200);
+    }
+    expect((await app.request(postReq("/trpc/fleet.createInstance"))).status).toBe(429);
+  });
+
+  it("tRPC org.changeRole returns 429 after 5 requests", async () => {
+    const app = buildPlatformApp();
+    for (let i = 0; i < 5; i++) {
+      expect((await app.request(postReq("/trpc/org.changeRole"))).status).toBe(200);
+    }
+    expect((await app.request(postReq("/trpc/org.changeRole"))).status).toBe(429);
+  });
+
+  it("tRPC admin.changeRole returns 429 after 5 requests", async () => {
+    const app = buildPlatformApp();
+    for (let i = 0; i < 5; i++) {
+      expect((await app.request(postReq("/trpc/admin.changeRole"))).status).toBe(200);
+    }
+    expect((await app.request(postReq("/trpc/admin.changeRole"))).status).toBe(429);
+  });
+
+  it("tRPC queries (GET) are not blocked by mutation-specific rules", async () => {
+    const app = buildPlatformApp();
+    // GET requests to billing.creditsBalance should use the general tRPC limit (100/min), not the checkout limit (10/min)
+    for (let i = 0; i < 50; i++) {
+      expect((await app.request(req("/trpc/billing.creditsBalance"))).status).toBe(200);
+    }
+  });
+
+  it("tRPC general catch-all limits to 100 req/min", async () => {
+    const app = buildPlatformApp();
+    app.get("/trpc/settings.health", (c) => c.json({ ok: true }));
+    for (let i = 0; i < 100; i++) {
+      expect((await app.request(req("/trpc/settings.health"))).status).toBe(200);
+    }
+    expect((await app.request(req("/trpc/settings.health"))).status).toBe(429);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Trusted proxy validation (WOP-656)
 // ---------------------------------------------------------------------------
 

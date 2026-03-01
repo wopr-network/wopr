@@ -226,11 +226,96 @@ const AUTH_RESET_LIMIT: Omit<RateLimitConfig, "repo" | "scope"> = {
   message: "Too many password reset requests. Please try again later.",
 };
 
+// ---------------------------------------------------------------------------
+// tRPC procedure rate limits (WOP-1220)
+// ---------------------------------------------------------------------------
+
+/** tRPC billing mutations: 10 req/min (matches REST billing limit) */
+const TRPC_BILLING_MUTATION_LIMIT: Omit<RateLimitConfig, "repo" | "scope"> = {
+  max: 10,
+  message: "Too many billing requests",
+};
+
+/** tRPC coupon redemption: 5 req/min (brute-force prevention) */
+const TRPC_COUPON_LIMIT: Omit<RateLimitConfig, "repo" | "scope"> = {
+  max: 5,
+  message: "Too many coupon attempts",
+};
+
+/** tRPC password change: 5 req/15min (matches REST auth login limit) */
+const TRPC_PASSWORD_CHANGE_LIMIT: Omit<RateLimitConfig, "repo" | "scope"> = {
+  max: 5,
+  windowMs: 15 * 60 * 1000,
+  message: "Too many password change attempts. Please try again later.",
+};
+
+/** tRPC role change: 5 req/min (privilege escalation prevention) */
+const TRPC_ROLE_CHANGE_LIMIT: Omit<RateLimitConfig, "repo" | "scope"> = {
+  max: 5,
+  message: "Too many role change requests",
+};
+
+/** tRPC fleet create: 10 req/min (resource abuse prevention) */
+const TRPC_FLEET_CREATE_LIMIT: Omit<RateLimitConfig, "repo" | "scope"> = {
+  max: 10,
+  message: "Too many instance creation requests",
+};
+
+/** tRPC general catch-all: 100 req/min (generous for dashboard loading) */
+const TRPC_DEFAULT_LIMIT: Omit<RateLimitConfig, "repo" | "scope"> = { max: 100 };
+
 /**
  * Pre-configured route rules for the WOPR platform. Evaluated top-to-bottom;
  * first match wins.
  */
 export const platformRateLimitRules: RateLimitRule[] = [
+  // tRPC: billing mutations — 10 req/min (WOP-1220)
+  {
+    method: "POST",
+    pathPrefix: "/trpc/billing.creditsCheckout",
+    config: TRPC_BILLING_MUTATION_LIMIT,
+    scope: "trpc:billing-checkout",
+  },
+  {
+    method: "POST",
+    pathPrefix: "/trpc/billing.cryptoCheckout",
+    config: TRPC_BILLING_MUTATION_LIMIT,
+    scope: "trpc:billing-crypto",
+  },
+  {
+    method: "POST",
+    pathPrefix: "/trpc/billing.portalSession",
+    config: TRPC_BILLING_MUTATION_LIMIT,
+    scope: "trpc:billing-portal",
+  },
+
+  // tRPC: coupon brute-force prevention — 5 req/min (WOP-1220)
+  { method: "POST", pathPrefix: "/trpc/billing.applyCoupon", config: TRPC_COUPON_LIMIT, scope: "trpc:billing-coupon" },
+
+  // tRPC: password change brute-force — 5 req/15min (WOP-1220)
+  {
+    method: "POST",
+    pathPrefix: "/trpc/profile.changePassword",
+    config: TRPC_PASSWORD_CHANGE_LIMIT,
+    scope: "trpc:profile-password",
+  },
+
+  // tRPC: role change abuse prevention — 5 req/min (WOP-1220)
+  { method: "POST", pathPrefix: "/trpc/org.changeRole", config: TRPC_ROLE_CHANGE_LIMIT, scope: "trpc:org-role" },
+  { method: "POST", pathPrefix: "/trpc/admin.changeRole", config: TRPC_ROLE_CHANGE_LIMIT, scope: "trpc:admin-role" },
+
+  // tRPC: fleet instance creation — 10 req/min (WOP-1220)
+  {
+    method: "POST",
+    pathPrefix: "/trpc/fleet.createInstance",
+    config: TRPC_FLEET_CREATE_LIMIT,
+    scope: "trpc:fleet-create",
+  },
+
+  // tRPC: general catch-all — 100 req/min (WOP-1220)
+  // Must be LAST among tRPC rules since first-match wins
+  { method: "*", pathPrefix: "/trpc/", config: TRPC_DEFAULT_LIMIT, scope: "trpc:default" },
+
   // Auth: brute force prevention — 5 req/15min for login (WOP-839)
   { method: "POST", pathPrefix: "/api/auth/sign-in", config: AUTH_LOGIN_LIMIT, scope: "auth:login" },
 
