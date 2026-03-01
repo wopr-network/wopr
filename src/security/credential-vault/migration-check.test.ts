@@ -4,9 +4,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { DrizzleDb } from "../../db/index.js";
 import { providerCredentials, tenantApiKeys } from "../../db/schema/index.js";
 import { createTestDb, truncateAllTables } from "../../test/db.js";
-import { encrypt, generateInstanceKey } from "../encryption.js";
+import { decrypt, encrypt, generateInstanceKey } from "../encryption.js";
+import type { EncryptedPayload } from "../types.js";
+import { DrizzleCredentialRepository } from "./credential-repository.js";
+import { reEncryptAllCredentials } from "./key-rotation.js";
 import { migratePlaintextCredentials } from "./migrate-plaintext.js";
 import { auditCredentialEncryption } from "./migration-check.js";
+import { CredentialVaultStore, getVaultEncryptionKey } from "./store.js";
 
 // TOP OF FILE - shared across ALL describes
 let pool: PGlite;
@@ -258,5 +262,256 @@ describe("migratePlaintextCredentials", () => {
       // Ensure the raw value does not contain any plaintext key pattern
       expect(row.encryptedValue).not.toMatch(/sk-ant-plaintext/);
     }
+  });
+});
+
+describe("credential vault migration path", () => {
+  let vaultKey: Buffer;
+
+  beforeEach(async () => {
+    await truncateAllTables(pool);
+    vaultKey = generateInstanceKey();
+  });
+
+  it("pre-migration plaintext credential is readable after migratePlaintextCredentials", async () => {
+    // Insert a plaintext credential (simulating legacy state)
+    await db.insert(providerCredentials).values({
+      id: "cred-legacy",
+      provider: "anthropic",
+      keyName: "Legacy Key",
+      encryptedValue: "sk-ant-legacy-plaintext-key-999",
+      authType: "header",
+      authHeader: "x-api-key",
+      createdBy: "admin",
+    });
+
+    // Pre-migration: raw value is plaintext
+    const rowsBefore = await db
+      .select({ encryptedValue: providerCredentials.encryptedValue })
+      .from(providerCredentials)
+      .where(eq(providerCredentials.id, "cred-legacy"));
+    expect(rowsBefore[0].encryptedValue).toBe("sk-ant-legacy-plaintext-key-999");
+
+    // Migrate
+    const results = await migratePlaintextCredentials(db, vaultKey, () => vaultKey);
+    expect(results[0].migratedCount).toBe(1);
+    expect(results[0].errors).toHaveLength(0);
+
+    // Post-migration: decrypt through CredentialVaultStore
+    const repo = new DrizzleCredentialRepository(db);
+    const store = new CredentialVaultStore(repo, vaultKey);
+    const decrypted = await store.decrypt("cred-legacy");
+    expect(decrypted).not.toBeNull();
+    expect(decrypted!.plaintextKey).toBe("sk-ant-legacy-plaintext-key-999");
+    expect(decrypted!.provider).toBe("anthropic");
+    expect(decrypted!.keyName).toBe("Legacy Key");
+    expect(decrypted!.authType).toBe("header");
+    expect(decrypted!.authHeader).toBe("x-api-key");
+  });
+
+  it("post-migration credential metadata is fully preserved", async () => {
+    await db.insert(providerCredentials).values({
+      id: "cred-meta",
+      provider: "openai",
+      keyName: "Metadata Test",
+      encryptedValue: "sk-openai-meta-test-key-12345",
+      authType: "bearer",
+      authHeader: null,
+      createdBy: "admin-user",
+    });
+
+    await migratePlaintextCredentials(db, vaultKey, () => vaultKey);
+
+    const repo = new DrizzleCredentialRepository(db);
+    const store = new CredentialVaultStore(repo, vaultKey);
+
+    // Verify summary metadata is intact
+    const summary = await store.getById("cred-meta");
+    expect(summary).not.toBeNull();
+    expect(summary!.provider).toBe("openai");
+    expect(summary!.keyName).toBe("Metadata Test");
+    expect(summary!.authType).toBe("bearer");
+    expect(summary!.authHeader).toBeNull();
+    expect(summary!.createdBy).toBe("admin-user");
+    expect(summary!.isActive).toBe(true);
+  });
+
+  it("migration idempotency: running twice does not corrupt and encrypted value is unchanged", async () => {
+    await db.insert(providerCredentials).values({
+      id: "cred-idem",
+      provider: "anthropic",
+      keyName: "Idempotent",
+      encryptedValue: "sk-ant-idempotent-test-key-000",
+      authType: "header",
+      createdBy: "admin",
+    });
+
+    // First migration
+    const r1 = await migratePlaintextCredentials(db, vaultKey, () => vaultKey);
+    expect(r1[0].migratedCount).toBe(1);
+
+    // Capture encrypted value
+    const rowsAfterFirst = await db
+      .select({ encryptedValue: providerCredentials.encryptedValue })
+      .from(providerCredentials)
+      .where(eq(providerCredentials.id, "cred-idem"));
+    const encryptedAfterFirst = rowsAfterFirst[0].encryptedValue;
+
+    // Second migration (should be no-op)
+    const r2 = await migratePlaintextCredentials(db, vaultKey, () => vaultKey);
+    expect(r2[0].migratedCount).toBe(0);
+
+    // Encrypted value must be byte-identical
+    const rowsAfterSecond = await db
+      .select({ encryptedValue: providerCredentials.encryptedValue })
+      .from(providerCredentials)
+      .where(eq(providerCredentials.id, "cred-idem"));
+    expect(rowsAfterSecond[0].encryptedValue).toBe(encryptedAfterFirst);
+
+    // Still decryptable through the store
+    const repo = new DrizzleCredentialRepository(db);
+    const store = new CredentialVaultStore(repo, vaultKey);
+    const decrypted = await store.decrypt("cred-idem");
+    expect(decrypted!.plaintextKey).toBe("sk-ant-idempotent-test-key-000");
+  });
+
+  it("partial migration failure: valid rows are migrated, invalid rows produce errors, valid rows remain readable", async () => {
+    // Row 1: valid plaintext
+    await db.insert(providerCredentials).values({
+      id: "cred-valid",
+      provider: "anthropic",
+      keyName: "Valid",
+      encryptedValue: "sk-ant-valid-plaintext-key-111",
+      authType: "header",
+      createdBy: "admin",
+    });
+
+    // Row 2: already encrypted (should be skipped, not an error)
+    const alreadyEncrypted = JSON.stringify(encrypt("sk-ant-already-encrypted", vaultKey));
+    await db.insert(providerCredentials).values({
+      id: "cred-encrypted",
+      provider: "openai",
+      keyName: "Already Encrypted",
+      encryptedValue: alreadyEncrypted,
+      authType: "bearer",
+      createdBy: "admin",
+    });
+
+    const results = await migratePlaintextCredentials(db, vaultKey, () => vaultKey);
+    expect(results[0].migratedCount).toBe(1); // only the plaintext row
+    expect(results[0].errors).toHaveLength(0);
+
+    // Both rows are now readable through the store
+    const repo = new DrizzleCredentialRepository(db);
+    const store = new CredentialVaultStore(repo, vaultKey);
+
+    const d1 = await store.decrypt("cred-valid");
+    expect(d1!.plaintextKey).toBe("sk-ant-valid-plaintext-key-111");
+
+    const d2 = await store.decrypt("cred-encrypted");
+    expect(d2!.plaintextKey).toBe("sk-ant-already-encrypted");
+  });
+
+  it("key rotation after plaintext migration: full chain works", async () => {
+    const oldSecret = "old-platform-secret-rotation-test";
+    const newSecret = "new-platform-secret-rotation-test";
+    const oldKey = getVaultEncryptionKey(oldSecret);
+
+    // Start with plaintext
+    await db.insert(providerCredentials).values({
+      id: "cred-chain",
+      provider: "anthropic",
+      keyName: "Chain Test",
+      encryptedValue: "sk-ant-chain-test-key-xyz",
+      authType: "header",
+      authHeader: "x-api-key",
+      createdBy: "admin",
+    });
+
+    // Step 1: Migrate plaintext to encrypted with old key
+    const migrateResults = await migratePlaintextCredentials(db, oldKey, () => oldKey);
+    expect(migrateResults[0].migratedCount).toBe(1);
+
+    // Verify readable with old key
+    const repo1 = new DrizzleCredentialRepository(db);
+    const store1 = new CredentialVaultStore(repo1, oldKey);
+    const d1 = await store1.decrypt("cred-chain");
+    expect(d1!.plaintextKey).toBe("sk-ant-chain-test-key-xyz");
+
+    // Step 2: Rotate keys from old secret to new secret
+    const rotResult = await reEncryptAllCredentials(db, oldSecret, newSecret);
+    expect(rotResult.providerCredentials.migrated).toBe(1);
+    expect(rotResult.providerCredentials.errors).toHaveLength(0);
+
+    // Verify readable with new key
+    const newKey = getVaultEncryptionKey(newSecret);
+    const repo2 = new DrizzleCredentialRepository(db);
+    const store2 = new CredentialVaultStore(repo2, newKey);
+    const d2 = await store2.decrypt("cred-chain");
+    expect(d2!.plaintextKey).toBe("sk-ant-chain-test-key-xyz");
+    expect(d2!.provider).toBe("anthropic");
+    expect(d2!.authHeader).toBe("x-api-key");
+
+    // Old key can no longer decrypt
+    const rowRaw = await db
+      .select({ encryptedValue: providerCredentials.encryptedValue })
+      .from(providerCredentials)
+      .where(eq(providerCredentials.id, "cred-chain"));
+    const payload: EncryptedPayload = JSON.parse(rowRaw[0].encryptedValue);
+    expect(() => decrypt(payload, oldKey)).toThrow();
+  });
+
+  it("tenant_api_keys migration: plaintext tenant key is readable post-migration", async () => {
+    await db.insert(tenantApiKeys).values({
+      id: "tk-migrate",
+      tenantId: "tenant-test",
+      provider: "anthropic",
+      label: "Tenant Migration Test",
+      encryptedKey: "sk-ant-tenant-plaintext-key-888",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const tenantKeyDeriver = (_tenantId: string) => vaultKey;
+    const results = await migratePlaintextCredentials(db, vaultKey, tenantKeyDeriver);
+    const tenantResult = results.find((r) => r.table === "tenant_api_keys");
+    expect(tenantResult).toBeDefined();
+    expect(tenantResult!.migratedCount).toBe(1);
+    expect(tenantResult!.errors).toHaveLength(0);
+
+    // Verify the encrypted value is valid
+    const rows = await db
+      .select({ encryptedKey: tenantApiKeys.encryptedKey })
+      .from(tenantApiKeys)
+      .where(eq(tenantApiKeys.id, "tk-migrate"));
+    const payload: EncryptedPayload = JSON.parse(rows[0].encryptedKey);
+    const decrypted = decrypt(payload, vaultKey);
+    expect(decrypted).toBe("sk-ant-tenant-plaintext-key-888");
+  });
+
+  it("audit after migration: no plaintext findings remain", async () => {
+    // Insert 3 plaintext credentials
+    for (let i = 0; i < 3; i++) {
+      await db.insert(providerCredentials).values({
+        id: `cred-audit-${i}`,
+        provider: "anthropic",
+        keyName: `Audit Key ${i}`,
+        encryptedValue: `sk-ant-audit-plaintext-key-${i}`,
+        authType: "header",
+        createdBy: "admin",
+      });
+    }
+
+    // Pre-migration audit should find 3 plaintext entries
+    const findingsBefore = await auditCredentialEncryption(db);
+    expect(findingsBefore).toHaveLength(3);
+
+    // Migrate
+    const results = await migratePlaintextCredentials(db, vaultKey, () => vaultKey);
+    expect(results[0].migratedCount).toBe(3);
+
+    // Post-migration audit should find 0 plaintext entries
+    const findingsAfter = await auditCredentialEncryption(db);
+    expect(findingsAfter).toHaveLength(0);
   });
 });
