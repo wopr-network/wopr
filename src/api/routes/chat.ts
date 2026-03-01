@@ -187,6 +187,14 @@ chatRoutes.route(
   (() => {
     const lazy = new Hono();
     lazy.all("/*", async (c) => {
+      // Auth must be checked here, in the outer context where resolveSessionUser()
+      // has already populated c.get("user"). inner.fetch(c.req.raw) creates a
+      // fresh Hono context with no user set, so getUser() inside the inner
+      // handlers would always return null in production.
+      const user = getUser(c);
+      if (!user) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
       const inner = getChatRoutesInner();
       return inner.fetch(c.req.raw);
     });

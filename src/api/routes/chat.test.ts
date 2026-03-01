@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthEnv } from "../../auth/index.js";
 import type { IChatBackend } from "../../chat/chat-backend.js";
 import type { ChatEvent } from "../../chat/types.js";
-import { createChatRoutes } from "./chat.js";
+import { chatRoutes, createChatRoutes, setChatDeps } from "./chat.js";
 
 function createMockBackend(events: ChatEvent[]): IChatBackend {
   return {
@@ -111,6 +111,49 @@ describe("POST /", () => {
       body: JSON.stringify({ sessionId: "s1", message: "test" }),
     });
     expect(backend.process).toHaveBeenCalledWith("s1", "test", expect.any(Function));
+  });
+});
+
+describe("chatRoutes singleton — outer auth gate", () => {
+  afterEach(() => {
+    // Reset module-level singleton so each test starts clean.
+    // setChatDeps replaces _deps; we also need to reset _chatRoutesInner.
+    // Calling setChatDeps with a fresh mock is sufficient because
+    // getChatRoutesInner() is re-created only when _chatRoutesInner is null.
+    // Force recreation by resetting via setChatDeps.
+    setChatDeps({ backend: createMockBackend([]) });
+  });
+
+  it("returns 401 on GET /stream when outer context has no user", async () => {
+    setChatDeps({ backend: createMockBackend([]) });
+    // chatRoutes receives a request with no user in context (simulates
+    // a request that bypasses resolveSessionUser — proves the outer
+    // lazy wrapper enforces auth before delegating to inner.fetch).
+    const res = await chatRoutes.request("/stream?sessionId=s1");
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Authentication required");
+  });
+
+  it("returns 401 on POST / when outer context has no user", async () => {
+    setChatDeps({ backend: createMockBackend([]) });
+    const res = await chatRoutes.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "s1", message: "hello" }),
+    });
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Authentication required");
+  });
+
+  it("does not reach the inner handler (returns 401 before delegating) when no user", async () => {
+    // The outer lazy wrapper must short-circuit with 401 before calling
+    // inner.fetch() — this confirms auth is enforced at the outer level.
+    setChatDeps({ backend: createMockBackend([]) });
+    const res = await chatRoutes.request("/stream?sessionId=s1");
+    // Must be 401, not 404 or 500 (which would indicate it reached inner.fetch)
+    expect(res.status).toBe(401);
   });
 });
 
