@@ -99,6 +99,22 @@ onboardingRoutes.post("/session/handoff", async (c) => {
 onboardingRoutes.get("/session/:id/history", async (c) => {
   const service = getService();
   const id = c.req.param("id");
+
+  // Ownership check: fetch session and verify caller identity
+  const session = await service.getSession(id);
+  if (!session) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
+  const userId = c.get("user")?.id as string | undefined;
+  const anonymousId = c.req.header("x-anonymous-id") ?? undefined;
+
+  const ownerMatch = (userId && session.userId === userId) || (anonymousId && session.anonymousId === anonymousId);
+
+  if (!ownerMatch) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
   const limitParam = c.req.query("limit");
   const limitRaw = limitParam ? Number(limitParam) : 50;
   const limit = Number.isNaN(limitRaw) ? 50 : Math.min(200, Math.max(1, limitRaw));
@@ -145,11 +161,18 @@ onboardingRoutes.post("/session/:id/graduate", async (c) => {
   if (!userId) {
     return c.json({ error: "Authentication required" }, 401);
   }
+
+  const sessionId = c.req.param("id");
+
+  // Ownership check
+  const session = await getService().getSession(sessionId);
+  if (!session || session.userId !== userId) {
+    return c.json({ error: "Session not found" }, 404);
+  }
+
   if (!_graduationService) {
     return c.json({ error: "Graduation service not available" }, 503);
   }
-
-  const sessionId = c.req.param("id");
   let body: Record<string, unknown>;
   try {
     body = (await c.req.json()) as Record<string, unknown>;
