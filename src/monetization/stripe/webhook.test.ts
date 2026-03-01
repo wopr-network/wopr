@@ -332,7 +332,7 @@ describe("handleWebhookEvent (credit model)", () => {
       const depsWithGuard: WebhookDeps = { ...deps, replayGuard };
       const event = {
         id: "evt_unknown_replay",
-        type: "charge.refunded",
+        type: "balance.available",
         data: { object: {} },
       } as Stripe.Event;
 
@@ -627,6 +627,198 @@ describe("handleWebhookEvent (credit model)", () => {
       const result = await handleWebhookEvent({ ...deps, vpsRepo }, event);
 
       expect(result.handled).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // invoice.payment_failed (WOP-1289)
+  // ---------------------------------------------------------------------------
+
+  describe("invoice.payment_failed (WOP-1289)", () => {
+    function makeInvoiceFailedEvent(overrides?: Record<string, unknown>): Stripe.Event {
+      return {
+        id: "evt_inv_fail_1",
+        type: "invoice.payment_failed",
+        data: {
+          object: {
+            id: "in_test_fail_1",
+            customer: "cus_fail_abc",
+            subscription: "sub_fail_1",
+            amount_due: 500,
+            metadata: {},
+            ...overrides,
+          },
+        },
+      } as unknown as Stripe.Event;
+    }
+
+    it("suspends bots and returns handled:true when tenant found", async () => {
+      await tenantStore.upsert({ tenant: "tenant-fail-1", processorCustomerId: "cus_fail_abc" });
+
+      const botBilling = {
+        suspendAllForTenant: vi.fn(async () => ["bot-1", "bot-2"]),
+      } as unknown as import("../../monetization/credits/bot-billing.js").BotBilling;
+
+      const result = await handleWebhookEvent({ ...deps, botBilling }, makeInvoiceFailedEvent());
+
+      expect(result.handled).toBe(true);
+      expect(result.event_type).toBe("invoice.payment_failed");
+      expect(result.tenant).toBe("tenant-fail-1");
+      expect(result.suspendedBots).toEqual(["bot-1", "bot-2"]);
+      expect(botBilling.suspendAllForTenant).toHaveBeenCalledWith("tenant-fail-1");
+    });
+
+    it("sends payment_failed notification when notificationService and getEmailForTenant are available", async () => {
+      await tenantStore.upsert({ tenant: "tenant-fail-2", processorCustomerId: "cus_fail_notify" });
+
+      const notifyFn = vi.fn();
+      const notificationService = {
+        notifyAutoTopUpFailed: notifyFn,
+      } as unknown as import("../../email/notification-service.js").NotificationService;
+      const getEmailForTenant = vi.fn(() => "user@example.com");
+
+      await handleWebhookEvent(
+        { ...deps, notificationService, getEmailForTenant },
+        makeInvoiceFailedEvent({ customer: "cus_fail_notify" }),
+      );
+
+      expect(getEmailForTenant).toHaveBeenCalledWith("tenant-fail-2");
+      expect(notifyFn).toHaveBeenCalledWith("tenant-fail-2", "user@example.com");
+    });
+
+    it("returns handled:false when tenant not found for customer", async () => {
+      const result = await handleWebhookEvent(deps, makeInvoiceFailedEvent({ customer: "cus_unknown" }));
+
+      expect(result.handled).toBe(false);
+      expect(result.event_type).toBe("invoice.payment_failed");
+    });
+
+    it("handles customer object instead of string", async () => {
+      await tenantStore.upsert({ tenant: "tenant-fail-obj", processorCustomerId: "cus_obj_fail" });
+
+      const result = await handleWebhookEvent(deps, makeInvoiceFailedEvent({ customer: { id: "cus_obj_fail" } }));
+
+      expect(result.handled).toBe(true);
+      expect(result.tenant).toBe("tenant-fail-obj");
+    });
+
+    it("handles missing botBilling gracefully (no suspension, still handled)", async () => {
+      await tenantStore.upsert({ tenant: "tenant-fail-no-billing", processorCustomerId: "cus_fail_no_billing" });
+
+      const result = await handleWebhookEvent(deps, makeInvoiceFailedEvent({ customer: "cus_fail_no_billing" }));
+
+      expect(result.handled).toBe(true);
+      expect(result.suspendedBots).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // charge.refunded (WOP-1289)
+  // ---------------------------------------------------------------------------
+
+  describe("charge.refunded (WOP-1289)", () => {
+    function makeChargeRefundedEvent(overrides?: Record<string, unknown>): Stripe.Event {
+      return {
+        id: "evt_charge_ref_1",
+        type: "charge.refunded",
+        data: {
+          object: {
+            id: "ch_test_ref_1",
+            customer: "cus_ref_abc",
+            amount: 2500,
+            amount_refunded: 2500,
+            currency: "usd",
+            metadata: {},
+            ...overrides,
+          },
+        },
+      } as unknown as Stripe.Event;
+    }
+
+    it("debits the credit ledger for the refunded amount", async () => {
+      await tenantStore.upsert({ tenant: "tenant-ref-1", processorCustomerId: "cus_ref_abc" });
+      await creditLedger.credit("tenant-ref-1", Credit.fromCents(5000), "purchase", "seed");
+
+      const result = await handleWebhookEvent(deps, makeChargeRefundedEvent());
+
+      expect(result.handled).toBe(true);
+      expect(result.event_type).toBe("charge.refunded");
+      expect(result.tenant).toBe("tenant-ref-1");
+      expect(result.debitedCents).toBe(2500);
+
+      expect((await creditLedger.balance("tenant-ref-1")).toCents()).toBe(2500);
+    });
+
+    it("allows negative balance after refund (tenant already spent credits)", async () => {
+      await tenantStore.upsert({ tenant: "tenant-ref-neg", processorCustomerId: "cus_ref_neg" });
+
+      const result = await handleWebhookEvent(
+        deps,
+        makeChargeRefundedEvent({ customer: "cus_ref_neg", amount_refunded: 1000 }),
+      );
+
+      expect(result.handled).toBe(true);
+      expect(result.debitedCents).toBe(1000);
+      expect((await creditLedger.balance("tenant-ref-neg")).toCents()).toBe(-1000);
+    });
+
+    it("is idempotent — skips duplicate refund for same charge ID", async () => {
+      await tenantStore.upsert({ tenant: "tenant-ref-idem", processorCustomerId: "cus_ref_idem" });
+      await creditLedger.credit("tenant-ref-idem", Credit.fromCents(5000), "purchase", "seed");
+
+      const event = makeChargeRefundedEvent({ customer: "cus_ref_idem" });
+
+      const first = await handleWebhookEvent(deps, event);
+      expect(first.debitedCents).toBe(2500);
+
+      const second = await handleWebhookEvent(deps, event);
+      expect(second.handled).toBe(true);
+      expect(second.debitedCents).toBe(0);
+
+      expect((await creditLedger.balance("tenant-ref-idem")).toCents()).toBe(2500);
+    });
+
+    it("returns handled:false when tenant not found for customer", async () => {
+      const result = await handleWebhookEvent(deps, makeChargeRefundedEvent({ customer: "cus_unknown_ref" }));
+
+      expect(result.handled).toBe(false);
+    });
+
+    it("returns handled:false when amount_refunded is 0", async () => {
+      await tenantStore.upsert({ tenant: "tenant-ref-zero", processorCustomerId: "cus_ref_zero" });
+
+      const result = await handleWebhookEvent(
+        deps,
+        makeChargeRefundedEvent({ customer: "cus_ref_zero", amount_refunded: 0 }),
+      );
+
+      expect(result.handled).toBe(false);
+    });
+
+    it("handles customer object instead of string", async () => {
+      await tenantStore.upsert({ tenant: "tenant-ref-obj", processorCustomerId: "cus_ref_obj" });
+      await creditLedger.credit("tenant-ref-obj", Credit.fromCents(3000), "purchase", "seed");
+
+      const result = await handleWebhookEvent(
+        deps,
+        makeChargeRefundedEvent({ customer: { id: "cus_ref_obj" }, amount_refunded: 1500 }),
+      );
+
+      expect(result.handled).toBe(true);
+      expect(result.debitedCents).toBe(1500);
+    });
+
+    it("records charge ID as referenceId in the ledger transaction", async () => {
+      await tenantStore.upsert({ tenant: "tenant-ref-txn", processorCustomerId: "cus_ref_txn" });
+      await creditLedger.credit("tenant-ref-txn", Credit.fromCents(5000), "purchase", "seed");
+
+      await handleWebhookEvent(deps, makeChargeRefundedEvent({ customer: "cus_ref_txn", id: "ch_ref_txn_123" }));
+
+      const txns = await creditLedger.history("tenant-ref-txn", { type: "refund" });
+      expect(txns).toHaveLength(1);
+      expect(txns[0].referenceId).toBe("ch_ref_txn_123");
+      expect(txns[0].type).toBe("refund");
+      expect(txns[0].description).toContain("ch_ref_txn_123");
     });
   });
 

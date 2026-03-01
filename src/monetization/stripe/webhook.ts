@@ -22,8 +22,12 @@ export interface WebhookResult {
   tenant?: string;
   /** Credits granted in cents (for checkout.session.completed). */
   creditedCents?: number;
+  /** Credits debited in cents (for charge.refunded). */
+  debitedCents?: number;
   /** Bot IDs reactivated after credit purchase (WOP-447). */
   reactivatedBots?: string[];
+  /** Bot IDs suspended after payment failure (WOP-1289). */
+  suspendedBots?: string[];
   /** True when this event was a duplicate / replay. */
   duplicate?: boolean;
   /** Bonus credits granted to referred user on first purchase (WOP-950). */
@@ -299,6 +303,86 @@ export async function handleWebhookEvent(deps: WebhookDeps, event: Stripe.Event)
         tenant,
         creditedCents: pi.amount,
       };
+      break;
+    }
+
+    case "invoice.payment_failed": {
+      const invoice = event.data.object as Stripe.Invoice;
+      const customerId =
+        typeof invoice.customer === "string" ? invoice.customer : (invoice.customer as Stripe.Customer)?.id;
+
+      if (!customerId) {
+        result = { handled: false, event_type: event.type };
+        break;
+      }
+
+      const mapping = await deps.tenantStore.getByProcessorCustomerId(customerId);
+      if (!mapping) {
+        result = { handled: false, event_type: event.type };
+        break;
+      }
+
+      const tenant = mapping.tenant;
+
+      // Suspend all bots for this tenant (non-fatal if botBilling not provided).
+      let suspendedBots: string[] | undefined;
+      if (deps.botBilling) {
+        suspendedBots = await deps.botBilling.suspendAllForTenant(tenant);
+        if (suspendedBots.length === 0) suspendedBots = undefined;
+      }
+
+      // Send payment_failed notification (non-fatal).
+      if (deps.notificationService && deps.getEmailForTenant) {
+        const email = await deps.getEmailForTenant(tenant);
+        if (email) {
+          deps.notificationService.notifyAutoTopUpFailed(tenant, email);
+        }
+      }
+
+      logger.warn("Invoice payment failed", { tenant, customerId, invoiceId: invoice.id });
+
+      result = { handled: true, event_type: event.type, tenant, suspendedBots };
+      break;
+    }
+
+    case "charge.refunded": {
+      const charge = event.data.object as Stripe.Charge;
+      const customerId =
+        typeof charge.customer === "string" ? charge.customer : (charge.customer as Stripe.Customer)?.id;
+      const refundedCents = charge.amount_refunded;
+
+      if (!customerId || !refundedCents || refundedCents <= 0) {
+        result = { handled: false, event_type: event.type };
+        break;
+      }
+
+      const mapping = await deps.tenantStore.getByProcessorCustomerId(customerId);
+      if (!mapping) {
+        result = { handled: false, event_type: event.type };
+        break;
+      }
+
+      const tenant = mapping.tenant;
+
+      // Idempotency: skip if this charge was already refunded in the ledger.
+      if (await deps.creditLedger.hasReferenceId(charge.id)) {
+        result = { handled: true, event_type: event.type, tenant, debitedCents: 0 };
+        break;
+      }
+
+      // Debit the ledger. Allow negative balance — refund must always succeed.
+      await deps.creditLedger.debit(
+        tenant,
+        Credit.fromCents(refundedCents),
+        "refund",
+        `Stripe refund (charge: ${charge.id})`,
+        charge.id,
+        true, // allowNegative
+      );
+
+      logger.warn("Charge refunded — credits debited", { tenant, customerId, chargeId: charge.id, refundedCents });
+
+      result = { handled: true, event_type: event.type, tenant, debitedCents: refundedCents };
       break;
     }
 
