@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { proxyToInstance } from "./friends-proxy.js";
 
@@ -12,18 +13,82 @@ describe("proxyToInstance path validation", () => {
   it("accepts valid /p2p/ prefixed paths", async () => {
     mockFetch.mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), {
+=======
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { proxyToInstance } from "./friends-proxy.js";
+
+describe("proxyToInstance", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("returns JSON data on successful JSON response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ friends: [] }), {
+>>>>>>> 58070ff (test: add tests for API auth routes and tenant-proxy (WOP-1291))
         status: 200,
         headers: { "content-type": "application/json" },
       }),
     );
+<<<<<<< HEAD
     const result = await proxyToInstance("bot-1", "GET", "/p2p/friends");
     expect(result.ok).toBe(true);
     expect(mockFetch).toHaveBeenCalledWith(
       "http://wopr-bot-1:3000/p2p/friends",
+=======
+
+    const result = await proxyToInstance("bot-1", "GET", "/p2p/friends");
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.data).toEqual({ friends: [] });
+  });
+
+  it("returns text data on non-JSON response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response("plain text", {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+
+    const result = await proxyToInstance("bot-1", "GET", "/p2p/status");
+    expect(result.ok).toBe(true);
+    expect(result.data).toBe("plain text");
+  });
+
+  it("returns 503 for ECONNREFUSED", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const result = await proxyToInstance("bot-1", "GET", "/p2p/friends");
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(503);
+    expect(result.error).toBe("Instance unavailable");
+  });
+
+  it("returns 502 for other errors", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Unexpected"));
+
+    const result = await proxyToInstance("bot-1", "POST", "/p2p/friends", { peerId: "abc" });
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(502);
+  });
+
+  it("constructs correct URL from instanceId and path", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await proxyToInstance("my-bot", "GET", "/p2p/friends");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://wopr-my-bot:3000/p2p/friends",
+>>>>>>> 58070ff (test: add tests for API auth routes and tenant-proxy (WOP-1291))
       expect.objectContaining({ method: "GET" }),
     );
   });
 
+<<<<<<< HEAD
   it("accepts /p2p/ paths with sub-segments", async () => {
     mockFetch.mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), {
@@ -86,5 +151,25 @@ describe("proxyToInstance method validation", () => {
 
   it("rejects lowercase method", async () => {
     await expect(proxyToInstance("bot-1", "get", "/p2p/friends")).rejects.toThrow("proxyToInstance: disallowed method");
+=======
+  it("does not send body for GET requests", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await proxyToInstance("bot-1", "GET", "/p2p/friends", { ignored: true });
+    const fetchInit = vi.mocked(globalThis.fetch).mock.calls[0][1]!;
+    expect(fetchInit.body).toBeUndefined();
+  });
+
+  it("sends JSON body for POST requests", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await proxyToInstance("bot-1", "POST", "/p2p/friends", { peerId: "abc" });
+    const fetchInit = vi.mocked(globalThis.fetch).mock.calls[0][1]!;
+    expect(fetchInit.body).toBe(JSON.stringify({ peerId: "abc" }));
+>>>>>>> 58070ff (test: add tests for API auth routes and tenant-proxy (WOP-1291))
   });
 });
