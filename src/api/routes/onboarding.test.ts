@@ -102,6 +102,17 @@ describe("GET /api/onboarding/session/:id/history", () => {
     const res = await app.request("/api/onboarding/session/sess-1/history");
     expect(res.status).toBe(404);
   });
+
+  it("returns 404 when authenticated user forges x-anonymous-id to access anonymous session (IDOR)", async () => {
+    // The session belongs to an anonymous user, not any authenticated user.
+    const session = fakeSession({ userId: null, anonymousId: "anon-victim" });
+    // Authenticated attacker sends the victim's anonymousId in the header.
+    const { app } = buildApp(session, "user-attacker");
+    const res = await app.request("/api/onboarding/session/sess-1/history", {
+      headers: { "x-anonymous-id": "anon-victim" },
+    });
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("POST /api/onboarding/session/:id/upgrade", () => {

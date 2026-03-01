@@ -109,7 +109,14 @@ onboardingRoutes.get("/session/:id/history", async (c) => {
   const userId = c.get("user")?.id as string | undefined;
   const anonymousId = c.req.header("x-anonymous-id") ?? undefined;
 
-  const ownerMatch = (userId && session.userId === userId) || (anonymousId && session.anonymousId === anonymousId);
+  // If the session belongs to a registered user, only a matching authenticated userId grants access.
+  // If the session is anonymous (no userId), only a matching anonymousId from an unauthenticated
+  // caller grants access. An authenticated user must never satisfy the anonymous branch, which
+  // would allow IDOR via a forged x-anonymous-id header.
+  const ownerMatch =
+    session.userId !== null
+      ? userId === session.userId
+      : !userId && !!anonymousId && anonymousId === session.anonymousId;
 
   if (!ownerMatch) {
     return c.json({ error: "Session not found" }, 404);
