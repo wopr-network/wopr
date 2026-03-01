@@ -3,90 +3,55 @@ import type { Severity } from "./severity.js";
 export interface EscalationContact {
   role: string;
   channel: string; // "slack" | "pagerduty" | "email" | "phone"
-  target: string; // placeholder like "#billing-incidents" or "on-call-eng"
+  target: string;
   slaMinutes: number;
   order: number;
 }
 
-const SEV1_ESCALATION: EscalationContact[] = [
-  {
-    order: 1,
-    role: "on-call-engineer",
-    channel: "pagerduty",
-    target: "on-call-eng",
-    slaMinutes: 5,
-  },
-  {
-    order: 2,
-    role: "engineering-lead",
-    channel: "slack",
-    target: "#billing-incidents",
-    slaMinutes: 10,
-  },
-  {
-    order: 3,
-    role: "incident-commander",
-    channel: "slack",
-    target: "#billing-incidents",
-    slaMinutes: 15,
-  },
-  {
-    order: 4,
-    role: "cto",
-    channel: "phone",
-    target: "cto-oncall",
-    slaMinutes: 30,
-  },
-];
+/** Read escalation targets from env vars, falling back to defaults. */
+function targets() {
+  return {
+    pagerduty: process.env.ESCALATION_PAGERDUTY_SERVICE ?? "on-call-eng",
+    slack: process.env.ESCALATION_SLACK_CHANNEL ?? "#billing-incidents",
+    ctoPhone: process.env.ESCALATION_CTO_PHONE ?? "cto-oncall",
+    ctoEmail: process.env.ESCALATION_CTO_EMAIL ?? "cto@wopr.network",
+  };
+}
 
-const SEV2_ESCALATION: EscalationContact[] = [
-  {
-    order: 1,
-    role: "on-call-engineer",
-    channel: "slack",
-    target: "#billing-incidents",
-    slaMinutes: 15,
-  },
-  {
-    order: 2,
-    role: "engineering-lead",
-    channel: "slack",
-    target: "#billing-incidents",
-    slaMinutes: 60,
-  },
-  {
-    order: 3,
-    role: "cto",
-    channel: "email",
-    target: "cto@wopr.network",
-    slaMinutes: 240,
-  },
-];
+function buildSev1(): EscalationContact[] {
+  const t = targets();
+  return [
+    { order: 1, role: "on-call-engineer", channel: "pagerduty", target: t.pagerduty, slaMinutes: 5 },
+    { order: 2, role: "engineering-lead", channel: "slack", target: t.slack, slaMinutes: 10 },
+    { order: 3, role: "incident-commander", channel: "slack", target: t.slack, slaMinutes: 15 },
+    { order: 4, role: "cto", channel: "phone", target: t.ctoPhone, slaMinutes: 30 },
+  ];
+}
 
-const SEV3_ESCALATION: EscalationContact[] = [
-  {
-    order: 1,
-    role: "on-call-engineer",
-    channel: "slack",
-    target: "#billing-incidents",
-    slaMinutes: 60,
-  },
-  {
-    order: 2,
-    role: "engineering-lead",
-    channel: "slack",
-    target: "#billing-incidents",
-    slaMinutes: 240,
-  },
-];
+function buildSev2(): EscalationContact[] {
+  const t = targets();
+  return [
+    { order: 1, role: "on-call-engineer", channel: "slack", target: t.slack, slaMinutes: 15 },
+    { order: 2, role: "engineering-lead", channel: "slack", target: t.slack, slaMinutes: 60 },
+    { order: 3, role: "cto", channel: "email", target: t.ctoEmail, slaMinutes: 240 },
+  ];
+}
+
+function buildSev3(): EscalationContact[] {
+  const t = targets();
+  return [
+    { order: 1, role: "on-call-engineer", channel: "slack", target: t.slack, slaMinutes: 60 },
+    { order: 2, role: "engineering-lead", channel: "slack", target: t.slack, slaMinutes: 240 },
+  ];
+}
 
 export function getEscalationMatrix(severity: Severity): EscalationContact[] {
   switch (severity) {
     case "SEV1":
-      return SEV1_ESCALATION;
+      return buildSev1();
     case "SEV2":
-      return SEV2_ESCALATION;
+      return buildSev2();
     case "SEV3":
-      return SEV3_ESCALATION;
+      return buildSev3();
   }
 }
