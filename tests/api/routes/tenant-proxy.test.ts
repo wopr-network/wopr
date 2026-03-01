@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractTenantSubdomain } from "../../../src/api/routes/tenant-proxy.js";
+import { buildUpstreamHeaders, extractTenantSubdomain } from "../../../src/api/routes/tenant-proxy.js";
 
 describe("extractTenantSubdomain", () => {
   it("returns the subdomain for a valid tenant host", () => {
@@ -48,5 +48,64 @@ describe("extractTenantSubdomain", () => {
 
   it("handles hyphenated tenant names", () => {
     expect(extractTenantSubdomain("my-bot.wopr.bot")).toBe("my-bot");
+  });
+});
+
+describe("buildUpstreamHeaders", () => {
+  it("forwards allowed headers", () => {
+    const incoming = new Headers({
+      "content-type": "application/json",
+      "accept": "text/html",
+      "x-request-id": "abc-123",
+    });
+    const result = buildUpstreamHeaders(incoming, "user-1", "tenant-1");
+    expect(result.get("content-type")).toBe("application/json");
+    expect(result.get("accept")).toBe("text/html");
+    expect(result.get("x-request-id")).toBe("abc-123");
+  });
+
+  it("strips cookie header", () => {
+    const incoming = new Headers({
+      "content-type": "application/json",
+      "cookie": "better-auth.session_token=secret123",
+    });
+    const result = buildUpstreamHeaders(incoming, "user-1", "tenant-1");
+    expect(result.has("cookie")).toBe(false);
+  });
+
+  it("strips authorization header", () => {
+    const incoming = new Headers({
+      "content-type": "application/json",
+      "authorization": "Bearer sk-secret-key",
+    });
+    const result = buildUpstreamHeaders(incoming, "user-1", "tenant-1");
+    expect(result.has("authorization")).toBe(false);
+  });
+
+  it("strips host header", () => {
+    const incoming = new Headers({
+      "host": "alice.wopr.bot",
+      "content-type": "text/plain",
+    });
+    const result = buildUpstreamHeaders(incoming, "user-1", "tenant-1");
+    expect(result.has("host")).toBe(false);
+  });
+
+  it("injects x-wopr-user-id and x-wopr-tenant-id", () => {
+    const incoming = new Headers({ "content-type": "application/json" });
+    const result = buildUpstreamHeaders(incoming, "user-42", "tenant-7");
+    expect(result.get("x-wopr-user-id")).toBe("user-42");
+    expect(result.get("x-wopr-tenant-id")).toBe("tenant-7");
+  });
+
+  it("does not forward unknown headers", () => {
+    const incoming = new Headers({
+      "content-type": "application/json",
+      "x-custom-secret": "should-be-stripped",
+      "x-forwarded-for": "1.2.3.4",
+    });
+    const result = buildUpstreamHeaders(incoming, "user-1", "tenant-1");
+    expect(result.has("x-custom-secret")).toBe(false);
+    expect(result.has("x-forwarded-for")).toBe(false);
   });
 });
