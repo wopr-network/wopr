@@ -1,8 +1,7 @@
 const ALLOWED_REDIRECT_ORIGINS: string[] = [
   "https://app.wopr.bot",
   "https://wopr.network",
-  "http://localhost:3000",
-  "http://localhost:3001",
+  ...(process.env.NODE_ENV !== "production" ? ["http://localhost:3000", "http://localhost:3001"] : []),
   ...(process.env.PLATFORM_UI_URL ? [process.env.PLATFORM_UI_URL] : []),
 ];
 

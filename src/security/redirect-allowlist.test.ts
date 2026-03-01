@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertSafeRedirectUrl } from "./redirect-allowlist.js";
 
 describe("assertSafeRedirectUrl", () => {
@@ -44,5 +44,27 @@ describe("assertSafeRedirectUrl", () => {
 
   it("rejects empty string", () => {
     expect(() => assertSafeRedirectUrl("")).toThrow("Invalid redirect URL");
+  });
+
+  describe("PLATFORM_UI_URL env-driven entry", () => {
+    beforeEach(() => {
+      process.env.PLATFORM_UI_URL = "https://platform.example.com";
+      vi.resetModules();
+    });
+
+    afterEach(() => {
+      delete process.env.PLATFORM_UI_URL;
+      vi.resetModules();
+    });
+
+    it("allows PLATFORM_UI_URL when set", async () => {
+      const { assertSafeRedirectUrl: assertSafe } = await import("./redirect-allowlist.js");
+      expect(() => assertSafe("https://platform.example.com/dashboard")).not.toThrow();
+    });
+
+    it("rejects URLs not matching PLATFORM_UI_URL", async () => {
+      const { assertSafeRedirectUrl: assertSafe } = await import("./redirect-allowlist.js");
+      expect(() => assertSafe("https://other.example.com/dashboard")).toThrow("Invalid redirect URL");
+    });
   });
 });
