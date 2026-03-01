@@ -21,6 +21,7 @@ import { checkInstanceQuota, DEFAULT_INSTANCE_LIMITS } from "../../monetization/
 import { buildResourceLimits } from "../../monetization/quotas/resource-limits.js";
 import { NetworkPolicy } from "../../network/network-policy.js";
 import { getProxyManager } from "../../proxy/singleton.js";
+import { assertSafeRedirectUrl } from "../../security/redirect-allowlist.js";
 
 const DATA_DIR = process.env.FLEET_DATA_DIR || "/data/fleet";
 
@@ -790,6 +791,21 @@ fleetRoutes.post("/bots/:id/upgrade-to-vps", writeAuth, async (c) => {
   const successUrl =
     typeof body.successUrl === "string" ? body.successUrl : `${baseUrl}/dashboard/bots/${botId}?vps=activated`;
   const cancelUrl = typeof body.cancelUrl === "string" ? body.cancelUrl : `${baseUrl}/dashboard/bots/${botId}`;
+
+  if (typeof body.successUrl === "string") {
+    try {
+      assertSafeRedirectUrl(successUrl);
+    } catch {
+      return c.json({ error: "Invalid redirect URL" }, 400);
+    }
+  }
+  if (typeof body.cancelUrl === "string") {
+    try {
+      assertSafeRedirectUrl(cancelUrl);
+    } catch {
+      return c.json({ error: "Invalid redirect URL" }, 400);
+    }
+  }
 
   const { createVpsCheckoutSession } = await import("../../monetization/stripe/checkout.js");
   const { createStripeClient, loadStripeConfig } = await import("../../monetization/stripe/client.js");

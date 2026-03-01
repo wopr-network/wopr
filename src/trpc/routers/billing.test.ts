@@ -229,8 +229,8 @@ describe("billingRouter", () => {
       const caller = makeCaller(makeCtx("user-1", "tenant-1"));
       const result = await caller.creditsCheckout({
         priceId: "price_test_5",
-        successUrl: "https://example.com/success",
-        cancelUrl: "https://example.com/cancel",
+        successUrl: "https://app.wopr.bot/success",
+        cancelUrl: "https://app.wopr.bot/cancel",
       });
       expect(result.url).toBe("https://pay.example.com/checkout/cs_test");
       expect(result.sessionId).toBe("cs_test");
@@ -242,8 +242,8 @@ describe("billingRouter", () => {
       const caller = makeCaller(makeCtx("user-1", "ctx-tenant"));
       await caller.creditsCheckout({
         priceId: "price_test_5",
-        successUrl: "https://example.com/success",
-        cancelUrl: "https://example.com/cancel",
+        successUrl: "https://app.wopr.bot/success",
+        cancelUrl: "https://app.wopr.bot/cancel",
       });
       expect(mockProcessor.createCheckoutSession).toHaveBeenCalledWith(
         expect.objectContaining({ tenant: "ctx-tenant" }),
@@ -256,8 +256,8 @@ describe("billingRouter", () => {
         caller.creditsCheckout({
           tenant: "tenant-b",
           priceId: "price_test_5",
-          successUrl: "https://example.com/success",
-          cancelUrl: "https://example.com/cancel",
+          successUrl: "https://app.wopr.bot/success",
+          cancelUrl: "https://app.wopr.bot/cancel",
         }),
       ).rejects.toThrow("Access denied");
     });
@@ -267,10 +267,32 @@ describe("billingRouter", () => {
       await expect(
         caller.creditsCheckout({
           priceId: "price_test_5",
-          successUrl: "https://example.com/success",
-          cancelUrl: "https://example.com/cancel",
+          successUrl: "https://app.wopr.bot/success",
+          cancelUrl: "https://app.wopr.bot/cancel",
         }),
       ).rejects.toThrow("Authentication required");
+    });
+
+    it("rejects external successUrl", async () => {
+      const caller = makeCaller(makeCtx("user-1", "tenant-1"));
+      await expect(
+        caller.creditsCheckout({
+          priceId: "price_test_5",
+          successUrl: "https://evil.com/phishing",
+          cancelUrl: "https://app.wopr.bot/cancel",
+        }),
+      ).rejects.toThrow("Invalid redirect URL");
+    });
+
+    it("rejects external cancelUrl", async () => {
+      const caller = makeCaller(makeCtx("user-1", "tenant-1"));
+      await expect(
+        caller.creditsCheckout({
+          priceId: "price_test_5",
+          successUrl: "https://app.wopr.bot/success",
+          cancelUrl: "https://evil.com/cancel",
+        }),
+      ).rejects.toThrow("Invalid redirect URL");
     });
   });
 
@@ -309,7 +331,7 @@ describe("billingRouter", () => {
         processor: createMockProcessor({ supportsPortal: () => true }),
       });
       const caller = makeCaller(makeCtx("user-1", "tenant-1"));
-      const result = await caller.portalSession({ returnUrl: "https://example.com/return" });
+      const result = await caller.portalSession({ returnUrl: "https://app.wopr.bot/return" });
       expect(result.url).toBe("https://pay.example.com/portal/portal_test");
     });
 
@@ -318,14 +340,14 @@ describe("billingRouter", () => {
         processor: createMockProcessor({ supportsPortal: () => false }),
       });
       const caller = makeCaller(makeCtx("user-1", "tenant-1"));
-      const result = await caller.portalSession({ returnUrl: "https://example.com/return" });
+      const result = await caller.portalSession({ returnUrl: "https://app.wopr.bot/return" });
       expect(result.url).toBeNull();
     });
 
     it("rejects unauthenticated request", async () => {
       injectDeps();
       const caller = makeCaller(makeUnauthCtx());
-      await expect(caller.portalSession({ returnUrl: "https://example.com/return" })).rejects.toThrow(
+      await expect(caller.portalSession({ returnUrl: "https://app.wopr.bot/return" })).rejects.toThrow(
         "Authentication required",
       );
     });
@@ -334,8 +356,18 @@ describe("billingRouter", () => {
       injectDeps();
       const caller = makeCaller(makeCtx("user-1", "tenant-a"));
       await expect(
-        caller.portalSession({ tenant: "tenant-b", returnUrl: "https://example.com/return" }),
+        caller.portalSession({ tenant: "tenant-b", returnUrl: "https://app.wopr.bot/return" }),
       ).rejects.toThrow("Access denied");
+    });
+
+    it("rejects external returnUrl", async () => {
+      injectDeps({
+        processor: createMockProcessor({ supportsPortal: () => true }),
+      });
+      const caller = makeCaller(makeCtx("user-1", "tenant-1"));
+      await expect(caller.portalSession({ returnUrl: "https://evil.com/phishing" })).rejects.toThrow(
+        "Invalid redirect URL",
+      );
     });
   });
 
@@ -615,10 +647,10 @@ describe("billingRouter", () => {
     const protectedMutations: Array<{ name: string; input: unknown }> = [
       {
         name: "creditsCheckout",
-        input: { priceId: "p", successUrl: "https://a.com", cancelUrl: "https://b.com" },
+        input: { priceId: "p", successUrl: "https://app.wopr.bot/a", cancelUrl: "https://app.wopr.bot/b" },
       },
       { name: "cryptoCheckout", input: { amountUsd: 10 } },
-      { name: "portalSession", input: { returnUrl: "https://a.com" } },
+      { name: "portalSession", input: { returnUrl: "https://app.wopr.bot/a" } },
       {
         name: "updateSpendingLimits",
         input: { global: { alertAt: null, hardCap: null }, perCapability: {} },

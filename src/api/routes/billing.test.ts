@@ -121,8 +121,8 @@ describe("billing routes", () => {
         body: JSON.stringify({
           tenant: "t-1",
           priceId: "price_test_credit_5",
-          successUrl: "https://example.com/s",
-          cancelUrl: "https://example.com/c",
+          successUrl: "https://app.wopr.bot/s",
+          cancelUrl: "https://app.wopr.bot/c",
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -132,7 +132,7 @@ describe("billing routes", () => {
     it("rejects portal without bearer token", async () => {
       const res = await billingRoutes.request("/portal", {
         method: "POST",
-        body: JSON.stringify({ tenant: "t-1", returnUrl: "https://example.com/billing" }),
+        body: JSON.stringify({ tenant: "t-1", returnUrl: "https://app.wopr.bot/billing" }),
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(401);
@@ -144,8 +144,8 @@ describe("billing routes", () => {
         body: JSON.stringify({
           tenant: "t-1",
           priceId: "price_test_credit_5",
-          successUrl: "https://example.com/s",
-          cancelUrl: "https://example.com/c",
+          successUrl: "https://app.wopr.bot/s",
+          cancelUrl: "https://app.wopr.bot/c",
         }),
         headers: { Authorization: "Bearer wrong-token", "Content-Type": "application/json" },
       });
@@ -175,8 +175,8 @@ describe("billing routes", () => {
         body: JSON.stringify({
           tenant: "t-1",
           priceId: "price_test_credit_25",
-          successUrl: "https://example.com/success",
-          cancelUrl: "https://example.com/cancel",
+          successUrl: "https://app.wopr.bot/success",
+          cancelUrl: "https://app.wopr.bot/cancel",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
@@ -192,8 +192,8 @@ describe("billing routes", () => {
         method: "POST",
         body: JSON.stringify({
           tenant: "t-1",
-          successUrl: "https://example.com/success",
-          cancelUrl: "https://example.com/cancel",
+          successUrl: "https://app.wopr.bot/success",
+          cancelUrl: "https://app.wopr.bot/cancel",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
@@ -220,8 +220,8 @@ describe("billing routes", () => {
         method: "POST",
         body: JSON.stringify({
           priceId: "price_test_credit_5",
-          successUrl: "https://example.com/success",
-          cancelUrl: "https://example.com/cancel",
+          successUrl: "https://app.wopr.bot/success",
+          cancelUrl: "https://app.wopr.bot/cancel",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
@@ -237,8 +237,8 @@ describe("billing routes", () => {
         body: JSON.stringify({
           tenant: "t-1; DROP TABLE",
           priceId: "price_test_credit_5",
-          successUrl: "https://example.com/success",
-          cancelUrl: "https://example.com/cancel",
+          successUrl: "https://app.wopr.bot/success",
+          cancelUrl: "https://app.wopr.bot/cancel",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
@@ -255,12 +255,29 @@ describe("billing routes", () => {
           tenant: "t-1",
           priceId: "price_test_credit_5",
           successUrl: "not-a-url",
-          cancelUrl: "https://example.com/cancel",
+          cancelUrl: "https://app.wopr.bot/cancel",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
 
       expect(res.status).toBe(400);
+    });
+
+    it("returns 400 for external redirect URLs", async () => {
+      const res = await billingRoutes.request("/credits/checkout", {
+        method: "POST",
+        body: JSON.stringify({
+          tenant: "t-1",
+          priceId: "price_test_credit_5",
+          successUrl: "https://evil.com/phishing",
+          cancelUrl: "https://app.wopr.bot/cancel",
+        }),
+        headers: { ...authHeader, "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("Invalid redirect URL");
     });
 
     it("returns 500 when processor API fails", async () => {
@@ -280,8 +297,8 @@ describe("billing routes", () => {
         body: JSON.stringify({
           tenant: "t-1",
           priceId: "price_test_credit_5",
-          successUrl: "https://example.com/success",
-          cancelUrl: "https://example.com/cancel",
+          successUrl: "https://app.wopr.bot/success",
+          cancelUrl: "https://app.wopr.bot/cancel",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
@@ -313,7 +330,7 @@ describe("billing routes", () => {
         method: "POST",
         body: JSON.stringify({
           tenant: "t-1",
-          returnUrl: "https://example.com/billing",
+          returnUrl: "https://app.wopr.bot/billing",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
@@ -361,7 +378,7 @@ describe("billing routes", () => {
         method: "POST",
         body: JSON.stringify({
           tenant: "t-unknown",
-          returnUrl: "https://example.com/billing",
+          returnUrl: "https://app.wopr.bot/billing",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
@@ -389,7 +406,7 @@ describe("billing routes", () => {
         method: "POST",
         body: JSON.stringify({
           tenant: "t-1",
-          returnUrl: "https://example.com/billing",
+          returnUrl: "https://app.wopr.bot/billing",
         }),
         headers: { ...authHeader, "Content-Type": "application/json" },
       });
