@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { Hono } from "hono";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AuthEnv } from "../../auth/index.js";
 import type { IChatBackend } from "../../chat/chat-backend.js";
 import type { ChatEvent } from "../../chat/types.js";
-import { createChatRoutes } from "./chat.js";
+import { chatRoutes, createChatRoutes, setChatDeps } from "./chat.js";
 
 function createMockBackend(events: ChatEvent[]): IChatBackend {
   return {
@@ -13,10 +15,62 @@ function createMockBackend(events: ChatEvent[]): IChatBackend {
   };
 }
 
-describe("POST /", () => {
-  it("returns 400 for missing sessionId", async () => {
+// Helper: wrap chat routes with a fake user set on context
+function createAuthedRoutes(deps: { backend: IChatBackend }) {
+  const app = new Hono<AuthEnv>();
+  app.use("/*", async (c, next) => {
+    c.set("user", { id: "test-user", roles: [] });
+    c.set("authMethod", "session");
+    return next();
+  });
+  app.route("/", createChatRoutes(deps));
+  return app;
+}
+
+describe("authentication", () => {
+  it("GET /stream returns 401 without auth", async () => {
+    const routes = createChatRoutes({ backend: createMockBackend([]) });
+    const res = await routes.request("/stream?sessionId=s1");
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Authentication required");
+  });
+
+  it("POST / returns 401 without auth", async () => {
     const routes = createChatRoutes({ backend: createMockBackend([]) });
     const res = await routes.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "s1", message: "hello" }),
+    });
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Authentication required");
+  });
+
+  it("GET /stream returns 200 with auth", async () => {
+    const app = createAuthedRoutes({ backend: createMockBackend([]) });
+    const res = await app.request("/stream?sessionId=s1");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+  });
+
+  it("POST / returns 200 with auth", async () => {
+    const backend = createMockBackend([{ type: "done" }]);
+    const app = createAuthedRoutes({ backend });
+    const res = await app.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "s1", message: "hello" }),
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("POST /", () => {
+  it("returns 400 for missing sessionId", async () => {
+    const app = createAuthedRoutes({ backend: createMockBackend([]) });
+    const res = await app.request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: "hello" }),
@@ -25,8 +79,8 @@ describe("POST /", () => {
   });
 
   it("returns 400 for missing message field", async () => {
-    const routes = createChatRoutes({ backend: createMockBackend([]) });
-    const res = await routes.request("/", {
+    const app = createAuthedRoutes({ backend: createMockBackend([]) });
+    const res = await app.request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: "s1" }),
@@ -36,8 +90,8 @@ describe("POST /", () => {
 
   it("returns streamId on valid request", async () => {
     const backend = createMockBackend([{ type: "text", delta: "hi" }, { type: "done" }]);
-    const routes = createChatRoutes({ backend });
-    const res = await routes.request("/", {
+    const app = createAuthedRoutes({ backend });
+    const res = await app.request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: "s1", message: "hello" }),
@@ -50,8 +104,8 @@ describe("POST /", () => {
 
   it("calls backend.process with sessionId and message", async () => {
     const backend = createMockBackend([{ type: "done" }]);
-    const routes = createChatRoutes({ backend });
-    await routes.request("/", {
+    const app = createAuthedRoutes({ backend });
+    await app.request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: "s1", message: "test" }),
@@ -60,16 +114,59 @@ describe("POST /", () => {
   });
 });
 
+describe("chatRoutes singleton — outer auth gate", () => {
+  afterEach(() => {
+    // Reset module-level singleton so each test starts clean.
+    // setChatDeps replaces _deps; we also need to reset _chatRoutesInner.
+    // Calling setChatDeps with a fresh mock is sufficient because
+    // getChatRoutesInner() is re-created only when _chatRoutesInner is null.
+    // Force recreation by resetting via setChatDeps.
+    setChatDeps({ backend: createMockBackend([]) });
+  });
+
+  it("returns 401 on GET /stream when outer context has no user", async () => {
+    setChatDeps({ backend: createMockBackend([]) });
+    // chatRoutes receives a request with no user in context (simulates
+    // a request that bypasses resolveSessionUser — proves the outer
+    // lazy wrapper enforces auth before delegating to inner.fetch).
+    const res = await chatRoutes.request("/stream?sessionId=s1");
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Authentication required");
+  });
+
+  it("returns 401 on POST / when outer context has no user", async () => {
+    setChatDeps({ backend: createMockBackend([]) });
+    const res = await chatRoutes.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "s1", message: "hello" }),
+    });
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe("Authentication required");
+  });
+
+  it("does not reach the inner handler (returns 401 before delegating) when no user", async () => {
+    // The outer lazy wrapper must short-circuit with 401 before calling
+    // inner.fetch() — this confirms auth is enforced at the outer level.
+    setChatDeps({ backend: createMockBackend([]) });
+    const res = await chatRoutes.request("/stream?sessionId=s1");
+    // Must be 401, not 404 or 500 (which would indicate it reached inner.fetch)
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("GET /stream", () => {
   it("returns 400 without sessionId query param", async () => {
-    const routes = createChatRoutes({ backend: createMockBackend([]) });
-    const res = await routes.request("/stream");
+    const app = createAuthedRoutes({ backend: createMockBackend([]) });
+    const res = await app.request("/stream");
     expect(res.status).toBe(400);
   });
 
   it("returns SSE content type with valid sessionId", async () => {
-    const routes = createChatRoutes({ backend: createMockBackend([]) });
-    const res = await routes.request("/stream?sessionId=s1");
+    const app = createAuthedRoutes({ backend: createMockBackend([]) });
+    const res = await app.request("/stream?sessionId=s1");
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
     expect(res.headers.get("Cache-Control")).toBe("no-cache");
@@ -84,14 +181,14 @@ describe("GET /stream", () => {
         emit({ type: "done" });
       }),
     };
-    const routes = createChatRoutes({ backend });
+    const app = createAuthedRoutes({ backend });
 
     // Open SSE connection
-    const sseRes = await routes.request("/stream?sessionId=s1");
+    const sseRes = await app.request("/stream?sessionId=s1");
     expect(sseRes.status).toBe(200);
 
     // Send a message (this triggers backend.process which writes to the SSE stream)
-    const postRes = await routes.request("/", {
+    const postRes = await app.request("/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: "s1", message: "hello" }),

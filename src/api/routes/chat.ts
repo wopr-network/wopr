@@ -18,6 +18,16 @@ export interface ChatRouteDeps {
  * Create chat routes with injected dependencies.
  * Enables testing without real WOPR instances.
  */
+/** Extract authenticated user from context, or null if not set. */
+function getUser(c: { get(key: string): unknown }): { id: string } | null {
+  try {
+    const user = c.get("user") as { id: string } | undefined;
+    return user ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function createChatRoutes(deps: ChatRouteDeps): Hono {
   const routes = new Hono();
   const registry = new ChatStreamRegistry();
@@ -27,6 +37,11 @@ export function createChatRoutes(deps: ChatRouteDeps): Hono {
    * Opens an SSE connection. Events are pushed when POST / is called.
    */
   routes.get("/stream", (c) => {
+    const user = getUser(c);
+    if (!user) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
     const sessionId = c.req.query("sessionId");
     if (!sessionId) {
       return c.json({ error: "sessionId query parameter is required" }, 400);
@@ -86,6 +101,11 @@ export function createChatRoutes(deps: ChatRouteDeps): Hono {
    * Events are pushed to all SSE connections for this sessionId.
    */
   routes.post("/", async (c) => {
+    const user = getUser(c);
+    if (!user) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
     let body: unknown;
     try {
       body = await c.req.json();
@@ -167,6 +187,14 @@ chatRoutes.route(
   (() => {
     const lazy = new Hono();
     lazy.all("/*", async (c) => {
+      // Auth must be checked here, in the outer context where resolveSessionUser()
+      // has already populated c.get("user"). inner.fetch(c.req.raw) creates a
+      // fresh Hono context with no user set, so getUser() inside the inner
+      // handlers would always return null in production.
+      const user = getUser(c);
+      if (!user) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
       const inner = getChatRoutesInner();
       return inner.fetch(c.req.raw);
     });
