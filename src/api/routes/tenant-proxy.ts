@@ -27,6 +27,32 @@ const RESERVED_SUBDOMAINS = new Set([
 /** DNS label rules (RFC 1123) — compiled once at module scope. */
 const SUBDOMAIN_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
+/** Headers safe to forward to upstream tenant containers. */
+const FORWARDED_HEADERS = [
+  "content-type",
+  "accept",
+  "accept-language",
+  "accept-encoding",
+  "content-length",
+  "x-request-id",
+  "user-agent",
+];
+
+/**
+ * Build a sanitized Headers object for upstream requests.
+ * Only forwards allowlisted headers and injects platform identity headers.
+ */
+export function buildUpstreamHeaders(incoming: Headers, userId: string, tenantSubdomain: string): Headers {
+  const headers = new Headers();
+  for (const key of FORWARDED_HEADERS) {
+    const val = incoming.get(key);
+    if (val) headers.set(key, val);
+  }
+  headers.set("x-wopr-user-id", userId);
+  headers.set("x-wopr-tenant-id", tenantSubdomain);
+  return headers;
+}
+
 /**
  * Extract the tenant subdomain from a Host header value.
  * Returns null if the host is the root domain, a reserved subdomain,
@@ -97,11 +123,14 @@ export const tenantProxyMiddleware: MiddlewareHandler = async (c, next) => {
   const url = new URL(c.req.url);
   const targetUrl = `${upstream}${url.pathname}${url.search}`;
 
+  const userId = (c.get("user") as { id: string } | undefined)?.id ?? "anonymous";
+  const upstreamHeaders = buildUpstreamHeaders(c.req.raw.headers, userId, subdomain);
+
   let response: Response;
   try {
     response = await fetch(targetUrl, {
       method: c.req.method,
-      headers: c.req.raw.headers,
+      headers: upstreamHeaders,
       body: c.req.method !== "GET" && c.req.method !== "HEAD" ? c.req.raw.body : undefined,
       // @ts-expect-error -- duplex needed for streaming request bodies
       duplex: "half",
