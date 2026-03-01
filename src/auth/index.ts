@@ -23,6 +23,7 @@ export interface AuthEnv {
     user: AuthUser;
     authMethod: "session" | "api_key";
     tokenTenantId?: string;
+    isOperatorToken?: boolean;
   };
 }
 
@@ -291,6 +292,10 @@ export function scopedBearerAuthWithTenant(metadataMap: Map<string, TokenMetadat
     // validateTenantOwnership (WOP-1264).
     if (metadata.tenantId) {
       c.set("tokenTenantId", metadata.tenantId);
+    } else {
+      // Operator/admin tokens have no tenant scope — mark them so ownership
+      // middlewares can pass them through without a tenantId check.
+      c.set("isOperatorToken", true);
     }
 
     return next();
@@ -398,10 +403,16 @@ export function requireSessionOrToken(tokenMap: Map<string, TokenScope>, require
  */
 export function requireTenantOwnership<T>(_getResourceTenantId: (resource: T) => string | undefined) {
   return async (c: Context<AuthEnv>, next: Next) => {
+    // Operator/admin tokens (fleet env var tokens) have no tenantId but must
+    // still access tenant-scoped routes — they are trusted at the operator level.
+    const isOperatorToken = c.get("isOperatorToken");
+    if (isOperatorToken) {
+      return next();
+    }
+
     const tokenTenantId = c.get("tokenTenantId");
 
-    // If token has no tenant constraint, reject — legacy tokens must not
-    // bypass tenant ownership (WOP-1264)
+    // If token has no tenant constraint and is not an operator token, reject.
     if (!tokenTenantId) {
       return c.json({ error: "Token lacks tenant scope" }, 403);
     }
@@ -440,7 +451,19 @@ export function validateTenantOwnership<T>(
     tokenTenantId = undefined;
   }
 
-  // No tenant constraint = legacy unscoped token — reject (WOP-1264)
+  // Operator/admin tokens (fleet env var tokens) have no tenantId but must
+  // still access tenant-scoped resources — they are trusted at the operator level.
+  let isOperatorToken: boolean | undefined;
+  try {
+    isOperatorToken = c.get("isOperatorToken");
+  } catch {
+    isOperatorToken = undefined;
+  }
+  if (isOperatorToken) {
+    return undefined;
+  }
+
+  // No tenant constraint and not an operator token — reject (WOP-1264)
   if (!tokenTenantId) {
     return c.json({ error: "Token lacks tenant scope" }, 403);
   }
