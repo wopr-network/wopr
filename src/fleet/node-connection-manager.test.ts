@@ -5,6 +5,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { DrizzleDb } from "../db/index.js";
 import { botInstances, nodes, recoveryEvents } from "../db/schema/index.js";
 import { createTestDb, truncateAllTables } from "../test/db.js";
+import { DrizzleBotInstanceRepository } from "./drizzle-bot-instance-repository.js";
+import { DrizzleNodeRepository } from "./drizzle-node-repository.js";
+import { DrizzleRecoveryRepository } from "./drizzle-recovery-repository.js";
 import { NodeConnectionManager } from "./node-connection-manager.js";
 import type { OrphanCleaner } from "./orphan-cleaner.js";
 import { findPlacement } from "./placement.js";
@@ -36,6 +39,15 @@ async function insertNode(
   });
 }
 
+function makeNcm(db: DrizzleDb, options?: { onNodeRegistered?: () => void }): NodeConnectionManager {
+  return new NodeConnectionManager(
+    new DrizzleNodeRepository(db),
+    new DrizzleBotInstanceRepository(db),
+    new DrizzleRecoveryRepository(db),
+    options,
+  );
+}
+
 // TOP OF FILE - shared across ALL describes
 let pool: PGlite;
 let db: DrizzleDb;
@@ -52,7 +64,7 @@ describe("NodeConnectionManager.registerNode", () => {
   let ncm: NodeConnectionManager;
 
   beforeAll(() => {
-    ncm = new NodeConnectionManager(db);
+    ncm = makeNcm(db);
   });
 
   beforeEach(async () => {
@@ -179,7 +191,7 @@ describe("NodeConnectionManager.processHeartbeat — returning status preservati
   let ncm: NodeConnectionManager;
 
   beforeAll(() => {
-    ncm = new NodeConnectionManager(db);
+    ncm = makeNcm(db);
   });
 
   beforeEach(async () => {
@@ -209,7 +221,7 @@ describe("NodeConnectionManager heartbeat triggers OrphanCleaner for returning n
 
   beforeAll(() => {
     orphanCleaner = makeOrphanCleaner();
-    ncm = new NodeConnectionManager(db);
+    ncm = makeNcm(db);
     ncm.setOrphanCleaner(orphanCleaner);
   });
 
@@ -294,7 +306,7 @@ describe("NodeConnectionManager heartbeat triggers OrphanCleaner for returning n
       return { nodeId: "node-1", stopped: [], kept: [], errors: [] };
     });
     orphanCleaner = makeOrphanCleaner({ clean: cleanMock });
-    const ncm2 = new NodeConnectionManager(db);
+    const ncm2 = makeNcm(db);
     ncm2.setOrphanCleaner(orphanCleaner);
 
     const mockWs = {
@@ -326,7 +338,7 @@ describe("re-registration + placement integration", () => {
   let ncm: NodeConnectionManager;
 
   beforeAll(() => {
-    ncm = new NodeConnectionManager(db);
+    ncm = makeNcm(db);
   });
 
   beforeEach(async () => {
@@ -371,8 +383,6 @@ describe("re-registration + placement integration", () => {
 });
 
 describe("end-to-end: node crash -> recovery -> reboot -> orphan cleanup", () => {
-  let ncm: NodeConnectionManager;
-
   beforeEach(async () => {
     await truncateAllTables(pool);
   });
@@ -388,7 +398,7 @@ describe("end-to-end: node crash -> recovery -> reboot -> orphan cleanup", () =>
 
     const sentCommands: Array<{ nodeId: string; type: string; name: string }> = [];
 
-    ncm = new NodeConnectionManager(db);
+    const ncm = makeNcm(db);
 
     ncm.sendCommand = vi
       .fn()
