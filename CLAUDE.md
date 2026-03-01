@@ -93,10 +93,4 @@ All database access MUST go through repository interfaces. Direct Drizzle ORM or
 
 **Gate 2 — Raw SQL Pattern Ban (`scripts/check-raw-sql.sh`):** `.prepare()` and `.exec()` calls are banned outside approved files. Even inside repository files, prefer Drizzle query builders (`db.select()`, `db.insert()`, `db.update()`, `db.delete()`). Raw `.prepare()` is a last resort and requires a comment: `// raw SQL: Drizzle cannot express <reason>`.
 
-**Temporary exemptions:** Both gates have temporary exemptions for existing violations. These are tracked in:
-- `biome.json` `overrides` array (last entry, marked TEMPORARY)
-- `scripts/check-raw-sql.sh` `TEMP_EXCLUDED_PATTERNS` array
-
-As each domain remediation story (WOP-899 through WOP-906) merges, the corresponding files MUST be removed from both exemption lists in the same PR.
-
 **Adding a new repository:** Create `src/<domain>/drizzle-<name>-repository.ts` implementing `I<Name>Repository`. Add it to the biome.json overrides approved section. Wire it in `src/fleet/services.ts`.

@@ -117,7 +117,6 @@
         "src/monetization/affiliate/drizzle-affiliate-repository.ts",
         "src/monetization/affiliate/affiliate-fraud-repository.ts",
         "src/monetization/affiliate/affiliate-admin-repository.ts",
-        "src/monetization/affiliate/schema.ts",
         "src/monetization/payram/charge-store.ts",
         "src/monetization/drizzle-spending-limits-repository.ts",
         "src/monetization/stripe/tenant-store.ts",
@@ -206,8 +205,6 @@
         "src/monetization/credits/credit-ledger.ts",
         "src/monetization/credits/bot-billing.ts",
         "src/security/tenant-keys/schema.ts",
-        "src/admin/credits/adjustment-store.ts",
-        "src/admin/credits/schema.ts",
         "src/gateway/spending-cap.ts",
         "src/trpc/routers/two-factor.ts"
       ],
