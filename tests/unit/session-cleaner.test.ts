@@ -325,6 +325,44 @@ describe("SessionCleaner", () => {
 
     expect(cleaner.getStats().expiredRemoved).toBe(2);
   });
+
+  it("should skip a concurrent cleanup if one is already in progress", async () => {
+    await sessions.saveSessionId("x", "id-x");
+    await backdateSession("x", 48 * 60 * 60 * 1000);
+
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
+
+    // Run two cleanups concurrently — only one should delete the session
+    const [r1, r2] = await Promise.all([cleaner.cleanup(), cleaner.cleanup()]);
+    expect(r1.expiredRemoved + r2.expiredRemoved).toBe(1);
+  });
+
+  it("should evict enough sessions even when some have pending injects", async () => {
+    // Create 5 sessions, maxCount = 3 → need to evict 2
+    for (let i = 0; i < 5; i++) {
+      await sessions.saveSessionId(`sess${i}`, `id-${i}`);
+    }
+    await backdateSession("sess0", 5000); // oldest — has pending inject, should be skipped
+    await backdateSession("sess1", 4000); // 2nd oldest — evicted
+    await backdateSession("sess2", 3000); // 3rd oldest — evicted
+    await backdateSession("sess3", 2000);
+    await backdateSession("sess4", 1000);
+
+    // Only sess0 has a pending inject
+    mockQueueManager.hasPending.mockImplementation((name: string) => name === "sess0");
+
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 3, cleanupIntervalMs: 60000 });
+    const stats = await cleaner.cleanup();
+
+    // Should evict sess1 and sess2 (not sess0 since it's busy)
+    expect(stats.lruEvicted).toBe(2);
+    const remaining = await sessions.getSessions();
+    expect(remaining.sess0).toBeDefined(); // busy, spared
+    expect(remaining.sess1).toBeUndefined(); // evicted
+    expect(remaining.sess2).toBeUndefined(); // evicted
+  });
 });
 
 // ===========================================================================
