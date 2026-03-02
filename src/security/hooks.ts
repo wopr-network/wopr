@@ -226,9 +226,12 @@ async function runCommandHook(
 
   return new Promise((resolve) => {
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     const settle = (result: PreInjectResult | PostInjectResult) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       resolve(result);
     };
 
@@ -249,6 +252,9 @@ async function runCommandHook(
     proc.stderr.on("data", (data: Buffer) => {
       stderr += data.toString();
     });
+
+    // Suppress stdin errors — spawn failures are delivered via proc 'error' event.
+    proc.stdin.on("error", () => {});
 
     // Send context as JSON to stdin
     proc.stdin.write(JSON.stringify(context));
@@ -273,11 +279,9 @@ async function runCommandHook(
     });
 
     // Timeout after 5 seconds
-    setTimeout(() => {
-      if (!settled) {
-        proc.kill();
-        settle(errorResult("Hook timed out after 5000ms"));
-      }
+    timer = setTimeout(() => {
+      proc.kill();
+      settle(errorResult("Hook timed out after 5000ms"));
     }, 5000);
   });
 }
