@@ -245,6 +245,36 @@ describe("OrgService", () => {
       expect((err as TRPCError).code).toBe("BAD_REQUEST");
     });
 
+    it("logs error when compensating delete also fails", async () => {
+      const { logger: loggerModule } = await import("../config/logger.js");
+      const errorSpy = vi.spyOn(loggerModule, "error");
+
+      const { orgRepo, memberRepo } = await setup(db);
+      const failingMemberRepo = {
+        ...memberRepo,
+        addMember: async () => {
+          throw new Error("addMember boom");
+        },
+      } as unknown as typeof memberRepo;
+
+      const mockDb = {
+        delete: () => ({
+          where: () => Promise.reject(new Error("delete boom")),
+        }),
+      } as unknown as typeof db;
+
+      const svc = new OrgService(orgRepo, failingMemberRepo, mockDb);
+
+      await expect(svc.createOrg("user-e", "Org E", "double-fail")).rejects.toThrow("addMember boom");
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Compensating org delete failed"),
+        expect.objectContaining({ err: expect.any(Error) }),
+      );
+
+      errorSpy.mockRestore();
+    });
+
     it("partial failure — throws when addMember fails, org creation rolled back", async () => {
       const { orgRepo, memberRepo } = await setup(db);
       const failingMemberRepo = {

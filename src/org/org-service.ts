@@ -7,6 +7,7 @@
 import crypto from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
+import { logger } from "../config/logger.js";
 import type { DrizzleDb } from "../db/index.js";
 import {
   botInstances,
@@ -103,7 +104,12 @@ export class OrgService {
       await this.db
         .delete(tenants)
         .where(eq(tenants.id, tenant.id))
-        .catch(() => {});
+        .catch((deleteErr) => {
+          logger.error("Compensating org delete failed — orphaned tenant record", {
+            err: deleteErr,
+            tenantId: tenant.id,
+          });
+        });
       throw err;
     }
     return { id: tenant.id, name: tenant.name, slug: tenant.slug ?? "" };
