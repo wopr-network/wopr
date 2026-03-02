@@ -157,14 +157,14 @@ describe("Security Policy Module", () => {
       expect(policy.capabilities).toContain("*");
     });
 
-    it("should resolve trusted with appropriate capability set", async () => {
-      const source = makeSource("plugin"); // trusted
+    it("should resolve semi-trusted with appropriate capability set", async () => {
+      const source = makeSource("plugin"); // semi-trusted
       const policy = resolvePolicy(source);
 
-      expect(policy.trustLevel).toBe("trusted");
+      expect(policy.trustLevel).toBe("semi-trusted");
       expect(policy.capabilities).toContain("inject");
       expect(policy.capabilities).toContain("inject.tools");
-      expect(policy.capabilities).toContain("session.spawn");
+      expect(policy.capabilities).not.toContain("session.spawn");
     });
 
     it("should resolve semi-trusted with limited capabilities", async () => {
@@ -297,13 +297,13 @@ describe("Security Policy Module", () => {
           sessions: ["gateway-session"],
         },
         trustLevels: {
-          trusted: {
+          "semi-trusted": {
             capabilities: ["inject", "cross.inject"],
           },
         },
       });
 
-      const source = makeSource("plugin"); // trusted
+      const source = makeSource("plugin"); // semi-trusted
       const policy = resolvePolicy(source, "gateway-session");
 
       expect(policy.isGateway).toBe(true);
@@ -609,11 +609,12 @@ describe("Security Policy Module", () => {
       expect(result).toBeNull();
     });
 
-    it("should not require sandbox for trusted", async () => {
+    it("should require sandbox for semi-trusted plugin", async () => {
       const source = makeSource("plugin");
       const result = checkSandboxRequired(source);
 
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.enabled).toBe(true);
     });
 
     it("should require sandbox for semi-trusted", async () => {
@@ -1130,7 +1131,7 @@ describe("Security Policy Module", () => {
       await setSecurityConfig({
         enforcement: "enforce",
         trustLevels: {
-          trusted: {
+          "semi-trusted": {
             capabilities: ["inject", "inject.tools", "config.read"],
             tools: {
               deny: ["exec_command"],
@@ -1140,7 +1141,7 @@ describe("Security Policy Module", () => {
         },
       });
 
-      const source = makeSource("plugin"); // trusted
+      const source = makeSource("plugin"); // semi-trusted
       const denied = checkToolAccess(source, "exec_command");
       expect(denied.allowed).toBe(false);
 
