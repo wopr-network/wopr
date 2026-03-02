@@ -1,6 +1,30 @@
 import { logger } from "../config/logger.js";
 
 /**
+ * Fetch the resolved dependency list for an installed plugin from the daemon.
+ * Returns npm package names (e.g., ["@wopr-network/plugin-voice"]).
+ * Returns [] on any failure — never throws.
+ */
+export async function fetchPluginDependencies(botId: string, pluginName: string): Promise<string[]> {
+  try {
+    const url = `http://wopr-${botId}:3000/plugins/${pluginName}/health`;
+    const response = await fetch(url, {
+      method: "GET",
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = (await response.json()) as { manifest?: { dependencies?: string[] } };
+    return data.manifest?.dependencies ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Dispatch a plugin install command to the running WOPR daemon via direct HTTP.
  * Returns { dispatched: true } on success, { dispatched: false, dispatchError } on failure.
  * Never throws — dispatch failure is non-fatal (plugin will be installed on next restart).

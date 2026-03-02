@@ -41,6 +41,7 @@ vi.mock("./friends-proxy.js", () => ({
 }));
 
 const pluginConfigRepoMock = {
+  findAllForBot: vi.fn().mockResolvedValue([]),
   findByBotAndPlugin: vi.fn(),
   upsert: vi.fn(),
   deleteBySetupSession: vi.fn(),
