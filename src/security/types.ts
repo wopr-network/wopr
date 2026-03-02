@@ -777,6 +777,16 @@ export function getSessionIndexable(
 }
 
 /**
+ * Convert a glob pattern (supporting * and ?) to a safe regex.
+ * All regex metacharacters except * and ? are escaped.
+ */
+function globToSafeRegex(glob: string): RegExp {
+  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  const regexStr = escaped.replace(/\*/g, ".*").replace(/\?/g, ".");
+  return new RegExp(`^${regexStr}$`);
+}
+
+/**
  * Check if a session can index (see in search) another session's transcripts
  *
  * @param searcherSession - The session performing the search
@@ -799,19 +809,12 @@ export function canIndexSession(searcherSession: string, targetSession: string, 
       continue;
     }
 
-    // "session:pattern" - regex match on session name
+    // "session:pattern" - glob match on session name (* = any chars, ? = single char)
     if (pattern.startsWith("session:")) {
-      const regexStr = pattern.slice(8);
-      try {
-        const regex = new RegExp(`^${regexStr}$`);
-        if (regex.test(targetSession)) {
-          return true;
-        }
-      } catch {
-        // Invalid regex, try exact match
-        if (regexStr === targetSession) {
-          return true;
-        }
+      const globPattern = pattern.slice(8);
+      const regex = globToSafeRegex(globPattern);
+      if (regex.test(targetSession)) {
+        return true;
       }
       continue;
     }
