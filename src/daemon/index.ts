@@ -354,8 +354,12 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
           source = createInjectionSource("api", { trustLevel: "semi-trusted" });
         } else if (from.startsWith("plugin:")) {
           const pluginName = from.slice(7);
+          const { pluginManifests } = require("../plugins/state.js");
+          const manifest = pluginManifests?.get(pluginName);
+          const grantedCapabilities = manifest?.permissions ?? [];
           source = createInjectionSource("plugin", {
             identity: { pluginName },
+            grantedCapabilities,
           });
         }
         // else: defaults to CLI (owner) in sessions.ts

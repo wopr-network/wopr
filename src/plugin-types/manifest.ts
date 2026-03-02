@@ -211,6 +211,14 @@ export interface PluginManifest {
   /** Other plugins this plugin conflicts with */
   conflicts?: string[];
 
+  /**
+   * Security permissions this plugin requests beyond the default semi-trusted profile.
+   * Each entry is a capability string (e.g., "memory.write", "session.spawn", "a2a.call").
+   * The platform grants these as grantedCapabilities on the plugin's InjectionSource
+   * when the plugin injects into sessions.
+   */
+  permissions?: string[];
+
   /** Lifecycle behavior declarations */
   lifecycle?: PluginLifecycle;
 
