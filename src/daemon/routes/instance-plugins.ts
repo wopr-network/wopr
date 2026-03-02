@@ -182,6 +182,7 @@ instancePluginsRouter.post(
     responses: {
       201: { description: "Plugin installed" },
       400: { description: "Validation error or install failed" },
+      422: { description: "Missing required dependencies" },
       401: { description: "Unauthorized" },
     },
   }),
@@ -207,12 +208,8 @@ instancePluginsRouter.post(
         const installedNames = installed.map((p) => p.name);
         const depCheck = checkPluginDependencies(manifest.dependencies, installedNames);
         if (!depCheck.ok) {
-          try {
-            await unloadPlugin(plugin.name);
-            await removePlugin(plugin.name);
-          } catch (_) {
-            // best-effort rollback
-          }
+          // Roll back: remove the just-installed artifact so it doesn't become orphaned
+          await removePlugin(plugin.name);
           return c.json(
             {
               error: `Missing required dependencies: ${depCheck.missing.join(", ")}`,

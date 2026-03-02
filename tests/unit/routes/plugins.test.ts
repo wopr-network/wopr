@@ -895,16 +895,19 @@ describe("POST /install — dependency check (WOP-1461)", () => {
     expect(res.status).toBe(201);
   });
 
-  it("returns 422 when required dependency is not installed", async () => {
+  it("returns 422 when required dependency is not installed and removes orphaned artifact", async () => {
     mockReadPluginManifest.mockReturnValue({
       dependencies: ["@wopr-network/plugin-discord"],
     });
     mockCheckPluginDependencies.mockReturnValue({ ok: false, missing: ["discord"] });
+    mockRemovePlugin.mockResolvedValue(true);
     const res = await req("POST", "/install", { source: "meeting-transcriber" });
     expect(res.status).toBe(422);
     const json = await res.json();
     expect(json.error).toMatch(/Missing required dependencies/);
     expect(json.missingDependencies).toEqual(["discord"]);
+    // Rollback: the orphaned artifact must be removed
+    expect(mockRemovePlugin).toHaveBeenCalledWith(SAMPLE_PLUGIN.name);
   });
 
   it("returns 201 when all dependencies are already installed", async () => {
@@ -928,6 +931,13 @@ describe("POST /install — dependency check (WOP-1461)", () => {
 });
 
 describe("GET /:name/check-deps (WOP-1461)", () => {
+  it("returns 400 for invalid plugin name", async () => {
+    const res = await req("GET", "/plugin;evil/check-deps");
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/Invalid plugin name/);
+  });
+
   it("returns 404 when plugin not found", async () => {
     mockListPlugins.mockResolvedValue([]);
     const res = await req("GET", "/unknown-plugin/check-deps");

@@ -183,12 +183,22 @@ pluginsRouter.get(
     summary: "Check plugin dependency satisfaction",
     responses: {
       200: { description: "Dependency check result" },
+      400: { description: "Invalid plugin name" },
       404: { description: "Plugin not found" },
       401: { description: "Unauthorized" },
     },
   }),
   async (c) => {
     const name = c.req.param("name");
+
+    try {
+      validatePluginName(name);
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      throw err;
+    }
 
     const plugins = await listPlugins();
     const plugin = plugins.find((p: PluginEntry) => p.name === name);
@@ -287,13 +297,8 @@ async function handleInstall(c: Context) {
       const installedNames = installed.map((p) => p.name);
       const depCheck = checkPluginDependencies(manifest.dependencies, installedNames);
       if (!depCheck.ok) {
-        // Rollback: uninstall the plugin we just installed
-        try {
-          await unloadPlugin(plugin.name);
-          await removePlugin(plugin.name);
-        } catch (_) {
-          // best-effort rollback
-        }
+        // Roll back: remove the just-installed artifact so it doesn't become orphaned
+        await removePlugin(plugin.name);
         return c.json(
           {
             error: `Missing required dependencies: ${depCheck.missing.join(", ")}`,
@@ -336,6 +341,7 @@ pluginsRouter.post(
     responses: {
       201: { description: "Plugin installed" },
       400: { description: "Validation error" },
+      422: { description: "Missing required dependencies" },
       429: { description: "Rate limit exceeded" },
       401: { description: "Unauthorized" },
     },
@@ -351,6 +357,7 @@ pluginsRouter.post(
     responses: {
       201: { description: "Plugin installed" },
       400: { description: "Validation error" },
+      422: { description: "Missing required dependencies" },
       429: { description: "Rate limit exceeded" },
       401: { description: "Unauthorized" },
     },
