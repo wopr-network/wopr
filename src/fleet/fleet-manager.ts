@@ -61,12 +61,16 @@ export class FleetManager {
 
   /**
    * Look up which node a bot is assigned to.
-   * Returns null if no instance repo, no instance record, or nodeId is null.
+   * Returns { nodeId, commandBus } when the bot has a remote assignment,
+   * or null when it should be handled locally.
+   * Callers use the returned commandBus reference directly, avoiding the need
+   * to re-check this.commandBus after the call.
    */
-  private async resolveNodeId(botId: string): Promise<string | null> {
+  private async resolveNodeId(botId: string): Promise<{ nodeId: string; commandBus: INodeCommandBus } | null> {
     if (!this.commandBus || !this.instanceRepo) return null;
     const instance = await this.instanceRepo.getById(botId);
-    return instance?.nodeId ?? null;
+    if (!instance?.nodeId) return null;
+    return { nodeId: instance.nodeId, commandBus: this.commandBus };
   }
 
   /**
@@ -92,10 +96,10 @@ export class FleetManager {
       await this.store.save(profile);
 
       try {
-        const nodeId = await this.resolveNodeId(id);
-        if (nodeId) {
+        const remote = await this.resolveNodeId(id);
+        if (remote) {
           // Dispatch to remote node agent — it handles pull + create + start
-          await this.commandBus!.send(nodeId, {
+          await remote.commandBus.send(remote.nodeId, {
             type: "bot.start",
             payload: {
               name: profile.name,
@@ -144,11 +148,11 @@ export class FleetManager {
    */
   async start(id: string): Promise<void> {
     return this.withLock(id, async () => {
-      const nodeId = await this.resolveNodeId(id);
-      if (nodeId) {
+      const remote = await this.resolveNodeId(id);
+      if (remote) {
         const profile = await this.store.get(id);
         if (!profile) throw new BotNotFoundError(id);
-        await this.commandBus!.send(nodeId, {
+        await remote.commandBus.send(remote.nodeId, {
           type: "bot.start",
           payload: {
             name: profile.name,
@@ -174,11 +178,11 @@ export class FleetManager {
    */
   async stop(id: string): Promise<void> {
     return this.withLock(id, async () => {
-      const nodeId = await this.resolveNodeId(id);
-      if (nodeId) {
+      const remote = await this.resolveNodeId(id);
+      if (remote) {
         const profile = await this.store.get(id);
         if (!profile) throw new BotNotFoundError(id);
-        await this.commandBus!.send(nodeId, {
+        await remote.commandBus.send(remote.nodeId, {
           type: "bot.stop",
           payload: { name: profile.name },
         });
@@ -203,9 +207,9 @@ export class FleetManager {
       const profile = await this.store.get(id);
       if (!profile) throw new BotNotFoundError(id);
 
-      const nodeId = await this.resolveNodeId(id);
-      if (nodeId) {
-        await this.commandBus!.send(nodeId, {
+      const remote = await this.resolveNodeId(id);
+      if (remote) {
+        await remote.commandBus.send(remote.nodeId, {
           type: "bot.restart",
           payload: { name: profile.name },
         });
@@ -230,9 +234,9 @@ export class FleetManager {
       const profile = await this.store.get(id);
       if (!profile) throw new BotNotFoundError(id);
 
-      const nodeId = await this.resolveNodeId(id);
-      if (nodeId) {
-        await this.commandBus!.send(nodeId, {
+      const remote = await this.resolveNodeId(id);
+      if (remote) {
+        await remote.commandBus.send(remote.nodeId, {
           type: "bot.remove",
           payload: { name: profile.name, removeVolumes },
         });
