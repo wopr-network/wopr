@@ -177,6 +177,26 @@ describe("bot-plugin-proxy routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("returns 400 for pluginId with invalid characters (path injection attempt)", async () => {
+      const res = await app.request(`/api/bots/${TEST_BOT_ID}/plugins/install`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ pluginId: "../../../etc/passwd" }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 for pluginId starting with a hyphen", async () => {
+      const res = await app.request(`/api/bots/${TEST_BOT_ID}/plugins/install`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ pluginId: "-bad-plugin" }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+
     it("returns 401 without auth token", async () => {
       const res = await app.request(`/api/bots/${TEST_BOT_ID}/plugins/install`, {
         method: "POST",

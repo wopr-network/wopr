@@ -8,14 +8,11 @@ import { ProfileStore } from "../../fleet/profile-store.js";
 import type { IPluginConfigRepository } from "../../setup/plugin-config-repository.js";
 import { proxyToInstance } from "./friends-proxy.js";
 
-const DATA_DIR = process.env.FLEET_DATA_DIR || "/data/fleet";
-const store = new ProfileStore(DATA_DIR);
-
 const UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const PLUGIN_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,127}$/;
 
 const installBodySchema = z.object({
-  pluginId: z.string().min(1).max(128),
+  pluginId: z.string().regex(PLUGIN_ID_RE),
 });
 
 const configBodySchema = z.object({
@@ -24,9 +21,11 @@ const configBodySchema = z.object({
 
 export interface BotPluginProxyDeps {
   pluginConfigRepo: IPluginConfigRepository;
+  profileStore?: ProfileStore;
 }
 
 export function createBotPluginProxyRoutes(deps: BotPluginProxyDeps): Hono {
+  const store = deps.profileStore ?? new ProfileStore(process.env.FLEET_DATA_DIR || "/data/fleet");
   const routes = new Hono();
   const tokenMetadataMap = buildTokenMetadataMap();
   const writeAuth = scopedBearerAuthWithTenant(tokenMetadataMap, "write");
