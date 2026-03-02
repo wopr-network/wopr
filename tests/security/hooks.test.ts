@@ -168,6 +168,61 @@ describe("parseHookCommand", () => {
   });
 });
 
+describe("shell denylist (WOP-1423)", () => {
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `wopr-test-denylist-${randomBytes(8).toString("hex")}`);
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
+    resetStorage();
+    getStorage(join(testDir, "test.sqlite"));
+    await initSecurity(testDir);
+  });
+
+  afterEach(() => {
+    resetStorage();
+  });
+
+  it("rejects all shell binaries even when added to allowedHookCommands", async () => {
+    const shells = ["bash", "sh", "zsh", "fish", "dash", "ksh", "csh", "tcsh", "cmd", "powershell", "pwsh"];
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      allowedHookCommands: shells,
+    });
+
+    for (const shell of shells) {
+      const result = parseHookCommand(`${shell} -c echo`);
+      expect(result, `expected '${shell}' to be denied by denylist`).toBeNull();
+    }
+  });
+
+  it("rejects shells case-insensitively", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      allowedHookCommands: ["BASH", "ZSH", "PowerShell"],
+    });
+
+    expect(parseHookCommand("BASH -c echo")).toBeNull();
+    expect(parseHookCommand("ZSH -c echo")).toBeNull();
+    expect(parseHookCommand("PowerShell -c echo")).toBeNull();
+  });
+
+  it("still allows non-shell commands when shells are in config", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      allowedHookCommands: ["bash", "my-custom-hook"],
+    });
+
+    expect(parseHookCommand("bash -c echo")).toBeNull();
+    const result = parseHookCommand("my-custom-hook run");
+    expect(result).not.toBeNull();
+    expect(result!.executable).toBe("my-custom-hook");
+  });
+});
+
 describe("runPreInjectHooks", () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `wopr-test-hooks-${randomBytes(8).toString("hex")}`);
