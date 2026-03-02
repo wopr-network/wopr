@@ -574,6 +574,34 @@ describe("DrizzleRepository gap coverage (WOP-954)", () => {
     });
   });
 
+  describe("repository-level transaction: TOCTOU race guard", () => {
+    beforeEach(async () => {
+      await storage.register(pluginSchema);
+    });
+
+    it("should serialize concurrent transaction() calls instead of double-BEGIN", async () => {
+      const repo = storage.getRepository<TestRecord>("drepo", "items");
+      const order: string[] = [];
+
+      const tx1 = repo.transaction(async () => {
+        order.push("tx1-start");
+        // Yield to let tx2 attempt to enter
+        await new Promise((r) => setTimeout(r, 10));
+        order.push("tx1-end");
+      });
+
+      const tx2 = repo.transaction(async () => {
+        order.push("tx2-start");
+        order.push("tx2-end");
+      });
+
+      await Promise.all([tx1, tx2]);
+
+      // tx2 must start AFTER tx1 ends (serialized, not interleaved)
+      expect(order.indexOf("tx1-end")).toBeLessThan(order.indexOf("tx2-start"));
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // Task 7: QueryBuilder count and first on empty tables / with where conditions
   // ---------------------------------------------------------------------------

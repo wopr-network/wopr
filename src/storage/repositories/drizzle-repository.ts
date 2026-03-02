@@ -208,6 +208,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
   private jsonColumns: Set<string>;
   private booleanColumns: Set<string>;
   private inTransaction = false;
+  private _txLock: Promise<void> = Promise.resolve();
 
   constructor(
     private db: DrizzleDB,
@@ -457,9 +458,21 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
     if (!this.sqliteRaw) {
       throw new Error("transaction() requires a raw SQLite connection (sqliteRaw was not provided)");
     }
+
     if (this.inTransaction) {
       throw new Error("Nested transactions are not supported; a transaction is already active");
     }
+
+    // Queue behind any in-flight transaction to prevent TOCTOU race.
+    // Each caller waits for the previous _txLock to resolve before proceeding.
+    let releaseLock!: () => void;
+    const prevLock = this._txLock;
+    this._txLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    await prevLock;
+
     const raw = this.sqliteRaw as { exec: (sql: string) => void };
     raw.exec("BEGIN");
     this.inTransaction = true;
@@ -476,6 +489,7 @@ export class DrizzleRepository<T extends Record<string, unknown>, PK extends key
       throw error;
     } finally {
       this.inTransaction = false;
+      releaseLock();
     }
   }
 
