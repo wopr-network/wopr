@@ -12,7 +12,7 @@ import { findPlacement } from "../../fleet/placement.js";
 import { defaultTemplatesDir, loadProfileTemplates } from "../../fleet/profile-loader.js";
 import type { ProfileTemplate } from "../../fleet/profile-schema.js";
 import { ProfileStore } from "../../fleet/profile-store.js";
-import { getNodeRepo, getRecoveryOrchestrator } from "../../fleet/services.js";
+import { getBotInstanceRepo, getCommandBus, getNodeRepo, getRecoveryOrchestrator } from "../../fleet/services.js";
 import { createBotSchema, updateBotSchema } from "../../fleet/types.js";
 import { ContainerUpdater } from "../../fleet/updater.js";
 import { Credit } from "../../monetization/credit.js";
@@ -29,9 +29,77 @@ const DATA_DIR = process.env.FLEET_DATA_DIR || "/data/fleet";
 const docker = new Docker();
 const store = new ProfileStore(DATA_DIR);
 const networkPolicy = new NetworkPolicy(docker);
-const fleet = new FleetManager(docker, store, config.discovery, networkPolicy, getProxyManager());
-const imagePoller = new ImagePoller(docker, store);
-const updater = new ContainerUpdater(docker, store, fleet, imagePoller);
+
+// Lazy singletons — defer DB-accessing service calls until first request so
+// that importing this module in tests (without DATABASE_URL) does not crash.
+let _fleet: FleetManager | null = null;
+let _imagePoller: ImagePoller | null = null;
+let _updater: ContainerUpdater | null = null;
+
+function getFleet(): FleetManager {
+  if (!_fleet) {
+    // Only resolve DB-backed services when DATABASE_URL is available.
+    // In test environments that mock FleetManager, DATABASE_URL is absent and
+    // commandBus/instanceRepo are not needed (FleetManager gracefully handles
+    // undefined by skipping remote-node operations).
+    const commandBus = process.env.DATABASE_URL ? getCommandBus() : undefined;
+    const instanceRepo = process.env.DATABASE_URL ? getBotInstanceRepo() : undefined;
+    _fleet = new FleetManager(
+      docker,
+      store,
+      config.discovery,
+      networkPolicy,
+      getProxyManager(),
+      commandBus,
+      instanceRepo,
+    );
+  }
+  return _fleet;
+}
+
+function getImagePoller(): ImagePoller {
+  if (!_imagePoller) {
+    _imagePoller = new ImagePoller(docker, store);
+  }
+  return _imagePoller;
+}
+
+function getUpdater(): ContainerUpdater {
+  if (!_updater) {
+    _updater = new ContainerUpdater(docker, store, getFleet(), getImagePoller());
+  }
+  return _updater;
+}
+
+// Proxy so callers can use `fleet.x` without changing call sites, while
+// deferring FleetManager construction until the first property access.
+const fleet = new Proxy({} as FleetManager, {
+  get(_target, prop) {
+    return (getFleet() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+  set(_target, prop, value) {
+    (getFleet() as unknown as Record<string | symbol, unknown>)[prop] = value;
+    return true;
+  },
+});
+const imagePoller = new Proxy({} as ImagePoller, {
+  get(_target, prop) {
+    return (getImagePoller() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+  set(_target, prop, value) {
+    (getImagePoller() as unknown as Record<string | symbol, unknown>)[prop] = value;
+    return true;
+  },
+});
+const updater = new Proxy({} as ContainerUpdater, {
+  get(_target, prop) {
+    return (getUpdater() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+  set(_target, prop, value) {
+    (getUpdater() as unknown as Record<string | symbol, unknown>)[prop] = value;
+    return true;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Injected billing deps — set via setFleetDeps() before the server starts.
