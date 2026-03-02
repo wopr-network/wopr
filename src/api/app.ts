@@ -141,15 +141,6 @@ app.use(
   }),
 );
 app.use("/*", secureHeaders());
-// CSRF protection: validate Origin/Referer on state-changing requests (WOP-1371).
-// Must run after CORS (which sets Access-Control-Allow-Origin) so preflight requests pass.
-// Exempt: /api/auth/* (better-auth), webhooks, /internal/*, bearer-token requests.
-app.use(
-  "/*",
-  csrfProtection({
-    allowedOrigins: (process.env.UI_ORIGIN || "http://localhost:3001").split(",").map((s) => s.trim()),
-  }),
-);
 // Rate limiting via DB-backed repo. Lazily initialized on first request to
 // avoid opening platform.db at module load time (tests import app.ts too).
 let _rateLimitMiddleware: MiddlewareHandler | null = null;
@@ -255,6 +246,15 @@ app.on(["POST", "GET"], "/api/auth/*", async (c) => {
 // Routes that also accept API tokens (scopedBearerAuth) will override if needed.
 app.use("/api/*", resolveSessionUser());
 app.use("/fleet/*", resolveSessionUser());
+// CSRF protection: validate Origin/Referer on state-changing requests (WOP-1371).
+// Mounted AFTER auth middleware so unauthenticated requests get 401 before CSRF fires.
+// Must run after CORS (which sets Access-Control-Allow-Origin) so preflight requests pass.
+// Exempt: /api/auth/* (better-auth), webhooks, /internal/*, bearer-token requests.
+const _csrfMiddleware = csrfProtection({
+  allowedOrigins: (process.env.UI_ORIGIN || "http://localhost:3001").split(",").map((s) => s.trim()),
+});
+app.use("/api/*", _csrfMiddleware);
+app.use("/fleet/*", _csrfMiddleware);
 
 app.route("/health", healthRoutes);
 

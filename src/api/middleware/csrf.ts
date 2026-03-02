@@ -81,6 +81,21 @@ export function csrfProtection(options: CsrfOptions): MiddlewareHandler {
       return next();
     }
 
+    // Only session-authenticated requests need CSRF validation.
+    // Unauthenticated requests (no session cookie, no bearer token) should
+    // fall through to route-level auth middleware which returns 401.
+    // Checking c.get("user") works because resolveSessionUser() runs before
+    // this middleware and sets "user" only when a valid session cookie is present.
+    let hasSession = false;
+    try {
+      hasSession = !!c.get("user");
+    } catch {
+      // c.get throws if variable not set — treat as unauthenticated
+    }
+    if (!hasSession) {
+      return next();
+    }
+
     // Validate Origin/Referer
     if (!validateCsrfOrigin(c.req.raw.headers, options.allowedOrigins)) {
       return c.json({ error: "CSRF validation failed" }, 403);
