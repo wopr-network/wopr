@@ -13,8 +13,8 @@ import { z } from "zod";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { logger } from "../../logger.js";
-import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
 import { checkPluginDependencies } from "../../plugins/dependency-check.js";
+import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
 import {
   disablePlugin,
   enablePlugin,
