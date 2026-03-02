@@ -11,9 +11,11 @@ import type { IBotInstanceRepository } from "../../fleet/bot-instance-repository
 import type { FleetManager } from "../../fleet/fleet-manager.js";
 import { BotNotFoundError } from "../../fleet/fleet-manager.js";
 import type { INodeRepository } from "../../fleet/node-repository.js";
+import * as placement from "../../fleet/placement.js";
 import type { ProfileTemplate } from "../../fleet/profile-schema.js";
 import type { BotInstance } from "../../fleet/repository-types.js";
 import { Credit } from "../../monetization/credit.js";
+import { DEFAULT_RESOURCE_CONFIG } from "../../monetization/quotas/resource-limits.js";
 import { appRouter } from "../index.js";
 import type { TRPCContext } from "../init.js";
 import { setTrpcOrgMemberRepo } from "../init.js";
@@ -263,7 +265,7 @@ describe("fleet.createInstance", () => {
     const mockNodeRepo: Partial<INodeRepository> = {
       list: vi
         .fn()
-        .mockResolvedValue([{ id: "node-1", host: "10.0.0.1", status: "active", capacityMb: 2000, usedMb: 500 }]),
+        .mockResolvedValue([{ id: "node-1", host: "10.0.0.1", status: "active", capacityMb: 4096, usedMb: 500 }]),
     };
     setFleetRouterDeps({
       getFleetManager: () => fleetMock as unknown as FleetManager,
@@ -278,6 +280,31 @@ describe("fleet.createInstance", () => {
     const caller = createCaller(authedContext());
     await caller.fleet.createInstance(createInput);
     expect(fleetMock.create).toHaveBeenCalledWith(expect.objectContaining({ nodeId: "node-1" }));
+  });
+
+  it("passes requiredMb from buildResourceLimits to findPlacement (not the 100MB default)", async () => {
+    const findPlacementSpy = vi.spyOn(placement, "findPlacement");
+    const mockNodeRepo: Partial<INodeRepository> = {
+      list: vi
+        .fn()
+        .mockResolvedValue([{ id: "node-1", host: "10.0.0.1", status: "active", capacityMb: 4000, usedMb: 500 }]),
+    };
+    setFleetRouterDeps({
+      getFleetManager: () => fleetMock as unknown as FleetManager,
+      getTemplates: () => mockTemplates,
+      getCreditLedger: () => null,
+      getBotBilling: () => null,
+      getBotInstanceRepo: () => mockBotInstanceRepo,
+      getRoleStore: () => mockRoleStore,
+      getNodeRepo: () => mockNodeRepo as INodeRepository,
+    });
+
+    const caller = createCaller(authedContext());
+    await caller.fleet.createInstance(createInput);
+    // Should pass the actual memory limit in MB (DEFAULT_RESOURCE_CONFIG.memoryLimitMb = 2048),
+    // not the 100MB hardcoded default.
+    expect(findPlacementSpy).toHaveBeenCalledWith(expect.anything(), DEFAULT_RESOURCE_CONFIG.memoryLimitMb);
+    findPlacementSpy.mockRestore();
   });
 
   it("throws UNAVAILABLE when no node has sufficient capacity", async () => {

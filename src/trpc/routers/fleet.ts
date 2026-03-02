@@ -26,6 +26,7 @@ import { Credit } from "../../monetization/credit.js";
 import type { IBotBilling } from "../../monetization/credits/bot-billing.js";
 import type { ICreditLedger as CreditLedger } from "../../monetization/credits/credit-ledger.js";
 import { checkInstanceQuota, DEFAULT_INSTANCE_LIMITS } from "../../monetization/quotas/quota-check.js";
+import { buildResourceLimits } from "../../monetization/quotas/resource-limits.js";
 import { createVpsCheckoutSession } from "../../monetization/stripe/checkout.js";
 import { createStripeClient, loadStripeConfig } from "../../monetization/stripe/client.js";
 import { assertSafeRedirectUrl } from "../../security/redirect-allowlist.js";
@@ -141,7 +142,9 @@ export const fleetRouter = router({
       const nodeRepo = deps().getNodeRepo?.();
       if (nodeRepo) {
         const activeNodes = await nodeRepo.list(["active"]);
-        const placement = findPlacement(activeNodes);
+        const resourceLimits = buildResourceLimits();
+        const requiredMb = resourceLimits.Memory ? Math.ceil(resourceLimits.Memory / (1024 * 1024)) : 100;
+        const placement = findPlacement(activeNodes, requiredMb);
         if (!placement) {
           throw new TRPCError({
             code: "SERVICE_UNAVAILABLE",
