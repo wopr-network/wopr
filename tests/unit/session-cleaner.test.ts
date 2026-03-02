@@ -1,0 +1,357 @@
+/**
+ * Session Cleaner Tests (WOP-1505)
+ *
+ * Tests for:
+ * - findExpiredSessionsAsync / countActiveSessionsAsync / findLruSessionsAsync (session-repository.ts)
+ * - SessionCleaner class (session-cleaner.ts): TTL expiry, LRU eviction, pending-inject guard
+ * - startSessionCleaner / stopSessionCleaner / getSessionCleanerStats (sessions.ts)
+ */
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync, rmSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+// ---------------------------------------------------------------------------
+// Mocks — must be declared before any dynamic imports
+// ---------------------------------------------------------------------------
+
+const TEST_WOPR_HOME = mkdtempSync(join(tmpdir(), "wopr-session-cleaner-test-"));
+const TEST_SESSIONS_DIR = join(TEST_WOPR_HOME, "sessions");
+const TEST_SESSIONS_FILE = join(TEST_WOPR_HOME, "sessions.json");
+
+vi.mock("../../src/paths.js", () => ({
+  WOPR_HOME: TEST_WOPR_HOME,
+  SESSIONS_DIR: TEST_SESSIONS_DIR,
+  SESSIONS_FILE: TEST_SESSIONS_FILE,
+}));
+
+vi.mock("../../src/logger.js", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
+vi.mock("../../src/security/index.js", () => ({
+  checkSessionAccess: vi.fn(() => ({ allowed: true })),
+  clearContext: vi.fn(),
+  createInjectionSource: vi.fn(() => ({ type: "cli", origin: "test" })),
+  createSecurityContext: vi.fn(() => ({
+    requestId: "test-req",
+    recordEvent: vi.fn(),
+  })),
+  isEnforcementEnabled: vi.fn(() => false),
+  storeContext: vi.fn(),
+}));
+
+vi.mock("../../src/core/events.js", () => ({
+  emitMutableIncoming: vi.fn(async () => ({ prevented: false, message: "" })),
+  emitMutableOutgoing: vi.fn(async () => ({ prevented: false, response: "" })),
+  emitSessionCreate: vi.fn(async () => {}),
+  emitSessionDestroy: vi.fn(async () => {}),
+  emitSessionResponseChunk: vi.fn(async () => {}),
+}));
+
+vi.mock("../../src/core/context.js", () => ({
+  assembleContext: vi.fn(async () => ({
+    context: "",
+    system: "",
+    sources: [],
+    warnings: [],
+  })),
+  initContextSystem: vi.fn(),
+  updateLastTriggerTimestamp: vi.fn(),
+}));
+
+vi.mock("../../src/core/providers.js", () => ({
+  providerRegistry: {
+    listProviders: vi.fn(() => []),
+    resolveProvider: vi.fn(),
+  },
+}));
+
+vi.mock("../../src/core/a2a-mcp.js", () => ({
+  getA2AMcpServer: vi.fn(() => null),
+  isA2AEnabled: vi.fn(() => false),
+  setSessionFunctions: vi.fn(),
+  listA2ATools: vi.fn(() => []),
+  registerA2ATool: vi.fn(),
+  unregisterA2ATool: vi.fn(),
+}));
+
+const mockQueueManager = {
+  inject: vi.fn(),
+  cancelActive: vi.fn(() => false),
+  hasPending: vi.fn(() => false),
+  getStats: vi.fn(() => ({ active: 0, queued: 0 })),
+  getAllStats: vi.fn(() => ({})),
+  setExecutor: vi.fn(),
+  on: vi.fn(),
+};
+
+vi.mock("../../src/core/queue/index.js", () => ({
+  queueManager: mockQueueManager,
+}));
+
+// ---------------------------------------------------------------------------
+// Import modules under test
+// ---------------------------------------------------------------------------
+let sessions: typeof import("../../src/core/sessions.js");
+let sessionRepository: typeof import("../../src/core/session-repository.js");
+let storage: typeof import("../../src/storage/index.js");
+
+beforeEach(async () => {
+  vi.resetModules();
+
+  mockQueueManager.inject.mockReset();
+  mockQueueManager.cancelActive.mockReset().mockReturnValue(false);
+  mockQueueManager.hasPending.mockReset().mockReturnValue(false);
+  mockQueueManager.getStats.mockReset().mockReturnValue({ active: 0, queued: 0 });
+  mockQueueManager.getAllStats.mockReset().mockReturnValue({});
+  mockQueueManager.setExecutor.mockReset();
+  mockQueueManager.on.mockReset();
+
+  storage = await import("../../src/storage/index.js");
+  sessionRepository = await import("../../src/core/session-repository.js");
+  sessions = await import("../../src/core/sessions.js");
+
+  await sessionRepository.initSessionStorage();
+});
+
+afterEach(async () => {
+  storage.resetStorage();
+  sessionRepository.resetSessionStorageInit();
+
+  const dbPath = join(TEST_WOPR_HOME, "wopr.sqlite");
+  if (existsSync(dbPath)) unlinkSync(dbPath);
+  const walPath = `${dbPath}-wal`;
+  const shmPath = `${dbPath}-shm`;
+  if (existsSync(walPath)) unlinkSync(walPath);
+  if (existsSync(shmPath)) unlinkSync(shmPath);
+
+  vi.restoreAllMocks();
+});
+
+afterAll(() => {
+  rmSync(TEST_WOPR_HOME, { recursive: true, force: true });
+});
+
+// Helper: backdate a session's lastActivityAt
+async function backdateSession(name: string, ageMs: number): Promise<void> {
+  const storageMod = await import("../../src/storage/index.js");
+  const repo = storageMod.getStorage().getRepository("sessions", "sessions");
+  const record = await repo.findFirst({ name });
+  if (record) {
+    await repo.update(record.id, { lastActivityAt: Date.now() - ageMs });
+  }
+}
+
+// ===========================================================================
+// findExpiredSessionsAsync
+// ===========================================================================
+describe("findExpiredSessionsAsync", () => {
+  it("should return sessions with lastActivityAt older than cutoff", async () => {
+    await sessions.saveSessionId("old-session", "id-old");
+    await backdateSession("old-session", 48 * 60 * 60 * 1000); // 48h ago
+
+    const expired = await sessionRepository.findExpiredSessionsAsync(24 * 60 * 60 * 1000);
+    expect(expired).toHaveLength(1);
+    expect(expired[0].name).toBe("old-session");
+  });
+
+  it("should not return sessions within TTL", async () => {
+    await sessions.saveSessionId("fresh-session", "id-fresh");
+
+    const expired = await sessionRepository.findExpiredSessionsAsync(24 * 60 * 60 * 1000);
+    expect(expired).toHaveLength(0);
+  });
+
+  it("should return multiple expired sessions", async () => {
+    await sessions.saveSessionId("s1", "id-1");
+    await sessions.saveSessionId("s2", "id-2");
+    await backdateSession("s1", 48 * 60 * 60 * 1000);
+    await backdateSession("s2", 48 * 60 * 60 * 1000);
+
+    const expired = await sessionRepository.findExpiredSessionsAsync(24 * 60 * 60 * 1000);
+    expect(expired).toHaveLength(2);
+  });
+});
+
+// ===========================================================================
+// countActiveSessionsAsync
+// ===========================================================================
+describe("countActiveSessionsAsync", () => {
+  it("should return 0 with no sessions", async () => {
+    const count = await sessionRepository.countActiveSessionsAsync();
+    expect(count).toBe(0);
+  });
+
+  it("should return count of active sessions", async () => {
+    await sessions.saveSessionId("s1", "id-1");
+    await sessions.saveSessionId("s2", "id-2");
+    const count = await sessionRepository.countActiveSessionsAsync();
+    expect(count).toBe(2);
+  });
+});
+
+// ===========================================================================
+// findLruSessionsAsync
+// ===========================================================================
+describe("findLruSessionsAsync", () => {
+  it("should return oldest sessions by lastActivityAt", async () => {
+    await sessions.saveSessionId("s1", "id-1");
+    await backdateSession("s1", 10000); // oldest
+    await sessions.saveSessionId("s2", "id-2");
+
+    const lru = await sessionRepository.findLruSessionsAsync(1);
+    expect(lru).toHaveLength(1);
+    expect(lru[0].name).toBe("s1");
+  });
+
+  it("should return up to N candidates", async () => {
+    await sessions.saveSessionId("a", "id-a");
+    await backdateSession("a", 3000);
+    await sessions.saveSessionId("b", "id-b");
+    await backdateSession("b", 2000);
+    await sessions.saveSessionId("c", "id-c");
+
+    const lru = await sessionRepository.findLruSessionsAsync(2);
+    expect(lru).toHaveLength(2);
+    expect(lru[0].name).toBe("a");
+    expect(lru[1].name).toBe("b");
+  });
+});
+
+// ===========================================================================
+// SessionCleaner
+// ===========================================================================
+describe("SessionCleaner", () => {
+  it("should remove expired sessions on cleanup()", async () => {
+    await sessions.saveSessionId("expired", "id-exp");
+    await backdateSession("expired", 48 * 60 * 60 * 1000);
+
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    const stats = await cleaner.cleanup();
+
+    expect(stats.expiredRemoved).toBe(1);
+    const remaining = await sessions.getSessions();
+    expect(remaining.expired).toBeUndefined();
+  });
+
+  it("should not remove fresh sessions", async () => {
+    await sessions.saveSessionId("fresh", "id-fresh");
+
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    const stats = await cleaner.cleanup();
+
+    expect(stats.expiredRemoved).toBe(0);
+    const remaining = await sessions.getSessions();
+    expect(remaining.fresh).toBeDefined();
+  });
+
+  it("should evict LRU sessions when over maxCount", async () => {
+    for (let i = 0; i < 3; i++) {
+      await sessions.saveSessionId(`s${i}`, `id-${i}`);
+    }
+    // Backdate s0 to be oldest
+    await backdateSession("s0", 3000);
+    await backdateSession("s1", 2000);
+
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 2, cleanupIntervalMs: 60000 });
+    const stats = await cleaner.cleanup();
+
+    expect(stats.lruEvicted).toBe(1);
+    const remaining = await sessions.getSessions();
+    expect(remaining.s0).toBeUndefined();
+  });
+
+  it("should not delete sessions with pending injects", async () => {
+    await sessions.saveSessionId("busy", "id-busy");
+    await backdateSession("busy", 48 * 60 * 60 * 1000);
+
+    // Mock hasPending to return true for "busy"
+    mockQueueManager.hasPending.mockImplementation((name: string) => name === "busy");
+
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    const stats = await cleaner.cleanup();
+
+    expect(stats.expiredRemoved).toBe(0);
+    const remaining = await sessions.getSessions();
+    expect(remaining.busy).toBeDefined();
+  });
+
+  it("should start and stop the interval", async () => {
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 86400000, maxCount: 1000, cleanupIntervalMs: 60000 });
+
+    cleaner.start();
+    expect(cleaner.getStats().isRunning).toBe(true);
+
+    cleaner.stop();
+    expect(cleaner.getStats().isRunning).toBe(false);
+  });
+
+  it("should not start a second interval if already running", async () => {
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 86400000, maxCount: 1000, cleanupIntervalMs: 60000 });
+
+    cleaner.start();
+    const statsBefore = cleaner.getStats();
+    cleaner.start(); // second call should be a no-op
+    const statsAfter = cleaner.getStats();
+
+    expect(statsBefore.isRunning).toBe(statsAfter.isRunning);
+    cleaner.stop();
+  });
+
+  it("should accumulate expiredRemoved in getStats() across multiple cleanups", async () => {
+    await sessions.saveSessionId("a", "id-a");
+    await backdateSession("a", 48 * 60 * 60 * 1000);
+
+    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
+    const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
+
+    await cleaner.cleanup();
+    // Create another expired session
+    await sessions.saveSessionId("b", "id-b");
+    await backdateSession("b", 48 * 60 * 60 * 1000);
+    await cleaner.cleanup();
+
+    expect(cleaner.getStats().expiredRemoved).toBe(2);
+  });
+});
+
+// ===========================================================================
+// sessions.ts facade: startSessionCleaner / stopSessionCleaner / getSessionCleanerStats
+// ===========================================================================
+describe("session cleaner facade", () => {
+  it("should export startSessionCleaner, stopSessionCleaner, getSessionCleanerStats", () => {
+    expect(typeof sessions.startSessionCleaner).toBe("function");
+    expect(typeof sessions.stopSessionCleaner).toBe("function");
+    expect(typeof sessions.getSessionCleanerStats).toBe("function");
+  });
+
+  it("should return null stats before cleaner is started", () => {
+    expect(sessions.getSessionCleanerStats()).toBeNull();
+  });
+
+  it("should return stats after starting", () => {
+    sessions.startSessionCleaner({ ttlMs: 86400000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    const stats = sessions.getSessionCleanerStats();
+    expect(stats).not.toBeNull();
+    expect(stats?.isRunning).toBe(true);
+    sessions.stopSessionCleaner();
+  });
+
+  it("should return null after stopping", () => {
+    sessions.startSessionCleaner({ ttlMs: 86400000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    sessions.stopSessionCleaner();
+    expect(sessions.getSessionCleanerStats()).toBeNull();
+  });
+});
