@@ -65,20 +65,24 @@ import {
 const DEFAULT_PORT = parseInt(process.env.WOPR_DAEMON_PORT || "7437", 10);
 const DEFAULT_HOST = process.env.WOPR_DAEMON_HOST || "127.0.0.1";
 
-// Global error handlers - prevent crash on unhandled errors
-process.on("uncaughtException", (error) => {
+// Global error handlers — crash so the supervisor (systemd/Docker) can restart cleanly.
+// After an uncaught exception Node's state is undefined; continuing risks silent corruption.
+export function handleUncaughtException(error: Error): void {
   winstonLogger.error(`[daemon] Uncaught exception: ${error.message}`);
   winstonLogger.error(`[daemon] Stack: ${error.stack}`);
-  // Don't exit - log and continue
-});
+  process.exit(1);
+}
 
-process.on("unhandledRejection", (reason, _promise) => {
+export function handleUnhandledRejection(reason: unknown, _promise: Promise<unknown>): void {
   const msg = reason instanceof Error ? reason.message : String(reason);
   const stack = reason instanceof Error ? reason.stack : undefined;
   winstonLogger.error(`[daemon] Unhandled rejection: ${msg}`);
   if (stack) winstonLogger.error(`[daemon] Stack: ${stack}`);
-  // Don't exit - log and continue
-});
+  process.exit(1);
+}
+
+process.on("uncaughtException", handleUncaughtException);
+process.on("unhandledRejection", handleUnhandledRejection);
 
 export interface DaemonConfig {
   port?: number;
