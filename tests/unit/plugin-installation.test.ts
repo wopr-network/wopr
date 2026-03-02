@@ -119,6 +119,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.clearAllMocks();
   // Clean up temp dirs
   try {
     rmSync(testWoprHome, { recursive: true, force: true });
@@ -270,8 +271,14 @@ describe("installPlugin — npm install uses --ignore-scripts", () => {
     const cp = await import("node:child_process");
     const execFileSyncMock = vi.mocked(cp.execFileSync);
 
-    const pluginSrc = join(testExternalDir, "gh-plugin");
-    mkdirSync(pluginSrc, { recursive: true });
+    // Pre-create the plugin directory with a package.json so the npm install
+    // branch is reached (git clone is mocked and doesn't create any files).
+    const pluginDir = join(testPluginsDir, "gh-plugin");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(
+      join(pluginDir, "package.json"),
+      JSON.stringify({ name: "gh-plugin", version: "1.0.0" }),
+    );
 
     await installPlugin("github:test-org/gh-plugin");
 
