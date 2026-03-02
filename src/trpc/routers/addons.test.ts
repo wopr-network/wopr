@@ -155,7 +155,7 @@ describe("addons router", () => {
 
   describe("auth guard", () => {
     it("rejects unauthenticated calls with UNAUTHORIZED", async () => {
-      const caller = appRouter.createCaller(unauthCtx() as any);
+      const caller = appRouter.createCaller(unauthCtx());
       await expect(caller.addons.catalog()).rejects.toThrow(TRPCError);
       await expect(caller.addons.catalog()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
