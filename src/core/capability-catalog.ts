@@ -38,7 +38,7 @@ export interface CapabilityPluginRef {
  */
 function hostedDefaults(): { baseUrl: string } {
   return {
-    baseUrl: "https://api.wopr.bot",
+    baseUrl: process.env.WOPR_API_BASE_URL || "https://api.wopr.bot",
   };
 }
 
