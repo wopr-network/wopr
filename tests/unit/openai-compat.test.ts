@@ -237,6 +237,101 @@ describe("OpenAI Compatibility Layer", () => {
   });
 
   // ==========================================================================
+  // Token usage tests
+  // ==========================================================================
+
+  describe("token usage", () => {
+    it("returns token usage from inject result", async () => {
+      vi.mocked(inject).mockResolvedValueOnce({
+        response: "Hello world",
+        sessionId: "test-session-id",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      });
+
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.usage).toEqual({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 });
+    });
+
+    it("returns zero usage when provider does not report tokens", async () => {
+      vi.mocked(inject).mockResolvedValueOnce({ response: "Hello", sessionId: "test-session-id" });
+
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "anthropic", messages: [{ role: "user", content: "Hello" }] }),
+      });
+
+      const data = await res.json();
+      expect(data.usage).toEqual({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+    });
+
+    it("includes usage in final SSE chunk when stream_options.include_usage is true", async () => {
+      vi.mocked(inject).mockImplementation(async (_name: string, _message: string, options?: any) => {
+        if (options?.onStream) {
+          options.onStream({ type: "text", content: "Hello" });
+          options.onStream({ type: "complete", content: "", usage: { inputTokens: 10, outputTokens: 5 } });
+        }
+        return { response: "Hello", sessionId: "test-session-id", usage: { inputTokens: 10, outputTokens: 5 } };
+      });
+
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user", content: "Hello" }],
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      const events = text
+        .split("\n\n")
+        .filter((line) => line.startsWith("data: ") && !line.includes("[DONE]"))
+        .map((line) => JSON.parse(line.replace("data: ", "")));
+
+      const finalChunk = events.find((e: any) => e.choices?.[0]?.finish_reason === "stop");
+      expect(finalChunk).toBeDefined();
+      expect(finalChunk.usage).toEqual({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 });
+    });
+
+    it("does NOT include usage in final SSE chunk when stream_options is absent", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "anthropic", messages: [{ role: "user", content: "Hello" }], stream: true }),
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      const events = text
+        .split("\n\n")
+        .filter((line) => line.startsWith("data: ") && !line.includes("[DONE]"))
+        .map((line) => JSON.parse(line.replace("data: ", "")));
+
+      const finalChunk = events.find((e: any) => e.choices?.[0]?.finish_reason === "stop");
+      expect(finalChunk).toBeDefined();
+      expect(finalChunk.usage).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
   // POST /v1/chat/completions - Validation
   // ==========================================================================
 

@@ -27,6 +27,7 @@ export interface InjectOptions {
 export interface InjectResult {
   response: string;
   sessionId: string;
+  usage?: { inputTokens: number; outputTokens: number };
 }
 
 /**
