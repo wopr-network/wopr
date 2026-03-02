@@ -3,10 +3,18 @@ import { join, resolve, sep } from "node:path";
 import yaml from "js-yaml";
 import { type BotProfile, botProfileSchema } from "./types.js";
 
+export interface IProfileStore {
+  init(): Promise<void>;
+  save(profile: BotProfile): Promise<void>;
+  get(id: string): Promise<BotProfile | null>;
+  list(): Promise<BotProfile[]>;
+  delete(id: string): Promise<boolean>;
+}
+
 /**
  * Persists bot profiles as YAML files in a data directory.
  */
-export class ProfileStore {
+export class ProfileStore implements IProfileStore {
   constructor(private readonly dataDir: string) {}
 
   async init(): Promise<void> {

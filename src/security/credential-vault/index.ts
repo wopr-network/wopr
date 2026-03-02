@@ -17,6 +17,7 @@ export type {
   CreateCredentialInput,
   CredentialSummary,
   DecryptedCredential,
+  ICredentialVaultStore,
   RotateCredentialInput,
 } from "./store.js";
 export { CredentialVaultStore, getVaultEncryptionKey } from "./store.js";

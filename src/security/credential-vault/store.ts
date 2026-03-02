@@ -59,6 +59,18 @@ export interface DecryptedCredential {
 // Store
 // ---------------------------------------------------------------------------
 
+export interface ICredentialVaultStore {
+  create(input: CreateCredentialInput): Promise<string>;
+  list(provider?: string): Promise<CredentialSummary[]>;
+  getById(id: string): Promise<CredentialSummary | null>;
+  decrypt(id: string): Promise<DecryptedCredential | null>;
+  getActiveForProvider(provider: string): Promise<DecryptedCredential[]>;
+  rotate(input: RotateCredentialInput): Promise<boolean>;
+  setActive(id: string, isActive: boolean, changedBy: string): Promise<boolean>;
+  markValidated(id: string): Promise<boolean>;
+  delete(id: string, deletedBy: string): Promise<boolean>;
+}
+
 /**
  * Credential vault store — encrypted CRUD for platform-level provider API keys.
  *
@@ -68,7 +80,7 @@ export interface DecryptedCredential {
  * - Plaintext keys are never logged, persisted, or returned in list operations.
  * - All mutations are audit-logged.
  */
-export class CredentialVaultStore {
+export class CredentialVaultStore implements ICredentialVaultStore {
   private readonly repo: ICredentialRepository;
   private readonly encryptionKey: Buffer;
   private readonly auditLog: AdminAuditLog | null;

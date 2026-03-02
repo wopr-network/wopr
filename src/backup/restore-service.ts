@@ -1,6 +1,6 @@
 import { logger } from "../config/logger.js";
 import type { INodeCommandBus } from "../fleet/node-command-bus.js";
-import type { RestoreLogStore } from "./restore-log-store.js";
+import type { IRestoreLogStore } from "./restore-log-store.js";
 import type { SpacesClient } from "./spaces-client.js";
 
 export interface RestoreResult {
@@ -15,12 +15,12 @@ export interface RestoreResult {
 export class RestoreService {
   private readonly spaces: SpacesClient;
   private readonly commandBus: INodeCommandBus;
-  private readonly restoreLog: RestoreLogStore;
+  private readonly restoreLog: IRestoreLogStore;
 
   constructor(opts: {
     spaces: SpacesClient;
     commandBus: INodeCommandBus;
-    restoreLog: RestoreLogStore;
+    restoreLog: IRestoreLogStore;
   }) {
     this.spaces = opts.spaces;
     this.commandBus = opts.commandBus;

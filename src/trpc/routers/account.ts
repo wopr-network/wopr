@@ -10,7 +10,7 @@
 
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import type { AccountDeletionStore } from "../../account/deletion-store.js";
+import type { IAccountDeletionStore } from "../../account/deletion-store.js";
 import type { NotificationService } from "../../email/notification-service.js";
 import { router, tenantProcedure } from "../init.js";
 
@@ -19,7 +19,7 @@ import { router, tenantProcedure } from "../init.js";
 // ---------------------------------------------------------------------------
 
 export interface AccountRouterDeps {
-  getDeletionStore: () => AccountDeletionStore;
+  getDeletionStore: () => IAccountDeletionStore;
   getNotificationService?: () => NotificationService;
   /** Suspend all bots for the given tenant. */
   suspendBots?: (tenantId: string) => void;

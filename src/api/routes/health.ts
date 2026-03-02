@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { BackupStatusStore } from "../../backup/backup-status-store.js";
+import type { IBackupStatusStore } from "../../backup/backup-status-store.js";
 import { getBackupStatusStore } from "../../fleet/services.js";
 
-function getHealthStore(): BackupStatusStore | null {
+function getHealthStore(): IBackupStatusStore | null {
   try {
     return getBackupStatusStore();
   } catch {
@@ -15,7 +15,7 @@ function getHealthStore(): BackupStatusStore | null {
 // Public, unauthenticated, used by load balancers and monitoring.
 // Note: tRPC settings.health also exists as a tRPC-level health check
 // for the tRPC adapter itself — both are intentional.
-export function createHealthRoutes(storeFactory?: () => BackupStatusStore | null): Hono {
+export function createHealthRoutes(storeFactory?: () => IBackupStatusStore | null): Hono {
   const routes = new Hono();
   const resolveStore = storeFactory ?? getHealthStore;
 

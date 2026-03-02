@@ -26,6 +26,7 @@ export type {
   BulkResult,
   BulkSuspendInput,
   ExportField,
+  IBulkOperationsStore,
 } from "./bulk/bulk-operations-store.js";
 export { BulkOperationsStore, MAX_BULK_SIZE, UNDO_WINDOW_MS } from "./bulk/bulk-operations-store.js";
 export type { IAdminNotesRepository } from "./notes/admin-notes-repository.js";
