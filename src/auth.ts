@@ -24,7 +24,7 @@ const CLAUDE_CODE_CREDENTIALS = join(homedir(), ".claude", ".credentials.json");
 // Anthropic OAuth configuration
 const OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const OAUTH_AUTH_URL = "https://claude.ai/oauth/authorize";
-const OAUTH_TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
+const OAUTH_TOKEN_URL = process.env.WOPR_OAUTH_TOKEN_URL ?? "https://console.anthropic.com/v1/oauth/token";
 const OAUTH_SCOPES = ["org:create_api_key", "user:profile", "user:inference"];
 
 // Required beta headers for Claude Code
