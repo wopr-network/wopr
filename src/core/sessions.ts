@@ -78,13 +78,17 @@ let queueInitialized = false;
 // Session cleaner singleton
 let sessionCleaner: SessionCleaner | null = null;
 
+function posEnv(key: string, fallback: number): number {
+  const v = Number(process.env[key]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
 export function startSessionCleaner(config?: { ttlMs?: number; maxCount?: number; cleanupIntervalMs?: number }): void {
   if (sessionCleaner) return;
   sessionCleaner = new SessionCleaner({
-    ttlMs: config?.ttlMs ?? (Number(process.env.WOPR_SESSION_TTL_MS) || 24 * 60 * 60 * 1000),
-    maxCount: config?.maxCount ?? (Number(process.env.WOPR_SESSION_MAX_COUNT) || 1000),
-    cleanupIntervalMs:
-      config?.cleanupIntervalMs ?? (Number(process.env.WOPR_SESSION_CLEANUP_INTERVAL_MS) || 5 * 60 * 1000),
+    ttlMs: config?.ttlMs ?? posEnv("WOPR_SESSION_TTL_MS", 24 * 60 * 60 * 1000),
+    maxCount: config?.maxCount ?? posEnv("WOPR_SESSION_MAX_COUNT", 1000),
+    cleanupIntervalMs: config?.cleanupIntervalMs ?? posEnv("WOPR_SESSION_CLEANUP_INTERVAL_MS", 5 * 60 * 1000),
   });
   sessionCleaner.start();
 }
