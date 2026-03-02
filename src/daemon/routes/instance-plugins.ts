@@ -14,11 +14,13 @@ import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { logger } from "../../logger.js";
 import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
+import { checkPluginDependencies } from "../../plugins/dependency-check.js";
 import {
   disablePlugin,
   enablePlugin,
   getAllPluginManifests,
   getConfigSchemas,
+  getInstalledPlugins,
   getLoadedPlugin,
   listPlugins,
   loadPlugin,
@@ -196,7 +198,30 @@ instancePluginsRouter.post(
     }
 
     try {
+      // ── Dependency check: block install if required plugins are missing ──
       const { plugin } = await installAndActivatePlugin(source);
+
+      const manifest = readPluginManifest(plugin.path);
+      if (manifest?.dependencies?.length) {
+        const installed = await getInstalledPlugins();
+        const installedNames = installed.map((p) => p.name);
+        const depCheck = checkPluginDependencies(manifest.dependencies, installedNames);
+        if (!depCheck.ok) {
+          try {
+            await unloadPlugin(plugin.name);
+            await removePlugin(plugin.name);
+          } catch (_) {
+            // best-effort rollback
+          }
+          return c.json(
+            {
+              error: `Missing required dependencies: ${depCheck.missing.join(", ")}`,
+              missingDependencies: depCheck.missing,
+            },
+            422,
+          );
+        }
+      }
 
       return c.json(
         {

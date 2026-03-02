@@ -12,12 +12,14 @@ import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { logger } from "../../logger.js";
 import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
+import { checkPluginDependencies } from "../../plugins/dependency-check.js";
 import {
   addRegistry,
   disablePlugin,
   enablePlugin,
   getAllPluginManifests,
   getConfigSchemas,
+  getInstalledPlugins,
   getLoadedPlugin,
   getPluginExtension,
   getPluginState,
@@ -167,6 +169,43 @@ pluginsRouter.get(
   },
 );
 
+/**
+ * GET /api/plugins/:name/check-deps
+ *
+ * Pre-flight check: returns which of the plugin's manifest.dependencies are
+ * not yet installed. The UI can call this before confirming install to show
+ * the user which required plugins are missing.
+ */
+pluginsRouter.get(
+  "/:name/check-deps",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Check plugin dependency satisfaction",
+    responses: {
+      200: { description: "Dependency check result" },
+      404: { description: "Plugin not found" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+
+    const plugins = await listPlugins();
+    const plugin = plugins.find((p: PluginEntry) => p.name === name);
+    if (!plugin) {
+      return c.json({ error: "Plugin not found" }, 404);
+    }
+
+    const runtimeManifests = getAllPluginManifests();
+    const manifest = runtimeManifests.get(name) || readPluginManifest(plugin.path);
+    const installed = await getInstalledPlugins();
+    const installedNames = installed.map((p) => p.name);
+
+    const result = checkPluginDependencies(manifest?.dependencies, installedNames);
+    return c.json(result);
+  },
+);
+
 // Search npm registry for available wopr-plugin-* packages
 pluginsRouter.get(
   "/available",
@@ -239,7 +278,31 @@ async function handleInstall(c: Context) {
   }
 
   try {
+    // ── Dependency check: block install if required plugins are missing ──
     const { plugin } = await installAndActivatePlugin(source);
+
+    const manifest = readPluginManifest(plugin.path);
+    if (manifest?.dependencies?.length) {
+      const installed = await getInstalledPlugins();
+      const installedNames = installed.map((p) => p.name);
+      const depCheck = checkPluginDependencies(manifest.dependencies, installedNames);
+      if (!depCheck.ok) {
+        // Rollback: uninstall the plugin we just installed
+        try {
+          await unloadPlugin(plugin.name);
+          await removePlugin(plugin.name);
+        } catch (_) {
+          // best-effort rollback
+        }
+        return c.json(
+          {
+            error: `Missing required dependencies: ${depCheck.missing.join(", ")}`,
+            missingDependencies: depCheck.missing,
+          },
+          422,
+        );
+      }
+    }
 
     return c.json(
       {

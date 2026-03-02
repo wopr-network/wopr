@@ -48,6 +48,7 @@ const mockRemoveRegistry = vi.fn();
 const mockGetWebUiExtensions = vi.fn();
 const mockGetUiComponents = vi.fn();
 const mockGetPluginExtension = vi.fn();
+const mockGetInstalledPlugins = vi.fn();
 
 vi.mock("../../../src/plugins.js", () => ({
   listPlugins: mockListPlugins,
@@ -65,6 +66,7 @@ vi.mock("../../../src/plugins.js", () => ({
   searchPlugins: mockSearchPlugins,
   listRegistries: mockListRegistries,
   addRegistry: mockAddRegistry,
+  getInstalledPlugins: mockGetInstalledPlugins,
   removeRegistry: mockRemoveRegistry,
   getWebUiExtensions: mockGetWebUiExtensions,
   getUiComponents: mockGetUiComponents,
@@ -115,6 +117,12 @@ vi.mock("hono-rate-limiter", () => ({
   rateLimiter: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
+// dependency-check — real implementation is simple enough; mock for route isolation
+const mockCheckPluginDependencies = vi.fn();
+vi.mock("../../../src/plugins/dependency-check.js", () => ({
+  checkPluginDependencies: mockCheckPluginDependencies,
+}));
+
 // Now import the router AFTER mocks are set up
 const { pluginsRouter } = await import("../../../src/daemon/routes/plugins.js");
 
@@ -147,6 +155,9 @@ beforeEach(() => {
   mockInject.mockResolvedValue({ response: "" });
   mockCheckHealth.mockResolvedValue(undefined);
   mockReadPluginManifest.mockReturnValue(undefined);
+  mockGetInstalledPlugins.mockResolvedValue([]);
+  // Default: all dependencies satisfied
+  mockCheckPluginDependencies.mockReturnValue({ ok: true, missing: [] });
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -867,5 +878,98 @@ describe("validatePluginName — edge cases via routes", () => {
     mockLoadPlugin.mockResolvedValue(undefined);
     const res = await req("POST", "/install", { source: "org/plugin.v2" });
     expect(res.status).toBe(201);
+  });
+});
+
+describe("POST /install — dependency check (WOP-1461)", () => {
+  beforeEach(() => {
+    mockInstallPlugin.mockResolvedValue(SAMPLE_PLUGIN);
+    mockEnablePlugin.mockResolvedValue(undefined);
+    mockLoadPlugin.mockResolvedValue(undefined);
+  });
+
+  it("returns 201 when plugin has no dependencies", async () => {
+    mockReadPluginManifest.mockReturnValue({ dependencies: [] });
+    mockCheckPluginDependencies.mockReturnValue({ ok: true, missing: [] });
+    const res = await req("POST", "/install", { source: "test-plugin" });
+    expect(res.status).toBe(201);
+  });
+
+  it("returns 422 when required dependency is not installed", async () => {
+    mockReadPluginManifest.mockReturnValue({
+      dependencies: ["@wopr-network/plugin-discord"],
+    });
+    mockCheckPluginDependencies.mockReturnValue({ ok: false, missing: ["discord"] });
+    const res = await req("POST", "/install", { source: "meeting-transcriber" });
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error).toMatch(/Missing required dependencies/);
+    expect(json.missingDependencies).toEqual(["discord"]);
+  });
+
+  it("returns 201 when all dependencies are already installed", async () => {
+    mockReadPluginManifest.mockReturnValue({
+      dependencies: ["@wopr-network/plugin-discord"],
+    });
+    mockGetInstalledPlugins.mockResolvedValue([
+      { ...SAMPLE_PLUGIN, name: "discord" },
+    ]);
+    mockCheckPluginDependencies.mockReturnValue({ ok: true, missing: [] });
+    const res = await req("POST", "/install", { source: "meeting-transcriber" });
+    expect(res.status).toBe(201);
+  });
+
+  it("skips dep check when manifest has no dependencies field", async () => {
+    mockReadPluginManifest.mockReturnValue({ capabilities: ["chat"] });
+    const res = await req("POST", "/install", { source: "test-plugin" });
+    expect(res.status).toBe(201);
+    expect(mockCheckPluginDependencies).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /:name/check-deps (WOP-1461)", () => {
+  it("returns 404 when plugin not found", async () => {
+    mockListPlugins.mockResolvedValue([]);
+    const res = await req("GET", "/unknown-plugin/check-deps");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns ok:true with empty missing for plugin with no deps", async () => {
+    mockListPlugins.mockResolvedValue([SAMPLE_PLUGIN]);
+    mockReadPluginManifest.mockReturnValue({ capabilities: ["chat"] });
+    mockGetInstalledPlugins.mockResolvedValue([]);
+    mockCheckPluginDependencies.mockReturnValue({ ok: true, missing: [] });
+    const res = await req("GET", "/test-plugin/check-deps");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+    expect(json.missing).toEqual([]);
+  });
+
+  it("returns ok:false with missing deps when dependency not installed", async () => {
+    mockListPlugins.mockResolvedValue([SAMPLE_PLUGIN]);
+    mockReadPluginManifest.mockReturnValue({
+      dependencies: ["@wopr-network/plugin-discord"],
+    });
+    mockGetInstalledPlugins.mockResolvedValue([]);
+    mockCheckPluginDependencies.mockReturnValue({ ok: false, missing: ["discord"] });
+    const res = await req("GET", "/test-plugin/check-deps");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(false);
+    expect(json.missing).toEqual(["discord"]);
+  });
+
+  it("returns ok:true when all deps are installed", async () => {
+    mockListPlugins.mockResolvedValue([SAMPLE_PLUGIN]);
+    mockReadPluginManifest.mockReturnValue({
+      dependencies: ["@wopr-network/plugin-discord"],
+    });
+    mockGetInstalledPlugins.mockResolvedValue([{ ...SAMPLE_PLUGIN, name: "discord" }]);
+    mockCheckPluginDependencies.mockReturnValue({ ok: true, missing: [] });
+    const res = await req("GET", "/test-plugin/check-deps");
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
   });
 });
