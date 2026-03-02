@@ -460,7 +460,7 @@ describe("switchProvider", () => {
     const installed = await getInstalledPlugins();
     const target = installed.find((p) => p.name === "new-plugin");
 
-    expect(target).toBeDefined();
+    expect(target).toMatchObject({ name: "new-plugin" });
     expect(loadedPlugins.has("old-plugin")).toBe(false);
   });
 

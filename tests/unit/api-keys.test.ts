@@ -49,7 +49,7 @@ describe("API Key Management (WOP-209)", () => {
       expect(keyInfo.name).toBe("My Key");
       expect(keyInfo.scope).toBe("full");
       expect(keyInfo.keyPrefix).toBe(rawKey.slice(0, 12));
-      expect(keyInfo.id).toBeDefined();
+      expect(keyInfo.id).toBeTypeOf("string");
       expect(keyInfo.createdAt).toBeGreaterThan(0);
       expect(keyInfo.expiresAt).toBeNull();
       expect(keyInfo.lastUsedAt).toBeNull();
@@ -242,7 +242,7 @@ describe("API Key Management (WOP-209)", () => {
       expect(body.key).toMatch(/^wopr_/);
       expect(body.name).toBe("CI Key");
       expect(body.scope).toBe("read-only");
-      expect(body.id).toBeDefined();
+      expect(body.id).toBeTypeOf("string");
     });
 
     it("POST /api/keys should reject missing name", async () => {

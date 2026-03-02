@@ -39,8 +39,7 @@ describe("CapabilityRegistry", () => {
 
     const capabilities = registry.listCapabilities();
     const imageGen = capabilities.find((c) => c.capability === "image-gen");
-    expect(imageGen).toBeDefined();
-    expect(imageGen?.providerCount).toBe(1);
+    expect(imageGen).toMatchObject({ capability: "image-gen", providerCount: 1 });
   });
 
   it("should allow multiple providers for same capability", () => {
@@ -109,8 +108,7 @@ describe("CapabilityRegistry", () => {
     registry.registerProvider("tts", { id: "elevenlabs", name: "ElevenLabs" });
 
     const provider = registry.getProvider("tts", "chatterbox");
-    expect(provider).toBeDefined();
-    expect(provider?.id).toBe("chatterbox");
+    expect(provider).toMatchObject({ id: "chatterbox" });
 
     const missing = registry.getProvider("tts", "nonexistent");
     expect(missing).toBeUndefined();

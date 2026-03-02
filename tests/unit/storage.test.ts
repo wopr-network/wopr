@@ -119,7 +119,7 @@ describe("Storage Module (WOP-545)", () => {
       resetStorage();
       // Getting a new instance should work
       const newStorage = getStorage(testDbPath);
-      expect(newStorage).toBeDefined();
+      expect(newStorage).toHaveProperty("getRepository");
     });
   });
 
@@ -212,7 +212,7 @@ describe("Storage Module (WOP-545)", () => {
       const result = await repo.raw('PRAGMA index_list("test_users")');
       const indexes = result as Array<{ name: string }>;
       const nameIndex = indexes.find(idx => idx.name === "idx_test_users_name");
-      expect(nameIndex).toBeDefined();
+      expect(nameIndex).toMatchObject({ name: "idx_test_users_name" });
     });
 
     it("should create multi-column index", async () => {
@@ -220,7 +220,7 @@ describe("Storage Module (WOP-545)", () => {
       const result = await repo.raw('PRAGMA index_list("test_users")');
       const indexes = result as Array<{ name: string }>;
       const multiIndex = indexes.find(idx => idx.name === "idx_test_users_age_name");
-      expect(multiIndex).toBeDefined();
+      expect(multiIndex).toMatchObject({ name: "idx_test_users_age_name" });
     });
 
     it("should create non-unique index by default", async () => {

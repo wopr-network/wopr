@@ -264,7 +264,7 @@ describe("createPluginHookManager", () => {
       hooks.on("session:create", () => { order.push(2); }, { priority: 100 });
 
       const busListener = busListeners.get("session:create");
-      expect(busListener).toBeDefined();
+      expect(busListener).toBeTypeOf("function");
       await busListener!({ session: "test" }, "session:create");
 
       expect(order).toEqual([1, 2, 3]);
@@ -338,7 +338,7 @@ describe("createPluginHookManager", () => {
         "session:beforeInject",
       );
 
-      expect(receivedEvent).toBeDefined();
+      expect(receivedEvent).toMatchObject({ data: { session: "s1", message: "hello", from: "user" } });
       const evt = receivedEvent as Record<string, unknown>;
       expect(evt["data"]).toEqual({ session: "s1", message: "hello", from: "user" });
       expect(evt["session"]).toBe("s1");
@@ -411,7 +411,7 @@ describe("createPluginHookManager", () => {
         "channel:message",
       );
 
-      expect(receivedEvent).toBeDefined();
+      expect((receivedEvent as Record<string, unknown>)["data"]).toEqual({ channel: { type: "discord", id: "123" }, message: "hi", from: "user" });
       expect(typeof (receivedEvent as Record<string, unknown>)["preventDefault"]).toBe("function");
     });
   });

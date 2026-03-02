@@ -143,7 +143,7 @@ describe("Rate Limiting Middleware", () => {
     // draft-6 headers
     expect(res.headers.get("RateLimit-Limit")).toBe("10");
     expect(res.headers.get("RateLimit-Remaining")).toBe("9");
-    expect(res.headers.get("RateLimit-Reset")).toBeTruthy();
+    expect(Number(res.headers.get("RateLimit-Reset"))).toBeGreaterThan(0);
   });
 
   it("should use default config (60 req/min) when no config provided", async () => {

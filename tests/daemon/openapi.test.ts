@@ -203,7 +203,6 @@ describe("OpenAPI endpoints (WOP-522)", () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.openapi).toMatch(/^3\.\d+\.\d+$/);
-      expect(json.info).toBeDefined();
       expect(json.info.title).toBe("WOPR Daemon API");
     });
 
@@ -225,7 +224,6 @@ describe("OpenAPI endpoints (WOP-522)", () => {
       const app = createApp();
       const res = await app.request("/openapi.json");
       const json = await res.json();
-      expect(json.components?.securitySchemes?.bearerAuth).toBeDefined();
       expect(json.components.securitySchemes.bearerAuth.type).toBe("http");
       expect(json.components.securitySchemes.bearerAuth.scheme).toBe("bearer");
     });
@@ -285,9 +283,9 @@ describe("OpenAPI endpoints (WOP-522)", () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.title).toBe("WOPR WebSocket API");
-      expect(json.connection).toBeDefined();
-      expect(json.clientMessages).toBeDefined();
-      expect(json.serverMessages).toBeDefined();
+      expect(json.connection).toHaveProperty("endpoints");
+      expect(json.clientMessages).toHaveProperty("auth");
+      expect(json.serverMessages).toHaveProperty("connected");
     });
   });
 
@@ -299,10 +297,9 @@ describe("OpenAPI endpoints (WOP-522)", () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.type).toBe("object");
-      expect(json.properties).toBeDefined();
-      expect(json.properties.name).toBeDefined();
-      expect(json.properties.version).toBeDefined();
-      expect(json.properties.capabilities).toBeDefined();
+      expect(json.properties.name).toHaveProperty("type");
+      expect(json.properties.version).toHaveProperty("type");
+      expect(json.properties.capabilities).toHaveProperty("type");
     });
   });
 
@@ -342,9 +339,9 @@ describe("OpenAPI endpoints (WOP-522)", () => {
       const { websocketDocs } = await import("../../src/daemon/openapi/websocket-docs.js");
       expect(websocketDocs.title).toBe("WOPR WebSocket API");
       expect(websocketDocs.connection.endpoints).toBeInstanceOf(Array);
-      expect(websocketDocs.clientMessages.auth).toBeDefined();
-      expect(websocketDocs.clientMessages.subscribe).toBeDefined();
-      expect(websocketDocs.serverMessages.connected).toBeDefined();
+      expect(websocketDocs.clientMessages.auth).toHaveProperty("description");
+      expect(websocketDocs.clientMessages.subscribe).toHaveProperty("description");
+      expect(websocketDocs.serverMessages.connected).toHaveProperty("description");
     });
   });
 
