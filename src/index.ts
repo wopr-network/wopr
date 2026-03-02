@@ -63,12 +63,11 @@ import { DrizzleSpendingCapStore } from "./fleet/spending-cap-repository.js";
 import { mountGateway } from "./gateway/index.js";
 import { createCachedRateLookup } from "./gateway/rate-lookup.js";
 import type { GatewayTenant } from "./gateway/types.js";
-import { buildAddonCosts } from "./monetization/addons/addon-cron.js";
 import { BudgetChecker } from "./monetization/budget/budget-checker.js";
 import { Credit } from "./monetization/credit.js";
 import { runDividendCron } from "./monetization/credits/dividend-cron.js";
 import { runDividendDigestCron } from "./monetization/credits/dividend-digest-cron.js";
-import { buildResourceTierCosts, runRuntimeDeductions } from "./monetization/credits/runtime-cron.js";
+import { startRuntimeScheduler } from "./monetization/credits/runtime-scheduler.js";
 import { DrizzleWebhookSeenRepository } from "./monetization/drizzle-webhook-seen-repository.js";
 import { MeterEmitter } from "./monetization/metering/emitter.js";
 import { runReconciliation } from "./monetization/metering/reconciliation-cron.js";
@@ -857,42 +856,20 @@ if (process.env.NODE_ENV !== "test") {
     logger.info("better-auth migrations applied");
   }
 
-  // Daily runtime deduction cron — charges tenants for active bots + resource tier surcharges.
-  // Runs once every 24 h (offset by 1 min from midnight to avoid thundering herd).
+  // Runtime deduction scheduler — charges tenants for active bots + resource tier surcharges.
+  // Runs once per day. referenceId is date-only so running more frequently wastes DB round-trips.
   {
-    const cronLedger = getCreditLedger();
-    const botInstanceRepo = getBotInstanceRepo();
-    const getResourceTierCosts = buildResourceTierCosts(botInstanceRepo, async (tenantId) => {
-      const bots = await botInstanceRepo.listByTenant(tenantId);
-      return bots.filter((b) => b.billingState === "active").map((b) => b.id);
+    const runtimeScheduler = startRuntimeScheduler({
+      ledger: getCreditLedger(),
+      botInstanceRepo: getBotInstanceRepo(),
+      tenantAddonRepo: getTenantAddonRepo(),
+      onSuspend: (tenantId) => {
+        logger.warn("Tenant suspended due to insufficient credits", { tenantId });
+      },
     });
-    const getAddonCosts = buildAddonCosts(getTenantAddonRepo());
-    const DAILY_MS = 24 * 60 * 60 * 1000;
-    setInterval(() => {
-      const today = new Date().toISOString().slice(0, 10);
-      void runRuntimeDeductions({
-        ledger: cronLedger,
-        date: today,
-        getActiveBotCount: async (tenantId) => {
-          const bots = await botInstanceRepo.listByTenant(tenantId);
-          return bots.filter((b) => b.billingState === "active").length;
-        },
-        getResourceTierCosts,
-        getAddonCosts,
-        onSuspend: (tenantId) => {
-          logger.warn("Tenant suspended due to insufficient credits", { tenantId });
-        },
-      })
-        .then((result) => {
-          logger.info("Daily runtime deductions complete", result);
-        })
-        .catch((err) => {
-          logger.error("Daily runtime deductions failed", {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
-    }, DAILY_MS);
-    logger.info("Daily runtime deduction cron scheduled (24h interval)");
+    process.on("SIGTERM", runtimeScheduler.stop);
+    process.on("SIGINT", runtimeScheduler.stop);
+    logger.info("Runtime deduction scheduler started (24h interval)");
   }
 
   // Daily community dividend distribution — pool = sum(purchases) × matchRate, split among active users.
