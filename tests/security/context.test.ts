@@ -375,10 +375,10 @@ describe("Security Context Module", () => {
         },
       });
 
-      const source = createInjectionSource("plugin"); // trusted
+      const source = createInjectionSource("plugin"); // semi-trusted
       const ctx = new SecurityContext(source, "gw-session");
 
-      expect(ctx.canForward()).toBe(true);
+      expect(ctx.canForward()).toBe(false);
     });
 
     it("should not canForward without cross.inject", async () => {
@@ -546,7 +546,7 @@ describe("Security Context Module", () => {
       const ctx = createPluginContext("main", "my-plugin");
 
       expect(ctx.source.type).toBe("plugin");
-      expect(ctx.trustLevel).toBe("trusted");
+      expect(ctx.trustLevel).toBe("semi-trusted");
       expect(ctx.source.identity?.pluginName).toBe("my-plugin");
     });
 
