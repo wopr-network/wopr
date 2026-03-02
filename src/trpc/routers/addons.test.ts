@@ -10,6 +10,7 @@ import { ADDON_KEYS } from "../../monetization/addons/addon-catalog.js";
 import { DrizzleTenantAddonRepository } from "../../monetization/addons/addon-repository.js";
 import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../../test/db.js";
 import { appRouter } from "../index.js";
+import type { TRPCContext } from "../init.js";
 import { setTrpcOrgMemberRepo } from "../init.js";
 import { setAddonRouterDeps } from "./addons.js";
 
@@ -162,7 +163,7 @@ describe("addons router", () => {
 
     it("rejects calls without tenant context with BAD_REQUEST", async () => {
       const ctx = { user: { id: "user-no-tenant", roles: ["user"] }, tenantId: undefined };
-      const caller = appRouter.createCaller(ctx as any);
+      const caller = appRouter.createCaller(ctx as TRPCContext);
       await expect(caller.addons.list()).rejects.toThrow(TRPCError);
       await expect(caller.addons.list()).rejects.toMatchObject({ code: "BAD_REQUEST" });
     });
