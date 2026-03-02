@@ -310,6 +310,39 @@ describe("OpenAI Compatibility Layer", () => {
       expect(finalChunk.usage).toEqual({ prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 });
     });
 
+    it("returns zero usage in final SSE chunk when include_usage is true but provider reports no usage", async () => {
+      vi.mocked(inject).mockImplementation(async (_name: string, _message: string, options?: any) => {
+        if (options?.onStream) {
+          options.onStream({ type: "text", content: "Hello" });
+          options.onStream({ type: "complete", content: "" }); // no usage field
+        }
+        return { response: "Hello", sessionId: "test-session-id" }; // no usage field
+      });
+
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user", content: "Hello" }],
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      const events = text
+        .split("\n\n")
+        .filter((line) => line.startsWith("data: ") && !line.includes("[DONE]"))
+        .map((line) => JSON.parse(line.replace("data: ", "")));
+
+      const finalChunk = events.find((e: any) => e.choices?.[0]?.finish_reason === "stop");
+      expect(finalChunk).toBeDefined();
+      expect(finalChunk.usage).toEqual({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+    });
+
     it("does NOT include usage in final SSE chunk when stream_options is absent", async () => {
       const app = createTestApp();
       const res = await app.request("/v1/chat/completions", {

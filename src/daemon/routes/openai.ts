@@ -350,11 +350,11 @@ openaiRouter.post(
               },
             ],
           };
-          if (body.stream_options?.include_usage && streamUsage) {
+          if (body.stream_options?.include_usage) {
             finalChunk.usage = {
-              prompt_tokens: streamUsage.inputTokens,
-              completion_tokens: streamUsage.outputTokens,
-              total_tokens: streamUsage.inputTokens + streamUsage.outputTokens,
+              prompt_tokens: streamUsage?.inputTokens ?? 0,
+              completion_tokens: streamUsage?.outputTokens ?? 0,
+              total_tokens: (streamUsage?.inputTokens ?? 0) + (streamUsage?.outputTokens ?? 0),
             };
           }
           s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
