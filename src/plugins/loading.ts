@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { getCapabilityDependencyGraph } from "../core/capability-deps.js";
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
+import { config as centralConfig } from "../core/config.js";
 import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
 import { logger, shouldLogStack } from "../logger.js";
 import type { InstallMethod, PluginManifest, PluginRequirements } from "../plugin-types/manifest.js";
@@ -24,6 +25,33 @@ import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContex
 import { createPluginContext } from "./context-factory.js";
 import { enablePlugin, getInstalledPlugins, installPlugin } from "./installation.js";
 import { configSchemas, loadedPlugins, pluginManifests, pluginStates } from "./state.js";
+
+/**
+ * Validate plugin config against its declared configSchema.
+ * Throws if any required field is missing or empty.
+ */
+function validatePluginConfig(pluginName: string, schema: import("../types.js").ConfigSchema): void {
+  const requiredFields = schema.fields.filter((f) => f.required);
+  if (requiredFields.length === 0) return;
+
+  const cfg = centralConfig.get();
+  const pluginConfig = (cfg.plugins?.data?.[pluginName] ?? {}) as Record<string, unknown>;
+
+  const missing: string[] = [];
+  for (const field of requiredFields) {
+    const value = pluginConfig[field.name];
+    if (value === undefined || value === null || value === "") {
+      missing.push(field.name);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Plugin ${pluginName} config validation failed: missing required fields: ${missing.join(", ")}. ` +
+        `Declare these in your config before loading the plugin.`,
+    );
+  }
+}
 
 /** Options for loading plugins */
 export interface LoadPluginOptions {
@@ -194,6 +222,14 @@ export async function loadPlugin(
 
   // Store
   loadedPlugins.set(installed.name, { plugin, context });
+
+  // ── Step 3.5: Validate config against schema (before init) ──
+  if (!options.skipInit) {
+    const schema = configSchemas.get(installed.name);
+    if (schema) {
+      validatePluginConfig(installed.name, schema);
+    }
+  }
 
   // ── Step 4: Initialize (skip for CLI commands) ──
   if (plugin.init && !options.skipInit) {
