@@ -910,6 +910,19 @@ describe("POST /install — dependency check (WOP-1461)", () => {
     expect(mockRemovePlugin).toHaveBeenCalledWith(SAMPLE_PLUGIN.name);
   });
 
+  it("returns 500 when dependency check fails and rollback also fails", async () => {
+    mockReadPluginManifest.mockReturnValue({
+      dependencies: ["@wopr-network/plugin-discord"],
+    });
+    mockCheckPluginDependencies.mockReturnValue({ ok: false, missing: ["discord"] });
+    mockRemovePlugin.mockRejectedValue(new Error("disk full"));
+    const res = await req("POST", "/install", { source: "meeting-transcriber" });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.error).toMatch(/rollback failed/);
+    expect(json.missingDependencies).toEqual(["discord"]);
+  });
+
   it("returns 201 when all dependencies are already installed", async () => {
     mockReadPluginManifest.mockReturnValue({
       dependencies: ["@wopr-network/plugin-discord"],

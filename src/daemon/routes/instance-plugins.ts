@@ -13,8 +13,8 @@ import { z } from "zod";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { logger } from "../../logger.js";
-import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
 import { checkPluginDependencies } from "../../plugins/dependency-check.js";
+import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
 import {
   disablePlugin,
   enablePlugin,
@@ -209,7 +209,24 @@ instancePluginsRouter.post(
         const depCheck = checkPluginDependencies(manifest.dependencies, installedNames);
         if (!depCheck.ok) {
           // Roll back: remove the just-installed artifact so it doesn't become orphaned
-          await removePlugin(plugin.name);
+          try {
+            await removePlugin(plugin.name);
+          } catch (rollbackErr) {
+            const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+            logger.error({
+              msg: "[instance-plugins] Dependency check failed and rollback failed",
+              plugin: plugin.name,
+              missingDependencies: depCheck.missing,
+              error: rollbackMessage,
+            });
+            return c.json(
+              {
+                error: "Missing required dependencies and rollback failed",
+                missingDependencies: depCheck.missing,
+              },
+              500,
+            );
+          }
           return c.json(
             {
               error: `Missing required dependencies: ${depCheck.missing.join(", ")}`,

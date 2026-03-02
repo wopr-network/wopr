@@ -12,8 +12,7 @@ vi.mock("../../src/plugins/loading.js", () => ({
     dep
       .replace(/^@wopr-network\/plugin-/, "")
       .replace(/^@wopr-network\//, "")
-      .replace(/^wopr-plugin-/, "")
-      .replace(/^plugin-/, ""),
+      .replace(/^wopr-plugin-/, ""),
 }));
 
 import { checkPluginDependencies } from "../../src/plugins/dependency-check.js";
