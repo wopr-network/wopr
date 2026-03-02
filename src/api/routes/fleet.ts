@@ -38,14 +38,20 @@ let _updater: ContainerUpdater | null = null;
 
 function getFleet(): FleetManager {
   if (!_fleet) {
+    // Only resolve DB-backed services when DATABASE_URL is available.
+    // In test environments that mock FleetManager, DATABASE_URL is absent and
+    // commandBus/instanceRepo are not needed (FleetManager gracefully handles
+    // undefined by skipping remote-node operations).
+    const commandBus = process.env.DATABASE_URL ? getCommandBus() : undefined;
+    const instanceRepo = process.env.DATABASE_URL ? getBotInstanceRepo() : undefined;
     _fleet = new FleetManager(
       docker,
       store,
       config.discovery,
       networkPolicy,
       getProxyManager(),
-      getCommandBus(),
-      getBotInstanceRepo(),
+      commandBus,
+      instanceRepo,
     );
   }
   return _fleet;
