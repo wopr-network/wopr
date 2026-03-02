@@ -47,7 +47,8 @@ export type DebitType =
   | "correction"
   | "resource_upgrade"
   | "storage_upgrade"
-  | "onboarding_llm";
+  | "onboarding_llm"
+  | "credit_expiry";
 
 export type TransactionType = CreditType | DebitType;
 
@@ -62,6 +63,7 @@ export interface CreditTransaction {
   fundingSource: string | null;
   attributedUserId: string | null;
   createdAt: string;
+  expiresAt: string | null;
 }
 
 export interface HistoryOptions {
@@ -100,7 +102,10 @@ export interface ICreditLedger {
     referenceId?: string,
     fundingSource?: string,
     attributedUserId?: string,
+    expiresAt?: string,
   ): Promise<CreditTransaction>;
+
+  expiredCredits(now: string): Promise<Array<{ id: string; tenantId: string; amount: Credit }>>;
 
   debit(
     tenantId: string,
@@ -167,6 +172,7 @@ export class DrizzleCreditLedger implements ICreditLedger {
     referenceId?: string,
     fundingSource?: string,
     attributedUserId?: string,
+    expiresAt?: string,
   ): Promise<CreditTransaction> {
     if (amount.isZero() || amount.isNegative()) {
       throw new Error("amount must be positive for credits");
@@ -197,6 +203,7 @@ export class DrizzleCreditLedger implements ICreditLedger {
         referenceId: referenceId ?? null,
         fundingSource: fundingSource ?? null,
         attributedUserId: attributedUserId ?? null,
+        expiresAt: expiresAt ?? null,
       };
 
       await tx.insert(creditTransactions).values(txn);
@@ -212,6 +219,7 @@ export class DrizzleCreditLedger implements ICreditLedger {
         fundingSource: txn.fundingSource ?? null,
         attributedUserId: txn.attributedUserId ?? null,
         createdAt: new Date().toISOString(),
+        expiresAt: expiresAt ?? null,
       };
     });
   }
@@ -280,6 +288,7 @@ export class DrizzleCreditLedger implements ICreditLedger {
         fundingSource: null,
         attributedUserId: txn.attributedUserId ?? null,
         createdAt: new Date().toISOString(),
+        expiresAt: null,
       };
     });
   }
@@ -349,6 +358,31 @@ export class DrizzleCreditLedger implements ICreditLedger {
         totalDebit: Credit.fromRaw(Number(r.totalDebitRaw)),
         transactionCount: r.transactionCount,
       }));
+  }
+
+  /** Return expired credit grant transactions not yet processed by the expiry cron. */
+  async expiredCredits(now: string): Promise<Array<{ id: string; tenantId: string; amount: Credit }>> {
+    const rows = await this.db
+      .select({
+        id: creditTransactions.id,
+        tenantId: creditTransactions.tenantId,
+        amount: creditTransactions.amount,
+      })
+      .from(creditTransactions)
+      .where(
+        and(
+          isNotNull(creditTransactions.expiresAt),
+          sql`${creditTransactions.expiresAt} <= ${now}`,
+          sql`${creditTransactions.amount} > 0`,
+        ),
+      );
+
+    const result: Array<{ id: string; tenantId: string; amount: Credit }> = [];
+    for (const row of rows) {
+      if (await this.hasReferenceId(`expiry:${row.id}`)) continue;
+      result.push(row);
+    }
+    return result;
   }
 
   /** List all tenants with positive balance (for cron deduction). */

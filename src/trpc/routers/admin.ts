@@ -173,6 +173,7 @@ export const adminRouter = router({
         tenantId: tenantIdSchema,
         amount_cents: z.number().int().positive(),
         reason: z.string().min(1),
+        expiresAt: z.string().datetime().optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -184,13 +185,17 @@ export const adminRouter = router({
           Credit.fromCents(input.amount_cents),
           "signup_grant",
           input.reason,
+          undefined,
+          undefined,
+          undefined,
+          input.expiresAt,
         );
         getAuditLog().log({
           adminUser,
           action: "credits.grant",
           category: "credits",
           targetTenant: input.tenantId,
-          details: { amount_cents: input.amount_cents, reason: input.reason },
+          details: { amount_cents: input.amount_cents, reason: input.reason, expiresAt: input.expiresAt },
           outcome: "success",
         });
         return result;

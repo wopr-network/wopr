@@ -49,6 +49,7 @@ describe("BulkOperationsStore", () => {
           fundingSource: null,
           attributedUserId: null,
           createdAt: new Date().toISOString(),
+          expiresAt: null,
         };
       },
       async debit(tenantId, amount) {
@@ -65,6 +66,7 @@ describe("BulkOperationsStore", () => {
           fundingSource: null,
           attributedUserId: null,
           createdAt: new Date().toISOString(),
+          expiresAt: null,
         };
       },
       async balance(tenantId) {
@@ -77,6 +79,9 @@ describe("BulkOperationsStore", () => {
         return [];
       },
       async tenantsWithBalance() {
+        return [];
+      },
+      async expiredCredits(_now: string) {
         return [];
       },
       async memberUsage(_tenantId: string) {

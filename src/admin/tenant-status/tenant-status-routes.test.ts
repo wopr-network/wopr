@@ -76,6 +76,7 @@ function makeMockLedger(): ICreditLedger {
         fundingSource: null,
         attributedUserId: null,
         createdAt: new Date().toISOString(),
+        expiresAt: null,
       };
     },
     async debit(
@@ -99,6 +100,7 @@ function makeMockLedger(): ICreditLedger {
         fundingSource: null,
         attributedUserId: null,
         createdAt: new Date().toISOString(),
+        expiresAt: null,
       };
     },
     async balance(tenantId: string): Promise<Credit> {
@@ -111,6 +113,9 @@ function makeMockLedger(): ICreditLedger {
       return [];
     },
     async tenantsWithBalance(): Promise<Array<{ tenantId: string; balance: Credit }>> {
+      return [];
+    },
+    async expiredCredits(_now: string) {
       return [];
     },
     async memberUsage(_tenantId: string) {
