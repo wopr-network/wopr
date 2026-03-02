@@ -159,16 +159,59 @@ describe("addons router", () => {
       await expect(caller.addons.catalog()).rejects.toThrow(TRPCError);
       await expect(caller.addons.catalog()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     });
-  });
 
-  describe("tenant resolution fallback", () => {
-    it("falls back to user.id when tenantId is undefined", async () => {
-      const ctx = { user: { id: "user-fallback", roles: ["user"] }, tenantId: undefined };
+    it("rejects calls without tenant context with BAD_REQUEST", async () => {
+      const ctx = { user: { id: "user-no-tenant", roles: ["user"] }, tenantId: undefined };
+      const caller = appRouter.createCaller(ctx as any);
+      await expect(caller.addons.list()).rejects.toThrow(TRPCError);
+      await expect(caller.addons.list()).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    });
+
+    it("rejects access to another tenant's addons with FORBIDDEN", async () => {
+      // Override org member repo to deny cross-tenant access
+      setTrpcOrgMemberRepo({
+        findMember: async () => null,
+        listMembers: async () => [],
+        addMember: async () => {},
+        updateMemberRole: async () => {},
+        removeMember: async () => {},
+        countAdminsAndOwners: async () => 0,
+        listInvites: async () => [],
+        createInvite: async () => {},
+        findInviteById: async () => null,
+        findInviteByToken: async () => null,
+        deleteInvite: async () => {},
+        deleteAllMembers: async () => {},
+        deleteAllInvites: async () => {},
+      });
+
+      const ctx = { user: { id: "attacker", roles: ["user"] }, tenantId: "victim-tenant" };
       const caller = appRouter.createCaller(ctx);
-      await caller.addons.enable({ key: "extra_storage" });
-      const result = await caller.addons.list();
-      expect(result).toHaveLength(1);
-      expect(result[0].key).toBe("extra_storage");
+      await expect(caller.addons.list()).rejects.toThrow(TRPCError);
+      await expect(caller.addons.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+      // Restore the permissive stub for subsequent tests
+      setTrpcOrgMemberRepo({
+        findMember: async (_userId: string, orgId: string) => ({
+          id: "m1",
+          orgId,
+          userId: `user-${orgId}`,
+          role: "owner" as const,
+          joinedAt: Date.now(),
+        }),
+        listMembers: async () => [],
+        addMember: async () => {},
+        updateMemberRole: async () => {},
+        removeMember: async () => {},
+        countAdminsAndOwners: async () => 1,
+        listInvites: async () => [],
+        createInvite: async () => {},
+        findInviteById: async () => null,
+        findInviteByToken: async () => null,
+        deleteInvite: async () => {},
+        deleteAllMembers: async () => {},
+        deleteAllInvites: async () => {},
+      });
     });
   });
 });
