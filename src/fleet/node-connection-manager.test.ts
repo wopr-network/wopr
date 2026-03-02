@@ -430,6 +430,27 @@ describe("NodeConnectionManager.processHeartbeat — state machine integration",
     expect(transitions).toHaveLength(0);
   });
 
+  it("rethrows non-transition errors from the processHeartbeat catch block", async () => {
+    await insertNode(db, { id: "node-1", status: "unhealthy" });
+
+    const nodeRepo = new DrizzleNodeRepository(db);
+    const unexpectedError = new Error("unexpected db failure");
+    vi.spyOn(nodeRepo, "transition").mockRejectedValueOnce(unexpectedError);
+
+    const ncm = new NodeConnectionManager(
+      nodeRepo,
+      new DrizzleBotInstanceRepository(db),
+      new DrizzleRecoveryRepository(db),
+    );
+
+    // Access private method via type cast to verify rethrow behavior
+    // biome-ignore lint/suspicious/noExplicitAny: testing private method
+    const ncmAny = ncm as any;
+    await expect(
+      ncmAny.processHeartbeat("node-1", { type: "heartbeat", containers: [] }) as Promise<void>,
+    ).rejects.toThrow("unexpected db failure");
+  });
+
   it("handles transition error gracefully (logs, does not throw)", async () => {
     await insertNode(db, { id: "node-1", status: "unhealthy" });
 
