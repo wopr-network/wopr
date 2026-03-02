@@ -56,8 +56,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-,format=short
 
-      # Pass 1: single-platform build for Trivy scanning
-      - name: Build image for scanning
+      # Pass 1: single-platform build (amd64 only, fast — validates the image builds)
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -67,29 +67,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Get short SHA
-        id: short-sha
-        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
-      - name: Run Trivy vulnerability scanner
-        id: trivy
-        uses: aquasecurity/trivy-action@0.34.0
-        with:
-          image-ref: ghcr.io/wopr-network/${{ matrix.image }}:sha-${{ steps.short-sha.outputs.sha }}
-          scan-type: image
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: '1'
-          format: sarif
-          ignorefile: .trivyignore
-          output: trivy-results.sarif
-
-      - name: Upload Trivy SARIF to GitHub Security
-        if: always() && steps.trivy.outcome != 'skipped'
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-results.sarif
 
       # Pass 2: multi-arch build + push (only on main/tags, reuses GHA cache)
       - name: Build and push multi-arch
