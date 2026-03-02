@@ -12,7 +12,7 @@ import { setBotPluginDeps } from "./api/routes/bot-plugins.js";
 import { setChannelOAuthRepo } from "./api/routes/channel-oauth.js";
 import { setChatDeps } from "./api/routes/chat.js";
 import { setFleetDeps } from "./api/routes/fleet.js";
-import { validateNodeAuth } from "./api/routes/internal-nodes.js";
+import { getNodeSecretDeprecationWarnings, validateNodeAuth } from "./api/routes/internal-nodes.js";
 import { setMarketplaceDeps } from "./api/routes/marketplace.js";
 import { setOnboardingDeps } from "./api/routes/onboarding.js";
 import { setSetupDeps } from "./api/routes/setup.js";
@@ -1060,6 +1060,9 @@ if (process.env.NODE_ENV !== "test") {
 
   const server = serve({ fetch: app.fetch, port }, () => {
     logger.info(`wopr-platform listening on http://0.0.0.0:${port}`);
+    for (const warning of getNodeSecretDeprecationWarnings()) {
+      logger.warn(warning);
+    }
   });
 
   // Set up WebSocket server for node agent connections

@@ -24,7 +24,7 @@ vi.mock("../../fleet/services.js", () => {
 });
 
 import { getNodeRegistrar, getNodeRepo, getRegistrationTokenStore } from "../../fleet/services.js";
-import { internalNodeRoutes, validateNodeAuth } from "./internal-nodes.js";
+import { getNodeSecretDeprecationWarnings, internalNodeRoutes, validateNodeAuth } from "./internal-nodes.js";
 
 describe("validateNodeAuth", () => {
   const originalSecret = process.env.NODE_SECRET;
@@ -35,6 +35,7 @@ describe("validateNodeAuth", () => {
     } else {
       delete process.env.NODE_SECRET;
     }
+    delete process.env.DISABLE_STATIC_NODE_SECRET;
   });
 
   it("returns null when NODE_SECRET is not configured", () => {
@@ -56,6 +57,18 @@ describe("validateNodeAuth", () => {
     process.env.NODE_SECRET = "my-secret";
     expect(validateNodeAuth("Bearer wrong")).toBe(false);
   });
+
+  it("returns false when DISABLE_STATIC_NODE_SECRET is true even if secret matches", () => {
+    process.env.NODE_SECRET = "my-secret";
+    process.env.DISABLE_STATIC_NODE_SECRET = "true";
+    expect(validateNodeAuth("Bearer my-secret")).toBe(false);
+  });
+
+  it("still works normally when DISABLE_STATIC_NODE_SECRET is not set", () => {
+    process.env.NODE_SECRET = "my-secret";
+    delete process.env.DISABLE_STATIC_NODE_SECRET;
+    expect(validateNodeAuth("Bearer my-secret")).toBe(true);
+  });
 });
 
 describe("POST /register", () => {
@@ -71,6 +84,7 @@ describe("POST /register", () => {
     } else {
       delete process.env.NODE_SECRET;
     }
+    delete process.env.DISABLE_STATIC_NODE_SECRET;
   });
 
   it("returns 401 when no authorization header", async () => {
@@ -348,5 +362,63 @@ describe("POST /register", () => {
       body: JSON.stringify({ node_id: "a".repeat(129), host: "10.0.0.1", capacity_mb: 1024, agent_version: "2.0" }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("rejects static NODE_SECRET auth when DISABLE_STATIC_NODE_SECRET is true", async () => {
+    process.env.NODE_SECRET = "static-secret";
+    process.env.DISABLE_STATIC_NODE_SECRET = "true";
+
+    const res = await internalNodeRoutes.request("/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer static-secret",
+      },
+      body: JSON.stringify({ node_id: "n1", host: "10.0.0.1", capacity_mb: 1024, agent_version: "2.0" }),
+    });
+
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("getNodeSecretDeprecationWarnings", () => {
+  const originalSecret = process.env.NODE_SECRET;
+  const originalDisable = process.env.DISABLE_STATIC_NODE_SECRET;
+
+  afterEach(() => {
+    if (originalSecret !== undefined) {
+      process.env.NODE_SECRET = originalSecret;
+    } else {
+      delete process.env.NODE_SECRET;
+    }
+    if (originalDisable !== undefined) {
+      process.env.DISABLE_STATIC_NODE_SECRET = originalDisable;
+    } else {
+      delete process.env.DISABLE_STATIC_NODE_SECRET;
+    }
+  });
+
+  it("returns deprecation warning when NODE_SECRET is set", () => {
+    process.env.NODE_SECRET = "some-secret";
+    delete process.env.DISABLE_STATIC_NODE_SECRET;
+    const warnings = getNodeSecretDeprecationWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("NODE_SECRET");
+    expect(warnings[0]).toContain("deprecated");
+  });
+
+  it("returns deprecation + disabled info when both are set", () => {
+    process.env.NODE_SECRET = "some-secret";
+    process.env.DISABLE_STATIC_NODE_SECRET = "true";
+    const warnings = getNodeSecretDeprecationWarnings();
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toContain("deprecated");
+    expect(warnings[1]).toContain("disabled");
+  });
+
+  it("returns empty array when NODE_SECRET is not set", () => {
+    delete process.env.NODE_SECRET;
+    const warnings = getNodeSecretDeprecationWarnings();
+    expect(warnings).toHaveLength(0);
   });
 });
