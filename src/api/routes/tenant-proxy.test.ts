@@ -2,6 +2,10 @@ import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildUpstreamHeaders, extractTenantSubdomain, tenantProxyMiddleware } from "./tenant-proxy.js";
 
+// Mock logger (use vi.hoisted so the factory can reference the mock before hoisting)
+const mockLogger = vi.hoisted(() => ({ warn: vi.fn(), debug: vi.fn(), error: vi.fn(), info: vi.fn() }));
+vi.mock("../../config/logger.js", () => ({ logger: mockLogger }));
+
 // ---------------------------------------------------------------------------
 // Unit tests: extractTenantSubdomain
 // ---------------------------------------------------------------------------
@@ -114,6 +118,7 @@ describe("tenantProxyMiddleware", () => {
     vi.clearAllMocks();
     // Restore default: no session (unauthenticated)
     mockGetSession.mockResolvedValue(null);
+    mockLogger.warn.mockClear();
     app = new Hono();
     app.use("/*", tenantProxyMiddleware);
     // Fallback route for requests that pass through the middleware
@@ -217,6 +222,23 @@ describe("tenantProxyMiddleware", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("logs a warning when session resolution throws and returns 401", async () => {
+    mockProxyManager.getRoutes.mockReturnValue([
+      { subdomain: "alice", upstreamHost: "wopr-alice", upstreamPort: 7437, healthy: true, instanceId: "i1" },
+    ]);
+    const authError = new Error("DB connection failed");
+    mockGetSession.mockRejectedValue(authError);
+
+    const res = await app.request("http://alice.wopr.bot/test", {
+      headers: { host: "alice.wopr.bot" },
+    });
+    expect(res.status).toBe(401);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Session resolution failed"),
+      expect.objectContaining({ err: authError }),
+    );
   });
 
   it("returns 401 when no session exists for tenant request", async () => {

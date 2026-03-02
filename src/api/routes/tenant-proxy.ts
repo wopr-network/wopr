@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
+import { getAuth } from "../../auth/better-auth.js";
 import { logger } from "../../config/logger.js";
 
 /**
@@ -129,14 +130,13 @@ export const tenantProxyMiddleware: MiddlewareHandler = async (c, next) => {
 
   if (!userId) {
     try {
-      const { getAuth } = await import("../../auth/better-auth.js");
       const auth = getAuth();
       const session = await auth.api.getSession({ headers: c.req.raw.headers });
       if (session?.user) {
         userId = (session.user as { id: string }).id;
       }
-    } catch {
-      // Session resolution failed — userId stays undefined
+    } catch (err) {
+      logger.warn("Session resolution failed for tenant proxy request", { err });
     }
   }
 
