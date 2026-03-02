@@ -1,7 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DrizzleDb } from "../../../src/db/index.js";
-import { createTestDb } from "../../../src/test/db.js";
+import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../../../src/test/db.js";
 import { DrizzleDividendRepository } from "../../../src/monetization/credits/dividend-repository.js";
 import { appRouter } from "../../../src/trpc/index.js";
 import { setBillingRouterDeps } from "../../../src/trpc/routers/billing.js";
@@ -11,8 +11,9 @@ describe("billing.dividend* tRPC procedures", () => {
   let db: DrizzleDb;
   let caller: ReturnType<typeof appRouter.createCaller>;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ db, pool } = await createTestDb());
+    await beginTestTransaction(pool);
     const dividendRepo = new DrizzleDividendRepository(db);
 
     setBillingRouterDeps({
@@ -43,8 +44,13 @@ describe("billing.dividend* tRPC procedures", () => {
     caller = appRouter.createCaller({ user: { id: "u-1", roles: ["admin"] }, tenantId: "t-1" });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
+    await endTestTransaction(pool);
     await pool.close();
+  });
+
+  beforeEach(async () => {
+    await rollbackTestTransaction(pool);
   });
 
   describe("dividendStats", () => {

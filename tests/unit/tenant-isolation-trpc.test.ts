@@ -17,7 +17,7 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { createTestDb } from "../../src/test/db.js"
+import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../../src/test/db.js"
 import type { DrizzleDb } from "../../src/db/index.js";
 import type { ICreditLedger } from "../../src/monetization/credits/credit-ledger.js";
 import { Credit } from "../../src/monetization/credit.js";
@@ -81,8 +81,9 @@ describe("tRPC tenant isolation — billing router (WOP-822)", () => {
   let pool: PGlite;
   let db: DrizzleDb;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ db, pool } = await createTestDb());
+    await beginTestTransaction(pool);
 
     const creditLedger: ICreditLedger = {
       credit(tenantId, amountCents) { return Promise.resolve({ id: "t", tenantId, amountCents, balanceAfterCents: 0, type: "signup_grant", description: null, referenceId: null, fundingSource: null, createdAt: new Date().toISOString() }); },
@@ -113,8 +114,13 @@ describe("tRPC tenant isolation — billing router (WOP-822)", () => {
     });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
+    await endTestTransaction(pool);
     await pool.close();
+  });
+
+  beforeEach(async () => {
+    await rollbackTestTransaction(pool);
   });
 
   // -------------------------------------------------------------------------
@@ -226,8 +232,9 @@ describe("tRPC tenant isolation — settings router (WOP-822)", () => {
   let pool: PGlite;
   let db: DrizzleDb;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ db, pool } = await createTestDb());
+    await beginTestTransaction(pool);
     const { NotificationPreferencesStore } = await import(
       "../../src/email/notification-preferences-store.js"
     );
@@ -236,8 +243,13 @@ describe("tRPC tenant isolation — settings router (WOP-822)", () => {
     setSettingsRouterDeps({ getNotificationPrefsStore: () => notifStore });
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
+    await endTestTransaction(pool);
     await pool.close();
+  });
+
+  beforeEach(async () => {
+    await rollbackTestTransaction(pool);
   });
 
   it("tenantConfig returns caller's own tenantId", async () => {

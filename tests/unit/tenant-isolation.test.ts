@@ -51,10 +51,10 @@
 
 import type { PGlite } from "@electric-sql/pglite";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BotProfile, BotStatus } from "../../src/fleet/types.js";
 import type { DrizzleDb } from "../../src/db/index.js";
-import { createTestDb } from "../../src/test/db.js";
+import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../../src/test/db.js";
 import { TenantKeyStore } from "../../src/security/tenant-keys/schema.js";
 
 // ---------------------------------------------------------------------------
@@ -438,14 +438,20 @@ describe("tenant isolation — tenant-key routes (WOP-822)", () => {
   let db: DrizzleDb;
   let store: TenantKeyStore;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ db, pool } = await createTestDb());
+    await beginTestTransaction(pool);
     store = new TenantKeyStore(db);
     setStore(store);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
+    await endTestTransaction(pool);
     await pool.close();
+  });
+
+  beforeEach(async () => {
+    await rollbackTestTransaction(pool);
   });
 
   it("org A cannot list org B's keys", async () => {

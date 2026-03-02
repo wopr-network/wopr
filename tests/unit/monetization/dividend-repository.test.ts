@@ -1,7 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { DrizzleDb } from "../../../src/db/index.js";
-import { createTestDb } from "../../../src/test/db.js";
+import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../../../src/test/db.js";
 import { DrizzleDividendRepository } from "../../../src/monetization/credits/dividend-repository.js";
 
 describe("DrizzleDividendRepository", () => {
@@ -9,13 +9,19 @@ describe("DrizzleDividendRepository", () => {
   let db: DrizzleDb;
   let repo: DrizzleDividendRepository;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ db, pool } = await createTestDb());
+    await beginTestTransaction(pool);
     repo = new DrizzleDividendRepository(db);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
+    await endTestTransaction(pool);
     await pool.close();
+  });
+
+  beforeEach(async () => {
+    await rollbackTestTransaction(pool);
   });
 
   describe("getStats", () => {
