@@ -33,6 +33,12 @@ export function validateNodeHost(host: string): void {
     return;
   }
 
+  // Reject malformed IPv4-looking strings (e.g. 999.999.999.999) that isIP()
+  // returns 0 for but validateHostname() would accept as digit-only labels.
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(trimmed)) {
+    throw new Error("Invalid node host: malformed IPv4 address");
+  }
+
   // Not an IP — treat as hostname
   validateHostname(trimmed);
 }

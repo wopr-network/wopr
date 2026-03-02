@@ -107,6 +107,19 @@ describe("validateNodeHost", () => {
     expect(() => validateNodeHost("169.254.169.254")).toThrow("Invalid node host");
   });
 
+  // --- Malformed IPv4-looking strings ---
+  it("rejects malformed dotted-quad 999.999.999.999", () => {
+    expect(() => validateNodeHost("999.999.999.999")).toThrow("Invalid node host: malformed IPv4 address");
+  });
+
+  it("rejects malformed dotted-quad 256.0.0.1", () => {
+    expect(() => validateNodeHost("256.0.0.1")).toThrow("Invalid node host: malformed IPv4 address");
+  });
+
+  it("rejects malformed dotted-quad 1.2.3.999", () => {
+    expect(() => validateNodeHost("1.2.3.999")).toThrow("Invalid node host: malformed IPv4 address");
+  });
+
   // --- Hostname validation ---
   it("rejects hostnames with spaces", () => {
     expect(() => validateNodeHost("host name")).toThrow("Invalid node host");
