@@ -76,6 +76,7 @@ describe("POST /register", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.ALLOW_PRIVATE_NODE_HOSTS = "true";
   });
 
   afterEach(() => {
@@ -85,6 +86,7 @@ describe("POST /register", () => {
       delete process.env.NODE_SECRET;
     }
     delete process.env.DISABLE_STATIC_NODE_SECRET;
+    delete process.env.ALLOW_PRIVATE_NODE_HOSTS;
   });
 
   it("returns 401 when no authorization header", async () => {
