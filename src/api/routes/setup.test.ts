@@ -369,6 +369,26 @@ describe("POST /save", () => {
     expect(json.error).toBe("Bot does not belong to your tenant");
   });
 
+  it("returns 401 when x-authenticated-tenant-id header is missing", async () => {
+    const deps = makeDeps({
+      profileStore: {
+        get: vi.fn().mockResolvedValue({ id: TEST_BOT_ID, tenantId: "my-tenant", env: {} }),
+        save: vi.fn(),
+      } as never,
+    });
+    const app = createSetupRoutes(deps);
+
+    const res = await app.request("/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ setupSessionId: "setup-1", botId: TEST_BOT_ID, values: { apiKey: "sk-test" } }),
+    });
+
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json.error).toBe("Authentication required");
+  });
+
   it("succeeds when bot belongs to the authenticated tenant", async () => {
     const deps = makeDeps({
       profileStore: {
