@@ -137,6 +137,13 @@ export interface BotStatus {
   createdAt: string;
   updatedAt: string;
   stats: ContainerStats | null;
+  applicationMetrics: {
+    requestCount: number;
+    errorCount: number;
+    latencyP50Ms: number;
+    latencyP95Ms: number;
+    latencyAvgMs: number;
+  } | null;
 }
 
 /** Image status showing current vs available digest */
