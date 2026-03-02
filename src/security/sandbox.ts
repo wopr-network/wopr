@@ -13,6 +13,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { createServer, connect as netConnect, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eventBus } from "../core/events.js";
 import { logger } from "../logger.js";
 import { getPluginExtension } from "../plugins/extensions.js";
 import { getContext } from "./context.js";
@@ -808,3 +809,11 @@ async function shutdownCleanup(): Promise<void> {
 
 process.on("SIGTERM", shutdownCleanup);
 process.on("SIGINT", shutdownCleanup);
+
+// Clean up connectionTimestamps when sessions are destroyed to prevent memory leak.
+// The close() handler on McpSocketBridgeHandle already deletes the entry, but sessions
+// can be deleted without their bridge being explicitly closed first.
+eventBus.on("session:destroy", ({ session }) => {
+  connectionTimestamps.delete(session);
+  destroyMcpSocketBridge(session);
+});
