@@ -41,6 +41,7 @@ describe("DrizzlePhoneNumberRepository", () => {
   });
 
   it("listActivePhoneNumbers returns all numbers", async () => {
+    await repo.trackPhoneNumber("tenant-1", "PN-001", "+15551234567");
     await repo.trackPhoneNumber("tenant-2", "PN-002", "+15559876543");
     const all = await repo.listActivePhoneNumbers();
     expect(all.length).toBeGreaterThanOrEqual(2);
