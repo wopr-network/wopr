@@ -379,7 +379,7 @@ export interface SessionConfig {
    * Indexable rules - which session transcripts THIS session can see in memory search
    * - ["*"] - can see all sessions' transcripts
    * - ["self"] - can only see own transcripts
-   * - ["self", "session:api-.*"] - self + regex match on session names
+   * - ["self", "session:api-*"] - self + glob match on session names (* = any chars)
    */
   indexable?: AccessPattern[];
 
