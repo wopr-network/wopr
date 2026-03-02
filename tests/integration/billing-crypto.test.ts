@@ -8,7 +8,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import type { Payram } from "payram";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { AUTH_HEADER, JSON_HEADERS } from "./setup.js";
-import { createTestDb, truncateAllTables } from "../../src/test/db.js"
+import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../../src/test/db.js"
 import type { DrizzleDb } from "../../src/db/index.js";
 
 const { app } = await import("../../src/api/app.js");
@@ -50,9 +50,19 @@ describe("integration: billing crypto routes", () => {
   let pool: PGlite;
   let db: DrizzleDb;
 
-  beforeEach(async () => {
-    vi.clearAllMocks();
+  beforeAll(async () => {
     ({ db, pool } = await createTestDb());
+    await beginTestTransaction(pool);
+  });
+
+  afterAll(async () => {
+    await endTestTransaction(pool);
+    await pool.close();
+  });
+
+  beforeEach(async () => {
+    await rollbackTestTransaction(pool);
+    vi.clearAllMocks();
     setBillingDeps({
       processor: createMockProcessor(),
       creditLedger: new CreditLedger(db),
@@ -68,8 +78,7 @@ describe("integration: billing crypto routes", () => {
     });
   });
 
-  afterEach(async () => {
-    await pool.close();
+  afterEach(() => {
     // Clean up env vars set during tests
     delete process.env.PAYRAM_API_KEY;
     delete process.env.PAYRAM_BASE_URL;

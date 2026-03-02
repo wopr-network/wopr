@@ -1,8 +1,8 @@
 import type { PGlite } from "@electric-sql/pglite";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { RateStore } from "../../../src/admin/rates/rate-store.js";
 import type { DrizzleDb } from "../../../src/db/index.js";
-import { createTestDb } from "../../../src/test/db.js";
+import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../../../src/test/db.js";
 import { publicPricingRoutes } from "../../../src/api/routes/public-pricing.js";
 
 describe("Public Pricing API Routes", () => {
@@ -43,13 +43,19 @@ describe("Public Pricing Data Structure", () => {
 	let pool: PGlite;
 	let store: RateStore;
 
-	beforeEach(async () => {
+	beforeAll(async () => {
 		({ db, pool } = await createTestDb());
-		store = new RateStore(db);
+		await beginTestTransaction(pool);
 	});
 
-	afterEach(async () => {
+	afterAll(async () => {
+		await endTestTransaction(pool);
 		await pool.close();
+	});
+
+	beforeEach(async () => {
+		await rollbackTestTransaction(pool);
+		store = new RateStore(db);
 	});
 
 	it("groups rates by capability with correct structure", async () => {
