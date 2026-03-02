@@ -376,6 +376,64 @@ describe("fail-closed hook behavior (WOP-1378)", () => {
     expect(result.allow).toBe(true);
     expect(spawnMock).not.toHaveBeenCalled();
   });
+
+  it("blocks on spawn error (ENOENT) by default", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "spawn-error-hook", type: "pre-inject", command: "node check.js", enabled: true },
+      ],
+    });
+
+    const mockProc = createMockProcessWithSpawnError(new Error("spawn ENOENT"));
+    spawnMock.mockReturnValue(mockProc);
+
+    const result = await runPreInjectHooks(makeHookContext());
+    expect(result.allow).toBe(false);
+    expect(result.reason).toContain("Hook execution failed");
+    expect(result.reason).toContain("ENOENT");
+  });
+
+  it("allows on spawn error when failOpen: true", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "spawn-error-hook", type: "pre-inject", command: "node check.js", enabled: true, failOpen: true },
+      ],
+    });
+
+    const mockProc = createMockProcessWithSpawnError(new Error("spawn ENOENT"));
+    spawnMock.mockReturnValue(mockProc);
+
+    const result = await runPreInjectHooks(makeHookContext());
+    expect(result.allow).toBe(true);
+  });
+
+  it("blocks on timeout by default", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "slow-hook", type: "pre-inject", command: "node check.js", enabled: true },
+      ],
+    });
+
+    const mockProc = createNeverResolvingProcess();
+    spawnMock.mockReturnValue(mockProc);
+
+    // Use fake timers to avoid waiting 5 real seconds
+    vi.useFakeTimers();
+    const resultPromise = runPreInjectHooks(makeHookContext());
+    vi.advanceTimersByTime(5001);
+    const result = await resultPromise;
+    vi.useRealTimers();
+
+    expect(result.allow).toBe(false);
+    expect(result.reason).toContain("Hook execution failed");
+    expect(result.reason).toContain("timed out");
+  });
 });
 
 describe("runPostInjectHooks", () => {
@@ -465,6 +523,55 @@ describe("shell injection attack vectors", () => {
 // ============================================================================
 // Test Helpers
 // ============================================================================
+
+/**
+ * Create a mock child process that emits a spawn error.
+ */
+function createMockProcessWithSpawnError(err: Error) {
+  const procCallbacks: Record<string, Function[]> = {};
+
+  const stdin = {
+    write: vi.fn(),
+    end: vi.fn(),
+    on: vi.fn(),
+  };
+
+  const stdoutStream = { on: vi.fn() };
+  const stderrStream = { on: vi.fn() };
+
+  return {
+    stdin,
+    stdout: stdoutStream,
+    stderr: stderrStream,
+    kill: vi.fn(),
+    on: (event: string, cb: Function) => {
+      procCallbacks[event] = procCallbacks[event] || [];
+      procCallbacks[event].push(cb);
+      if (event === "error") {
+        queueMicrotask(() => cb(err));
+      }
+    },
+  };
+}
+
+/**
+ * Create a mock child process that never resolves (for timeout testing).
+ */
+function createNeverResolvingProcess() {
+  const stdin = {
+    write: vi.fn(),
+    end: vi.fn(),
+    on: vi.fn(),
+  };
+
+  return {
+    stdin,
+    stdout: { on: vi.fn() },
+    stderr: { on: vi.fn() },
+    kill: vi.fn(),
+    on: vi.fn(),
+  };
+}
 
 /**
  * Create a mock child process that writes stdout and emits close.
