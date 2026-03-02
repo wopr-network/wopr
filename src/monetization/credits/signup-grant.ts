@@ -19,15 +19,28 @@ export async function grantSignupCredits(ledger: ICreditLedger, tenantId: string
     return false;
   }
 
-  await ledger.credit(
-    tenantId,
-    SIGNUP_GRANT,
-    "signup_grant",
-    "Welcome bonus — $5.00 credit on email verification",
-    refId,
-  );
+  try {
+    await ledger.credit(
+      tenantId,
+      SIGNUP_GRANT,
+      "signup_grant",
+      "Welcome bonus — $5.00 credit on email verification",
+      refId,
+    );
+  } catch (err) {
+    // Concurrent verify-email request won the race and already inserted the same referenceId.
+    // Treat unique constraint violation as a no-op (idempotent).
+    if (isUniqueConstraintViolation(err)) return false;
+    throw err;
+  }
 
   return true;
+}
+
+function isUniqueConstraintViolation(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if ((err as { code?: string }).code === "23505") return true;
+  return err.message.includes("UNIQUE") || err.message.includes("duplicate key");
 }
 
 /** @deprecated use SIGNUP_GRANT */
