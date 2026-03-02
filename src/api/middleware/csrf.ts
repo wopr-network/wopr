@@ -81,18 +81,10 @@ export function csrfProtection(options: CsrfOptions): MiddlewareHandler {
       return next();
     }
 
-    // Only session-authenticated requests need CSRF validation.
-    // Unauthenticated requests (no session cookie, no bearer token) should
-    // fall through to route-level auth middleware which returns 401.
-    // Checking c.get("user") works because resolveSessionUser() runs before
-    // this middleware and sets "user" only when a valid session cookie is present.
-    let hasSession = false;
-    try {
-      hasSession = !!c.get("user");
-    } catch {
-      // c.get throws if variable not set — treat as unauthenticated
-    }
-    if (!hasSession) {
+    // Unauthenticated requests (no session user, no bearer token) cannot be CSRF attacks —
+    // there is no credential to hijack. Let auth middleware return 401 naturally.
+    const user = c.get("user" as never);
+    if (!user) {
       return next();
     }
 
