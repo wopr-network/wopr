@@ -247,6 +247,7 @@ async function executeInjectInternal(
   const channel = options?.channel;
   const collected: string[] = [];
   let sessionId = existingSessionId || "";
+  let usageResult: { inputTokens: number; outputTokens: number } | undefined;
 
   // SECURITY: Create security context from source (defaults to CLI/owner)
   const injectionSource = options?.source ?? createInjectionSource("cli");
@@ -357,7 +358,7 @@ async function executeInjectInternal(
         type: "context",
         channel,
       });
-      return { response: "", sessionId };
+      return { response: "", sessionId, usage: usageResult };
     }
 
     const processedMessage = incomingResult.message;
@@ -557,10 +558,20 @@ async function executeInjectInternal(
             break;
           }
           case "result": {
-            const resultMsg = msg as { subtype?: string; errors?: unknown; permission_denials?: unknown };
+            const resultMsg = msg as {
+              subtype?: string;
+              errors?: unknown;
+              permission_denials?: unknown;
+              usage?: { input_tokens?: number; output_tokens?: number };
+            };
             if (resultMsg.subtype === "success") {
               if (!silent) logger.info(`\n[wopr] Complete (${providerUsed}).`);
-              const streamMsg: StreamMessage = { type: "complete", content: "" };
+              const rawUsage = resultMsg.usage;
+              const usageData = rawUsage
+                ? { inputTokens: rawUsage.input_tokens ?? 0, outputTokens: rawUsage.output_tokens ?? 0 }
+                : undefined;
+              usageResult = usageData;
+              const streamMsg: StreamMessage = { type: "complete", content: "", usage: usageData };
               if (onStream) onStream(streamMsg);
             } else {
               if (!silent) logger.error(`[wopr] Error: ${resultMsg.subtype}`);
@@ -645,11 +656,23 @@ async function executeInjectInternal(
               }
               break;
             }
-            case "result":
-              if (msg.subtype === "success") {
+            case "result": {
+              const retryResultMsg = msg as {
+                subtype?: string;
+                usage?: { input_tokens?: number; output_tokens?: number };
+              };
+              if (retryResultMsg.subtype === "success") {
                 if (!silent) logger.info(`[wopr] Complete (retry).`);
+                const rawUsage = retryResultMsg.usage;
+                const usageData = rawUsage
+                  ? { inputTokens: rawUsage.input_tokens ?? 0, outputTokens: rawUsage.output_tokens ?? 0 }
+                  : undefined;
+                usageResult = usageData;
+                const streamMsg: StreamMessage = { type: "complete", content: "", usage: usageData };
+                if (onStream) onStream(streamMsg);
               }
               break;
+            }
           }
         }
       } else {
@@ -675,7 +698,7 @@ async function executeInjectInternal(
         type: "context",
         channel,
       });
-      return { response: "", sessionId };
+      return { response: "", sessionId, usage: usageResult };
     }
 
     response = outgoingResult.response;
@@ -696,7 +719,7 @@ async function executeInjectInternal(
     const { updateLastTriggerTimestamp } = await import("./context.js");
     updateLastTriggerTimestamp(name);
 
-    return { response, sessionId };
+    return { response, sessionId, usage: usageResult };
   } finally {
     // SECURITY: Always clear context when request completes
     clearContext(name);

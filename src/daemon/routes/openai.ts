@@ -44,6 +44,7 @@ interface ChatCompletionRequest {
   top_p?: number;
   max_tokens?: number;
   stream?: boolean;
+  stream_options?: { include_usage?: boolean };
 }
 
 /** Post-validation message with guaranteed string content */
@@ -304,6 +305,8 @@ openaiRouter.post(
         });
 
         try {
+          let streamUsage: { inputTokens: number; outputTokens: number } | undefined;
+
           await inject(sessionName, userPrompt, {
             silent: true,
             from: "openai-api",
@@ -327,12 +330,14 @@ openaiRouter.post(
                   ],
                 };
                 s.write(`data: ${JSON.stringify(chunk)}\n\n`);
+              } else if (msg.type === "complete" && msg.usage) {
+                streamUsage = msg.usage;
               }
             },
           });
 
           // Final chunk with finish_reason
-          const finalChunk = {
+          const finalChunk: Record<string, unknown> = {
             id: requestId,
             object: "chat.completion.chunk",
             created,
@@ -345,6 +350,13 @@ openaiRouter.post(
               },
             ],
           };
+          if (body.stream_options?.include_usage && streamUsage) {
+            finalChunk.usage = {
+              prompt_tokens: streamUsage.inputTokens,
+              completion_tokens: streamUsage.outputTokens,
+              total_tokens: streamUsage.inputTokens + streamUsage.outputTokens,
+            };
+          }
           s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
           s.write("data: [DONE]\n\n");
         } catch (err) {
@@ -390,9 +402,9 @@ openaiRouter.post(
           },
         ],
         usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0,
+          prompt_tokens: result.usage?.inputTokens ?? 0,
+          completion_tokens: result.usage?.outputTokens ?? 0,
+          total_tokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
         },
       });
     } catch (err) {

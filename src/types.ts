@@ -369,6 +369,7 @@ export interface StreamMessage {
   toolName?: string;
   subtype?: string; // For system messages: "init", "compact_boundary", "status", etc.
   metadata?: Record<string, unknown>; // For system message metadata (e.g., compact_metadata)
+  usage?: { inputTokens: number; outputTokens: number };
 }
 
 export type StreamCallback = (msg: StreamMessage) => void;
