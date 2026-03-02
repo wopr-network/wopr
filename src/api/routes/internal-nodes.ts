@@ -29,12 +29,37 @@ const RegisterNodeSchema = z.object({
 export function validateNodeAuth(authHeader: string | undefined): boolean | null {
   const nodeSecret = process.env.NODE_SECRET;
   if (!nodeSecret) return null; // Not configured
+  if (process.env.DISABLE_STATIC_NODE_SECRET === "true") return false; // Kill-switch active
   if (!authHeader) return false;
   const token = authHeader.replace(/^Bearer\s+/i, "");
   const a = Buffer.from(token);
   const b = Buffer.from(nodeSecret);
   if (a.length !== b.length) return false;
   return timingSafeEqual(a, b);
+}
+
+/**
+ * Returns deprecation warning messages for NODE_SECRET configuration.
+ * Called at startup to log warnings. Pure function for testability.
+ */
+export function getNodeSecretDeprecationWarnings(): string[] {
+  const warnings: string[] = [];
+  if (!process.env.NODE_SECRET) return warnings;
+
+  warnings.push(
+    "[DEPRECATED] NODE_SECRET is set. Static shared-secret node auth is deprecated and will be removed in a future version. " +
+      "Migrate to per-node secrets (WOPR_NODE_SECRET) or registration tokens. " +
+      "Set DISABLE_STATIC_NODE_SECRET=true to disable the static secret auth path now.",
+  );
+
+  if (process.env.DISABLE_STATIC_NODE_SECRET === "true") {
+    warnings.push(
+      "NODE_SECRET is set but static secret auth is disabled (DISABLE_STATIC_NODE_SECRET=true). " +
+        "Only per-node secrets and registration tokens will be accepted.",
+    );
+  }
+
+  return warnings;
 }
 
 // BOUNDARY(WOP-805): REST is the correct layer for internal node APIs.
@@ -88,10 +113,11 @@ internalNodeRoutes.post("/register", async (c) => {
     agentVersion: body.agent_version,
   };
 
-  // Path 1: Static NODE_SECRET (backwards-compatible)
+  // Path 1: Static NODE_SECRET (backwards-compatible, can be disabled)
   const staticSecret = process.env.NODE_SECRET;
+  const staticDisabled = process.env.DISABLE_STATIC_NODE_SECRET === "true";
   const bearerBuf = Buffer.from(bearer);
-  if (staticSecret) {
+  if (staticSecret && !staticDisabled) {
     const secretBuf = Buffer.from(staticSecret);
     if (bearerBuf.length === secretBuf.length && timingSafeEqual(bearerBuf, secretBuf)) {
       // Verify per-node secret if the node has one stored
