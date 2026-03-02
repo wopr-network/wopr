@@ -18,13 +18,11 @@ import { logger } from "../../logger.js";
 import { validateApiKey } from "../api-keys.js";
 import { ensureToken } from "../auth-token.js";
 
-// WebSocket upgrade paths skip bearer auth — authentication happens
-// at the WebSocket message level via first-message ticket exchange
+// WebSocket upgrade paths are no longer skipped — auth happens at the HTTP
+// upgrade request via bearer token or Sec-WebSocket-Protocol header (WOP-1407)
 const SKIP_AUTH_PATHS = new Set([
   "/health",
   "/ready",
-  "/ws",
-  "/api/ws",
   "/healthz",
   "/healthz/history",
   "/openapi.json",
@@ -53,7 +51,7 @@ function getDaemonToken(): string {
  * Validate a wopr_ API key token and set user/role context on the Hono context.
  * Returns true if the key was valid and context was set, false otherwise.
  */
-async function authenticateApiKey(c: Parameters<MiddlewareHandler>[0], token: string): Promise<boolean> {
+export async function authenticateApiKey(c: Parameters<MiddlewareHandler>[0], token: string): Promise<boolean> {
   const keyUser = await validateApiKey(token);
   if (!keyUser) return false;
   c.set("user", { id: keyUser.id });
@@ -63,7 +61,7 @@ async function authenticateApiKey(c: Parameters<MiddlewareHandler>[0], token: st
   return true;
 }
 
-function isDaemonBearerValid(authHeader: string): boolean {
+export function isDaemonBearerValid(authHeader: string): boolean {
   const provided = authHeader.slice(7); // Strip "Bearer "
   let expected: string;
   try {
@@ -90,6 +88,29 @@ export function bearerAuth(): MiddlewareHandler {
     }
 
     const authHeader = c.req.header("Authorization");
+
+    // For WebSocket upgrade requests, also accept token via Sec-WebSocket-Protocol
+    // Browsers cannot set Authorization headers on WebSocket connections (WOP-1407)
+    if (!authHeader && c.req.header("Upgrade")?.toLowerCase() === "websocket") {
+      const protocols = c.req.header("Sec-WebSocket-Protocol");
+      if (protocols) {
+        const authProtocol = protocols
+          .split(",")
+          .map((p) => p.trim())
+          .find((p) => p.startsWith("auth."));
+        if (authProtocol) {
+          const token = authProtocol.slice(5); // strip "auth."
+          if (token.startsWith("wopr_")) {
+            if (await authenticateApiKey(c, token)) return next();
+          } else {
+            const fakeHeader = `Bearer ${token}`;
+            if (isDaemonBearerValid(fakeHeader)) return next();
+          }
+          return c.json({ error: "Invalid WebSocket auth token" }, 401);
+        }
+      }
+    }
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return c.json({ error: "Missing or invalid Authorization header" }, 401);
     }
