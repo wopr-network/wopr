@@ -6,6 +6,7 @@
  * permissions and tracking security events.
  */
 
+import { randomBytes } from "node:crypto";
 import { logger } from "../logger.js";
 import {
   checkCapability,
@@ -365,7 +366,7 @@ export function createApiContext(
  */
 function generateRequestId(): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
+  const random = randomBytes(6).toString("hex");
   return `sec-${timestamp}-${random}`;
 }
 
