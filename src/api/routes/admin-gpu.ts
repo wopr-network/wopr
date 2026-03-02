@@ -31,7 +31,12 @@ adminGpuRoutes.get("/", adminAuth, async (c) => {
 
 /**
  * POST /api/admin/gpu
- * Provision a new GPU node
+ * Provision a new GPU node.
+ *
+ * SECURITY: Admin-only by design. Node provisioning creates real infrastructure
+ * (DigitalOcean droplets) with cost implications. Only operator/admin tokens
+ * may call this endpoint — tenant-scoped tokens are rejected by the "admin"
+ * scope requirement in scopedBearerAuthWithTenant(). Never downgrade to "write".
  */
 adminGpuRoutes.post("/", adminAuth, async (c) => {
   try {

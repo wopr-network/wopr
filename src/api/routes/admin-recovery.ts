@@ -19,6 +19,13 @@ const metadataMap = buildTokenMetadataMap();
 const adminAuth = scopedBearerAuthWithTenant(metadataMap, "admin");
 
 /**
+ * SECURITY: All routes in this file use `adminAuth` which requires "admin" scope.
+ * NodeProvisioner access (POST /nodes, DELETE /nodes/:id, POST /nodes/:id/reboot,
+ * POST /nodes/:id/drain) is restricted to operator/admin tokens only.
+ * Tenant-scoped tokens cannot reach any provisioning or node management endpoint.
+ */
+
+/**
  * Admin API routes for node recovery history and manual recovery triggers.
  */
 export const adminRecoveryRoutes = new Hono<AuthEnv>();
