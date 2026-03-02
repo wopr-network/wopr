@@ -4,10 +4,10 @@
 
 import type { PGlite } from "@electric-sql/pglite";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DrizzleDb } from "../db/index.js";
 import { DrizzleSpendingLimitsRepository } from "../monetization/drizzle-spending-limits-repository.js";
-import { beginTestTransaction, createTestDb, endTestTransaction } from "../test/db.js";
+import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../test/db.js";
 import { hydrateSpendingCaps } from "./hydrate-spending-caps.js";
 import type { SpendingCaps } from "./spending-cap.js";
 import type { GatewayTenant } from "./types.js";
@@ -24,14 +24,18 @@ describe("hydrateSpendingCaps", () => {
   let db: DrizzleDb;
   let pool: PGlite;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     ({ db, pool } = await createTestDb());
     await beginTestTransaction(pool);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await endTestTransaction(pool);
     await pool.close();
+  });
+
+  beforeEach(async () => {
+    await rollbackTestTransaction(pool);
   });
 
   it("sets monthlyCapUsd from DB hardCap when tenant has no spendingCaps", async () => {

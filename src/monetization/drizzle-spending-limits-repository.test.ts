@@ -1,22 +1,26 @@
 import type { PGlite } from "@electric-sql/pglite";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { beginTestTransaction, createTestDb, endTestTransaction } from "../test/db.js";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../test/db.js";
 import { DrizzleSpendingLimitsRepository } from "./drizzle-spending-limits-repository.js";
 
 describe("DrizzleSpendingLimitsRepository", () => {
   let pool: PGlite;
   let repo: DrizzleSpendingLimitsRepository;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const { db, pool: p } = await createTestDb();
     pool = p;
     await beginTestTransaction(pool);
     repo = new DrizzleSpendingLimitsRepository(db);
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await endTestTransaction(pool);
     await pool.close();
+  });
+
+  beforeEach(async () => {
+    await rollbackTestTransaction(pool);
   });
 
   it("get() returns defaults when tenant has no row", async () => {
