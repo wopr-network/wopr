@@ -17,19 +17,103 @@ import type { ProviderConfig } from "../../types/provider.js";
 
 export const openaiRouter = new Hono();
 
+/** Valid roles for OpenAI chat messages */
+const VALID_ROLES = new Set(["system", "user", "assistant", "tool"]);
+
 /**
- * OpenAI Chat Completion request body
+ * OpenAI Chat Completion request body (pre-validation).
+ * `content` is `unknown` until validated — callers send arbitrary JSON.
  */
 interface ChatCompletionRequest {
   model: string;
   messages: Array<{
-    role: "system" | "user" | "assistant";
-    content: string;
+    role?: unknown;
+    content?: unknown;
   }>;
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
   stream?: boolean;
+}
+
+/** Post-validation message with guaranteed string content */
+interface ValidatedMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+}
+
+/**
+ * Validate and normalize OpenAI-style messages.
+ *
+ * Returns normalized messages with string content, or an error string
+ * describing the first invalid message.
+ */
+function validateMessages(
+  messages: ChatCompletionRequest["messages"],
+): { ok: true; messages: ValidatedMessage[] } | { ok: false; error: string } {
+  const validated: ValidatedMessage[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+
+    // Validate role
+    if (typeof msg.role !== "string" || !VALID_ROLES.has(msg.role)) {
+      return {
+        ok: false,
+        error: `messages[${i}].role must be one of: system, user, assistant, tool — got ${JSON.stringify(msg.role)}`,
+      };
+    }
+    const role = msg.role as ValidatedMessage["role"];
+
+    // Validate and normalize content
+    const content = msg.content;
+
+    // null/undefined content: allowed for assistant/tool, rejected for user/system
+    if (content === null || content === undefined) {
+      if (role === "user" || role === "system") {
+        return {
+          ok: false,
+          error: `messages[${i}].content is required for role "${role}"`,
+        };
+      }
+      validated.push({ role, content: "" });
+      continue;
+    }
+
+    // String content: pass through
+    if (typeof content === "string") {
+      validated.push({ role, content });
+      continue;
+    }
+
+    // Array content: extract text parts (OpenAI multimodal format)
+    if (Array.isArray(content)) {
+      const textParts: string[] = [];
+      for (const part of content) {
+        if (
+          typeof part === "object" &&
+          part !== null &&
+          "type" in part &&
+          (part as Record<string, unknown>).type === "text" &&
+          "text" in part &&
+          typeof (part as Record<string, unknown>).text === "string"
+        ) {
+          textParts.push((part as Record<string, unknown>).text as string);
+        }
+        // Skip non-text parts (image_url, etc.) silently
+      }
+      validated.push({ role, content: textParts.join("\n") });
+      continue;
+    }
+
+    // Anything else (number, boolean, non-array object): reject
+    return {
+      ok: false,
+      error: `messages[${i}].content must be a string or content array — got ${typeof content}`,
+    };
+  }
+
+  return { ok: true, messages: validated };
 }
 
 /**
@@ -66,9 +150,9 @@ function resolveProviderConfig(model: string): ProviderConfig | null {
 }
 
 /**
- * Build the prompt and system prompt from OpenAI-style messages array.
+ * Build the prompt and system prompt from validated messages.
  */
-function buildPrompts(messages: ChatCompletionRequest["messages"]): {
+function buildPrompts(messages: ValidatedMessage[]): {
   systemPrompt: string | undefined;
   userPrompt: string;
 } {
@@ -140,6 +224,21 @@ openaiRouter.post(
       );
     }
 
+    // Validate individual messages
+    const validation = validateMessages(body.messages);
+    if (!validation.ok) {
+      return c.json(
+        {
+          error: {
+            message: validation.error,
+            type: "invalid_request_error",
+            code: "invalid_message",
+          },
+        },
+        400,
+      );
+    }
+
     // Resolve provider
     const providerConfig = resolveProviderConfig(body.model);
     if (!providerConfig) {
@@ -156,7 +255,7 @@ openaiRouter.post(
     }
 
     const sessionName = makeSessionName();
-    const { systemPrompt, userPrompt } = buildPrompts(body.messages);
+    const { systemPrompt, userPrompt } = buildPrompts(validation.messages);
     const requestId = `chatcmpl-${randomUUID().replace(/-/g, "").slice(0, 24)}`;
     const created = Math.floor(Date.now() / 1000);
 

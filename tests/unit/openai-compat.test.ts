@@ -520,6 +520,156 @@ describe("OpenAI Compatibility Layer", () => {
   });
 
   // ==========================================================================
+  // POST /v1/chat/completions - Message validation
+  // ==========================================================================
+
+  describe("POST /v1/chat/completions (message validation)", () => {
+    it("rejects message with non-string, non-array content (number)", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user", content: 42 }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.type).toBe("invalid_request_error");
+      expect(data.error.code).toBe("invalid_message");
+    });
+
+    it("rejects message with object content (not array)", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user", content: { foo: "bar" } }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.code).toBe("invalid_message");
+    });
+
+    it("rejects message with undefined content for user role", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "user" }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.code).toBe("invalid_message");
+    });
+
+    it("rejects message with invalid role", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ role: "banana", content: "hello" }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.code).toBe("invalid_message");
+    });
+
+    it("rejects message with missing role", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [{ content: "hello" }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.code).toBe("invalid_message");
+    });
+
+    it("accepts content array and extracts text parts", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "What is in this image?" },
+                { type: "image_url", image_url: { url: "https://example.com/img.png" } },
+              ],
+            },
+          ],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(inject).toHaveBeenCalledWith(
+        expect.any(String),
+        "What is in this image?",
+        expect.any(Object),
+      );
+    });
+
+    it("accepts null content for assistant messages (treats as empty)", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [
+            { role: "assistant", content: null },
+            { role: "user", content: "Continue" },
+          ],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+    });
+
+    it("includes message index in error for invalid message", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "anthropic",
+          messages: [
+            { role: "user", content: "valid" },
+            { role: "user", content: 123 },
+          ],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.message).toContain("messages[1]");
+    });
+  });
+
+  // ==========================================================================
   // Provider resolution
   // ==========================================================================
 
