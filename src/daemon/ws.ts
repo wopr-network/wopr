@@ -43,6 +43,9 @@ function verifyToken(provided: string): boolean {
 let tokenVerifierOverride: ((token: string) => boolean) | null = null;
 
 export function _setTokenVerifier(fn: ((token: string) => boolean) | null): void {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("_setTokenVerifier is test-only");
+  }
   tokenVerifierOverride = fn;
 }
 
@@ -442,6 +445,9 @@ export function getSubscriptionStats(): { clients: number; totalSubscriptions: n
  * Reset all state (for testing).
  */
 export function _resetForTesting(): void {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("_resetForTesting is test-only");
+  }
   clients.clear();
   tokenVerifierOverride = null;
 }
