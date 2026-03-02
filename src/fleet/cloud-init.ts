@@ -1,4 +1,5 @@
 const BOT_IMAGE_PATTERN = /^[\w.\-/]+(:[\w.-]+)?$/;
+const NODE_SECRET_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 /**
  * Validate a Docker image reference against the allowed pattern.
@@ -17,6 +18,9 @@ export function validateBotImage(botImage: string): void {
  */
 export function generateCloudInit(botImage: string, nodeSecret?: string): string {
   validateBotImage(botImage);
+  if (nodeSecret && !NODE_SECRET_PATTERN.test(nodeSecret)) {
+    throw new Error(`Invalid nodeSecret: contains unsafe characters`);
+  }
   const secretLine = nodeSecret ? `  - echo 'WOPR_NODE_SECRET=${nodeSecret}' >> /etc/environment\n` : "";
   return `#cloud-config
 packages:
