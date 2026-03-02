@@ -211,12 +211,35 @@ describe("HotBackupScheduler", () => {
 
   describe("runHotBackup", () => {
     it("backs up all containers on first run (all new)", async () => {
+      const { execFile } = await import("node:child_process");
       const result = await scheduler.runHotBackup();
 
       expect(dm.exportBot).toHaveBeenCalledTimes(2);
       expect(result.backed_up).toEqual(["tenant_bot1", "tenant_bot2"]);
       expect(result.skipped).toEqual([]);
       expect(result.failed).toEqual([]);
+
+      // Hot backup uses --force and latest/{name}/latest.tar.gz path format
+      expect(execFile).toHaveBeenCalledWith(
+        "s3cmd",
+        [
+          "put",
+          "--force",
+          expect.stringContaining("tenant_bot1.tar.gz"),
+          "s3://wopr-backups/latest/tenant_bot1/latest.tar.gz",
+        ],
+        expect.any(Function),
+      );
+      expect(execFile).toHaveBeenCalledWith(
+        "s3cmd",
+        [
+          "put",
+          "--force",
+          expect.stringContaining("tenant_bot2.tar.gz"),
+          "s3://wopr-backups/latest/tenant_bot2/latest.tar.gz",
+        ],
+        expect.any(Function),
+      );
     });
 
     it("skips containers on second run when SizeRw unchanged", async () => {
