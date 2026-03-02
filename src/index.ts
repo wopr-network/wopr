@@ -716,7 +716,7 @@ if (process.env.NODE_ENV !== "test") {
           getCreditLedger: () => getCreditLedger(),
           getUserStore: () => new AdminUserStore(getDb()),
           getTenantStatusStore: () => getTenantStatusRepo(),
-          getBotBilling: () => new BotBilling(getDb()),
+          getBotBilling: () => new BotBilling(getBotInstanceRepo()),
           getAutoTopupSettingsRepo: () => getAutoTopupSettingsRepo(),
           detachAllPaymentMethods: (tenantId: string) => detachAllPaymentMethods(stripe, tenantStore, tenantId),
           getAffiliateFraudAdminRepo: () => new DrizzleAffiliateFraudAdminRepository(getDb()),

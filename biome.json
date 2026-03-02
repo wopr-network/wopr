@@ -99,7 +99,6 @@
         "src/monetization/credits/drizzle-phone-number-repository.ts",
         "src/monetization/credits/credit-ledger.ts",
         "src/monetization/credits/dividend-repository.ts",
-        "src/monetization/credits/bot-billing.ts",
         "src/monetization/credits/credit-transaction-repository.ts",
         "src/monetization/credits/dividend-cron.ts",
         "src/monetization/budget/budget-checker.ts",
@@ -195,7 +194,6 @@
         "src/backup/restore-log-store.ts",
         "src/backup/snapshot-manager.ts",
         "src/monetization/credits/credit-ledger.ts",
-        "src/monetization/credits/bot-billing.ts",
         "src/security/tenant-keys/schema.ts",
         "src/gateway/spending-cap.ts",
         "src/trpc/routers/two-factor.ts"
