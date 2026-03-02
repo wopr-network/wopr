@@ -4,6 +4,7 @@ import { z } from "zod";
 import { logger } from "../../config/logger.js";
 import type { NodeRegistration } from "../../fleet/repository-types.js";
 import { getNodeRegistrar, getNodeRepo, getRegistrationTokenStore } from "../../fleet/services.js";
+import { validateNodeHost } from "../../security/host-validation.js";
 
 const RegisterNodeSchema = z.object({
   node_id: z
@@ -101,6 +102,12 @@ internalNodeRoutes.post("/register", async (c) => {
   }
 
   const body = parsed.data;
+
+  try {
+    validateNodeHost(body.host);
+  } catch (err) {
+    return c.json({ success: false, error: (err as Error).message }, 400);
+  }
 
   const registrar = getNodeRegistrar();
   const nodeRepo = getNodeRepo();
