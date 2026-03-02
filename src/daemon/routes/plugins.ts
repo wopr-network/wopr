@@ -10,8 +10,8 @@ import { describeRoute } from "hono-openapi";
 import { rateLimiter } from "hono-rate-limiter";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
-import { getSessions, inject } from "../../core/sessions.js";
 import { logger } from "../../logger.js";
+import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
 import {
   addRegistry,
   disablePlugin,
@@ -23,7 +23,6 @@ import {
   getPluginState,
   getUiComponents,
   getWebUiExtensions,
-  installPlugin,
   listPlugins,
   listRegistries,
   loadPlugin,
@@ -33,7 +32,7 @@ import {
   searchPlugins,
   unloadPlugin,
 } from "../../plugins.js";
-import type { ConfigSchema, PluginInjectOptions } from "../../types.js";
+import type { ConfigSchema } from "../../types.js";
 
 // ============================================================================
 // Error classes
@@ -122,18 +121,6 @@ interface PluginConfigData {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-// Create injectors for hot-loading plugins (same as daemon/index.ts)
-async function createInjectors() {
-  const sessions = await getSessions();
-  return {
-    inject: async (session: string, message: string, options?: PluginInjectOptions): Promise<string> => {
-      const result = await inject(session, message, { silent: true, ...options });
-      return result.response;
-    },
-    getSessions: () => Object.keys(sessions),
-  };
-}
 
 // List installed plugins (with manifest metadata)
 pluginsRouter.get(
@@ -252,16 +239,7 @@ async function handleInstall(c: Context) {
   }
 
   try {
-    const plugin = await installPlugin(source);
-    // Auto-enable plugin after installation
-    await enablePlugin(plugin.name);
-
-    // Hot-load the plugin immediately (no restart required)
-    const injectors = await createInjectors();
-    await loadPlugin(plugin, injectors);
-
-    // Run health check for any newly registered providers
-    await providerRegistry.checkHealth();
+    const { plugin } = await installAndActivatePlugin(source);
 
     return c.json(
       {

@@ -12,22 +12,21 @@ import { describeRoute } from "hono-openapi";
 import { z } from "zod";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
-import { getSessions, inject } from "../../core/sessions.js";
 import { logger } from "../../logger.js";
+import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
 import {
   disablePlugin,
   enablePlugin,
   getAllPluginManifests,
   getConfigSchemas,
   getLoadedPlugin,
-  installPlugin,
   listPlugins,
   loadPlugin,
   readPluginManifest,
   removePlugin,
   unloadPlugin,
 } from "../../plugins.js";
-import type { ConfigSchema, PluginInjectOptions } from "../../types.js";
+import type { ConfigSchema } from "../../types.js";
 
 // ============================================================================
 // Zod Schemas
@@ -68,17 +67,6 @@ function validateInstanceId(id: string): string | null {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-async function createInjectors() {
-  const sessions = await getSessions();
-  return {
-    inject: async (session: string, message: string, options?: PluginInjectOptions): Promise<string> => {
-      const result = await inject(session, message, { silent: true, ...options });
-      return result.response;
-    },
-    getSessions: () => Object.keys(sessions),
-  };
-}
 
 /**
  * Validate a config object against a plugin's ConfigSchema.
@@ -208,12 +196,7 @@ instancePluginsRouter.post(
     }
 
     try {
-      const plugin = await installPlugin(source);
-      await enablePlugin(plugin.name);
-
-      const injectors = await createInjectors();
-      await loadPlugin(plugin, injectors);
-      await providerRegistry.checkHealth();
+      const { plugin } = await installAndActivatePlugin(source);
 
       return c.json(
         {
