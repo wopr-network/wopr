@@ -74,6 +74,18 @@ describe("OpenAI Capabilities Router", () => {
       expect(res.status).toBe(400);
     });
 
+    it("returns 400 when response_format is invalid", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/audio/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: "Hello", response_format: "evil/injection" }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.code).toBe("invalid_response_format");
+    });
+
     it("proxies to TTS handler and returns audio buffer", async () => {
       const audioBuffer = Buffer.from("fake-audio-data");
       const mockHandler = { speak: vi.fn(async () => audioBuffer) };
@@ -93,7 +105,7 @@ describe("OpenAI Capabilities Router", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(res.headers.get("Content-Type")).toBe("audio/mpeg");
+      expect(res.headers.get("Content-Type")).toBe("audio/mp3");
       expect(mockHandler.speak).toHaveBeenCalledWith(
         expect.objectContaining({ input: "Hello world", voice: "alloy" }),
       );
@@ -101,6 +113,18 @@ describe("OpenAI Capabilities Router", () => {
   });
 
   describe("POST /v1/audio/transcriptions", () => {
+    it("returns 400 when file is missing", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "whisper-1" }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.code).toBe("missing_field");
+    });
+
     it("returns 503 when no STT provider registered", async () => {
       const app = createTestApp();
       const res = await app.request("/v1/audio/transcriptions", {
@@ -135,6 +159,18 @@ describe("OpenAI Capabilities Router", () => {
   });
 
   describe("POST /v1/images/generations", () => {
+    it("returns 400 when prompt is missing", async () => {
+      const app = createTestApp();
+      const res = await app.request("/v1/images/generations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "dall-e-3" }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error.code).toBe("missing_field");
+    });
+
     it("returns 503 when no image-gen provider registered", async () => {
       const app = createTestApp();
       const res = await app.request("/v1/images/generations", {

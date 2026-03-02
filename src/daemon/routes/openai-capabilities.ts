@@ -47,9 +47,12 @@ function serverError(err: unknown) {
     error: {
       message: err instanceof Error ? err.message : "Internal server error",
       type: "server_error",
+      code: "provider_error",
     },
   };
 }
+
+const VALID_AUDIO_FORMATS = new Set(["mp3", "opus", "aac", "flac", "wav", "pcm"]);
 
 // ============================================================================
 // POST /v1/audio/speech — Text-to-Speech
@@ -90,6 +93,20 @@ openaiCapabilitiesRouter.post(
       );
     }
 
+    const responseFormat = body.response_format ?? "mp3";
+    if (!VALID_AUDIO_FORMATS.has(responseFormat)) {
+      return c.json(
+        {
+          error: {
+            message: `Invalid response_format '${responseFormat}'. Must be one of: ${[...VALID_AUDIO_FORMATS].join(", ")}`,
+            type: "invalid_request_error",
+            code: "invalid_response_format",
+          },
+        },
+        400,
+      );
+    }
+
     const resolved = resolveCapability("tts");
     if (!resolved) {
       return c.json(noProviderError("tts"), 503);
@@ -105,10 +122,10 @@ openaiCapabilitiesRouter.post(
         input: body.input,
         model: body.model,
         voice: body.voice,
-        response_format: body.response_format,
+        response_format: responseFormat,
         speed: body.speed,
       });
-      c.header("Content-Type", `audio/${body.response_format || "mpeg"}`);
+      c.header("Content-Type", `audio/${responseFormat}`);
       return c.body(new Uint8Array(audio));
     } catch (err) {
       logger.error(`[openai-capabilities] TTS error: ${err instanceof Error ? err.message : String(err)}`);
@@ -275,7 +292,7 @@ openaiCapabilitiesRouter.post(
       return c.json({ error: { message: "Invalid JSON", type: "invalid_request_error", code: "invalid_json" } }, 400);
     }
 
-    if (!body.input) {
+    if (body.input === undefined || body.input === null) {
       return c.json(
         { error: { message: "'input' is required", type: "invalid_request_error", code: "missing_field" } },
         400,
