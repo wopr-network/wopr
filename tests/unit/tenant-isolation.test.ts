@@ -55,7 +55,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { BotProfile, BotStatus } from "../../src/fleet/types.js";
 import type { DrizzleDb } from "../../src/db/index.js";
 import { beginTestTransaction, createTestDb, endTestTransaction, rollbackTestTransaction } from "../../src/test/db.js";
-import { TenantKeyStore } from "../../src/security/tenant-keys/schema.js";
+import { TenantKeyRepository } from "../../src/security/tenant-keys/schema.js";
 
 // ---------------------------------------------------------------------------
 // Two tenant-scoped tokens — MUST be set before any module import
@@ -428,7 +428,7 @@ describe("tenant isolation — fleet routes (WOP-822)", () => {
 // ---------------------------------------------------------------------------
 
 // Import tenant-key routes (shares the same mocked FLEET_TOKEN env vars)
-const { tenantKeyRoutes, setStore } = await import("../../src/api/routes/tenant-keys.js");
+const { tenantKeyRoutes, setRepo } = await import("../../src/api/routes/tenant-keys.js");
 
 const keysApp = new Hono();
 keysApp.route("/api/tenant-keys", tenantKeyRoutes);
@@ -436,13 +436,13 @@ keysApp.route("/api/tenant-keys", tenantKeyRoutes);
 describe("tenant isolation — tenant-key routes (WOP-822)", () => {
   let pool: PGlite;
   let db: DrizzleDb;
-  let store: TenantKeyStore;
+  let store: TenantKeyRepository;
 
   beforeAll(async () => {
     ({ db, pool } = await createTestDb());
     await beginTestTransaction(pool);
-    store = new TenantKeyStore(db);
-    setStore(store);
+    store = new TenantKeyRepository(db);
+    setRepo(store);
   });
 
   afterAll(async () => {
