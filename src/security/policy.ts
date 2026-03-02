@@ -7,6 +7,7 @@
 
 import { logger } from "../logger.js";
 import { getStorage } from "../storage/index.js";
+import { warnSandboxDisabled } from "./sandbox.js";
 import type { SecurityConfigRow, SecurityPluginRuleRow } from "./schema.js";
 import { securityConfigSchema, securityPluginRuleSchema } from "./schema.js";
 import type { SecurityPluginRule } from "./store.js";
@@ -66,6 +67,10 @@ export async function initSecurity(woprDir: string): Promise<void> {
   await securityStore.init();
 
   logger.info("[security] Security system initialized");
+
+  // Warn if sandboxing is disabled (WOP-1510)
+  const secConfig = getSecurityConfig();
+  warnSandboxDisabled(secConfig);
 }
 
 /**

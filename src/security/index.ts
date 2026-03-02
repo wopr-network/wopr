@@ -107,6 +107,7 @@ export {
   isSessionSandboxed,
   listSandboxes,
   type SandboxContext,
+  warnSandboxDisabled,
 } from "./sandbox.js";
 // Export all types
 export {

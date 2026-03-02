@@ -503,6 +503,9 @@ export interface SecurityConfig {
     /** Audit log path */
     logPath?: string;
   };
+
+  /** Whether to log a warning at startup when sandboxing is disabled (default: true) */
+  warnOnDisabledSandbox?: boolean;
 }
 
 /**
@@ -554,6 +557,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     logSuccess: false,
     logDenied: true,
   },
+  warnOnDisabledSandbox: true,
 };
 
 // ============================================================================

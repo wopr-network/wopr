@@ -17,7 +17,7 @@ import { eventBus } from "../core/events.js";
 import { logger } from "../logger.js";
 import { getPluginExtension } from "../plugins/extensions.js";
 import { getContext } from "./context.js";
-import type { SandboxConfig as LegacySandboxConfig } from "./types.js";
+import type { SandboxConfig as LegacySandboxConfig, SecurityConfig } from "./types.js";
 
 // ============================================================================
 // Sandbox Extension Interface (provided by wopr-plugin-sandbox)
@@ -61,6 +61,28 @@ interface SandboxExtension {
  */
 function getSandboxExtension(): SandboxExtension | undefined {
   return getPluginExtension<SandboxExtension>("sandbox");
+}
+
+/**
+ * Log a warning at startup if plugin sandboxing is disabled.
+ * Called from initSecurity() after the security config is loaded.
+ */
+export function warnSandboxDisabled(config: SecurityConfig): void {
+  // Check if warning is suppressed
+  if (config.warnOnDisabledSandbox === false) {
+    return;
+  }
+
+  // Check if sandbox is enabled in the default policy
+  if (config.defaults?.sandbox?.enabled) {
+    return;
+  }
+
+  logger.warn(
+    "[SECURITY] Plugin sandboxing is disabled — plugins run with full process access. " +
+      "Set sandbox.mode to 'non-main' or 'all' in config, or install wopr-plugin-sandbox. " +
+      "To suppress this warning, set security.warnOnDisabledSandbox to false.",
+  );
 }
 
 // ============================================================================
