@@ -209,7 +209,7 @@ describe("runPreInjectHooks", () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it("rejects commands that fail allowlist validation", async () => {
+  it("blocks when hook command fails validation (fail closed)", async () => {
     await setTestSecurityConfig({
       enforcement: "enforce",
       defaults: { minTrustLevel: "semi-trusted" },
@@ -219,8 +219,8 @@ describe("runPreInjectHooks", () => {
     });
 
     const result = await runPreInjectHooks(makeHookContext());
-    // Fails open — allow: true, but spawn is never called
-    expect(result.allow).toBe(true);
+    expect(result.allow).toBe(false);
+    expect(result.reason).toContain("Hook execution failed");
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
@@ -278,6 +278,103 @@ describe("runPreInjectHooks", () => {
     const result = await runPreInjectHooks(makeHookContext());
     expect(result.allow).toBe(true);
     expect(result.message).toBe("transformed message");
+  });
+});
+
+describe("fail-closed hook behavior (WOP-1378)", () => {
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `wopr-test-failclosed-${randomBytes(8).toString("hex")}`);
+    if (!existsSync(testDir)) {
+      mkdirSync(testDir, { recursive: true });
+    }
+    resetStorage();
+    getStorage(join(testDir, "test.sqlite"));
+    await initSecurity(testDir);
+    spawnMock.mockReset();
+  });
+
+  afterEach(() => {
+    resetStorage();
+  });
+
+  it("blocks on non-zero exit code by default", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "failing-hook", type: "pre-inject", command: "node check.js", enabled: true },
+      ],
+    });
+
+    const mockProc = createMockProcess("", 1);
+    spawnMock.mockReturnValue(mockProc);
+
+    const result = await runPreInjectHooks(makeHookContext());
+    expect(result.allow).toBe(false);
+    expect(result.reason).toContain("Hook execution failed");
+  });
+
+  it("blocks on invalid JSON output by default", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "bad-json-hook", type: "pre-inject", command: "node check.js", enabled: true },
+      ],
+    });
+
+    const mockProc = createMockProcess("not json at all");
+    spawnMock.mockReturnValue(mockProc);
+
+    const result = await runPreInjectHooks(makeHookContext());
+    expect(result.allow).toBe(false);
+    expect(result.reason).toContain("Hook execution failed");
+  });
+
+  it("allows on non-zero exit when failOpen: true", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "lenient-hook", type: "pre-inject", command: "node check.js", enabled: true, failOpen: true },
+      ],
+    });
+
+    const mockProc = createMockProcess("", 1);
+    spawnMock.mockReturnValue(mockProc);
+
+    const result = await runPreInjectHooks(makeHookContext());
+    expect(result.allow).toBe(true);
+  });
+
+  it("allows on invalid JSON when failOpen: true", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "lenient-hook", type: "pre-inject", command: "node check.js", enabled: true, failOpen: true },
+      ],
+    });
+
+    const mockProc = createMockProcess("not json");
+    spawnMock.mockReturnValue(mockProc);
+
+    const result = await runPreInjectHooks(makeHookContext());
+    expect(result.allow).toBe(true);
+  });
+
+  it("allows on validation failure when failOpen: true", async () => {
+    await setTestSecurityConfig({
+      enforcement: "enforce",
+      defaults: { minTrustLevel: "semi-trusted" },
+      hooks: [
+        { name: "bad-cmd-hook", type: "pre-inject", command: "/usr/bin/evil", enabled: true, failOpen: true },
+      ],
+    });
+
+    const result = await runPreInjectHooks(makeHookContext());
+    expect(result.allow).toBe(true);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 });
 
