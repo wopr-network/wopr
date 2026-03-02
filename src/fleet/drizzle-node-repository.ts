@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { DrizzleDb } from "../db/index.js";
 import { nodeTransitions } from "../db/schema/node-transitions.js";
@@ -216,7 +216,9 @@ export class DrizzleNodeRepository implements INodeRepository {
     if (!rows[0]) return null; // node not found
     if (!rows[0].nodeSecret) return null; // legacy node, no secret stored
     const hash = createHash("sha256").update(secret).digest("hex");
-    return rows[0].nodeSecret === hash;
+    const a = Buffer.from(rows[0].nodeSecret, "hex");
+    const b = Buffer.from(hash, "hex");
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 
   async insertProvisioning(data: NewProvisioningNode): Promise<Node> {
