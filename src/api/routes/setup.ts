@@ -299,7 +299,20 @@ export function createSetupRoutes(deps: SetupRouteDeps): Hono {
       }
     }
 
-    // 4. Upsert into plugin_configs
+    // 4. Verify ownership before persisting anything
+    const profile = await deps.profileStore.get(botId);
+    if (!profile) {
+      return c.json({ error: `Bot not found: ${botId}` }, 404);
+    }
+    const authenticatedTenantId = c.req.header("x-authenticated-tenant-id");
+    if (!authenticatedTenantId) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+    if (profile.tenantId !== authenticatedTenantId) {
+      return c.json({ error: "Bot does not belong to your tenant" }, 403);
+    }
+
+    // 5. Upsert into plugin_configs
     await deps.pluginConfigRepo.upsert({
       id: randomUUID(),
       botId,
@@ -308,18 +321,6 @@ export function createSetupRoutes(deps: SetupRouteDeps): Hono {
       encryptedFieldsJson: Object.keys(encryptedFields).length > 0 ? JSON.stringify(encryptedFields) : null,
       setupSessionId,
     });
-
-    // 5. Inject env vars into bot profile
-    const profile = await deps.profileStore.get(botId);
-    if (!profile) {
-      return c.json({ error: `Bot not found: ${botId}` }, 404);
-    }
-
-    // Ownership validation: authenticated tenant must own this bot
-    const authenticatedTenantId = c.req.header("x-authenticated-tenant-id");
-    if (!authenticatedTenantId || profile.tenantId !== authenticatedTenantId) {
-      return c.json({ error: "Bot does not belong to your tenant" }, 403);
-    }
 
     const envUpdates: Record<string, string> = {};
     for (const field of manifest.configSchema) {
