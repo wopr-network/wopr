@@ -27,7 +27,7 @@ import type { PayRamChargeStore } from "../../monetization/payram/charge-store.j
 import { createPayRamCheckout, MIN_PAYMENT_USD } from "../../monetization/payram/checkout.js";
 import type { PromotionEngine } from "../../monetization/promotions/engine.js";
 import { assertSafeRedirectUrl } from "../../security/redirect-allowlist.js";
-import { protectedProcedure, publicProcedure, router } from "../init.js";
+import { protectedProcedure, publicProcedure, router, tenantProcedure } from "../init.js";
 
 // ---------------------------------------------------------------------------
 // Schedule interval → hours mapping
@@ -179,31 +179,25 @@ function deps(): BillingRouterDeps {
 // ---------------------------------------------------------------------------
 
 export const billingRouter = router({
-  /** Get credits balance for a tenant. Tenant defaults to ctx.tenantId when omitted. */
-  creditsBalance: protectedProcedure
-    .input(z.object({ tenant: tenantIdSchema.optional() }))
-    .query(async ({ input, ctx }) => {
-      const tenant = input.tenant ?? ctx.tenantId ?? ctx.user.id;
-      if (input.tenant && input.tenant !== (ctx.tenantId ?? ctx.user.id)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
-      }
-      const { creditLedger, meterAggregator } = deps();
-      const balance = await creditLedger.balance(tenant);
+  /** Get credits balance for a tenant. Uses validated ctx.tenantId. */
+  creditsBalance: tenantProcedure.input(z.object({}).optional()).query(async ({ ctx }) => {
+    const tenant = ctx.tenantId;
+    const { creditLedger, meterAggregator } = deps();
+    const balance = await creditLedger.balance(tenant);
 
-      // Compute 7-day average daily burn from usage summaries.
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const { totalCharge } = await meterAggregator.getTenantTotal(tenant, sevenDaysAgo);
-      const daily_burn_credits = Math.round(totalCharge / 7);
-      const runway_days = daily_burn_credits > 0 ? Math.floor(balance.toCents() / daily_burn_credits) : null;
+    // Compute 7-day average daily burn from usage summaries.
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const { totalCharge } = await meterAggregator.getTenantTotal(tenant, sevenDaysAgo);
+    const daily_burn_credits = Math.round(totalCharge / 7);
+    const runway_days = daily_burn_credits > 0 ? Math.floor(balance.toCents() / daily_burn_credits) : null;
 
-      return { tenant, balance_credits: balance.toCentsRounded(), daily_burn_credits, runway_days };
-    }),
+    return { tenant, balance_credits: balance.toCentsRounded(), daily_burn_credits, runway_days };
+  }),
 
-  /** Get credit transaction history for a tenant. Tenant defaults to ctx.tenantId when omitted. */
-  creditsHistory: protectedProcedure
+  /** Get credit transaction history for a tenant. Uses validated ctx.tenantId. */
+  creditsHistory: tenantProcedure
     .input(
       z.object({
-        tenant: tenantIdSchema.optional(),
         type: z.enum(["grant", "refund", "correction"]).optional(),
         from: z.number().int().optional(),
         to: z.number().int().optional(),
@@ -212,13 +206,9 @@ export const billingRouter = router({
       }),
     )
     .query(async ({ input, ctx }) => {
-      const tenant = input.tenant ?? ctx.tenantId ?? ctx.user.id;
-      if (input.tenant && input.tenant !== (ctx.tenantId ?? ctx.user.id)) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
-      }
+      const tenant = ctx.tenantId;
       const { creditLedger } = deps();
-      const { tenant: _t, ...filters } = { ...input, tenant };
-      const entries = await creditLedger.history(tenant, filters);
+      const entries = await creditLedger.history(tenant, input);
       return { entries, total: entries.length };
     }),
 
