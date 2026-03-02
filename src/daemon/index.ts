@@ -130,8 +130,11 @@ export function createApp(healthMonitor?: HealthMonitor) {
   app.route("/providers", providersRouter);
   app.route("/templates", templatesRouter);
   app.route("/observability", observabilityRouter);
-  app.route("/v1", openaiRouter);
+  // openaiCapabilitiesRouter mounts first so its /embeddings, /audio/transcriptions,
+  // /audio/speech, and /images/generations handlers take precedence. openaiRouter
+  // only handles /chat/completions and /models — no route conflict.
   app.route("/v1", openaiCapabilitiesRouter);
+  app.route("/v1", openaiRouter);
   app.route("/api/daemon", restartRouter);
 
   // Per-instance plugin management (WOP-203)

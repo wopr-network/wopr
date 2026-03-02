@@ -148,8 +148,9 @@ openaiCapabilitiesRouter.post(
       return c.json(
         {
           error: {
-            message: "'file' is required (base64-encoded audio)",
-            type: "invalid_request_error",
+            message:
+              "This endpoint accepts JSON with base64-encoded audio: { model, file_base64, language? }. Multipart/form-data is not supported.",
+            type: "unsupported_format",
             code: "missing_field",
           },
         },
