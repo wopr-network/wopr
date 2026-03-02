@@ -85,4 +85,32 @@ describe("generateCloudInit", () => {
     const result = generateCloudInit("ghcr.io/wopr-network/wopr:latest");
     expect(result).not.toContain("WOPR_NODE_SECRET");
   });
+
+  it("rejects nodeSecret with shell metacharacters (semicolon)", () => {
+    expect(() => generateCloudInit("ghcr.io/wopr-network/wopr:latest", "abc; rm -rf /")).toThrow("Invalid nodeSecret");
+  });
+
+  it("rejects nodeSecret with dollar sign", () => {
+    expect(() => generateCloudInit("ghcr.io/wopr-network/wopr:latest", "abc$HOME")).toThrow("Invalid nodeSecret");
+  });
+
+  it("rejects nodeSecret with backticks", () => {
+    expect(() => generateCloudInit("ghcr.io/wopr-network/wopr:latest", "`whoami`")).toThrow("Invalid nodeSecret");
+  });
+
+  it("rejects nodeSecret with double quotes", () => {
+    expect(() => generateCloudInit("ghcr.io/wopr-network/wopr:latest", 'abc"def')).toThrow(
+      // biome-ignore format: contains literal double quote
+      "Invalid nodeSecret",
+    );
+  });
+
+  it("rejects nodeSecret with spaces", () => {
+    expect(() => generateCloudInit("ghcr.io/wopr-network/wopr:latest", "abc def")).toThrow("Invalid nodeSecret");
+  });
+
+  it("accepts valid nodeSecret with underscores and hyphens", () => {
+    const result = generateCloudInit("ghcr.io/wopr-network/wopr:latest", "wopr_node_abc123-def456");
+    expect(result).toContain("WOPR_NODE_SECRET=wopr_node_abc123-def456");
+  });
 });
