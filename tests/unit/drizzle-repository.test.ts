@@ -38,7 +38,7 @@ vi.mock("../../src/paths.js", () => ({
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { getStorage, resetStorage } from "../../src/storage/public.js";
-import type { StorageApi } from "../../src/storage/api/plugin-storage.js";
+import type { InternalRepository, StorageApi } from "../../src/storage/api/plugin-storage.js";
 
 // Test schema with boolean field for serialization tests
 const testSchema = z.object({
@@ -271,14 +271,14 @@ describe("DrizzleRepository gap coverage (WOP-954)", () => {
     });
 
     it("should execute SELECT with params and return matching rows", async () => {
-      const repo = storage.getRepository<TestRecord>("drepo", "items");
+      const repo = storage.getRepository<TestRecord>("drepo", "items") as InternalRepository<TestRecord>;
       const result = await repo.raw("SELECT * FROM drepo_items WHERE age > ?", [26]);
       expect(result).toHaveLength(1);
       expect((result[0] as TestRecord).name).toBe("Alice");
     });
 
     it("should execute INSERT via raw and report changes", async () => {
-      const repo = storage.getRepository<TestRecord>("drepo", "items");
+      const repo = storage.getRepository<TestRecord>("drepo", "items") as InternalRepository<TestRecord>;
       const result = await repo.raw(
         "INSERT INTO drepo_items (id, name, age) VALUES (?, ?, ?)",
         ["3", "Charlie", 35],
@@ -288,25 +288,25 @@ describe("DrizzleRepository gap coverage (WOP-954)", () => {
     });
 
     it("should execute UPDATE via raw and report changes", async () => {
-      const repo = storage.getRepository<TestRecord>("drepo", "items");
+      const repo = storage.getRepository<TestRecord>("drepo", "items") as InternalRepository<TestRecord>;
       const result = await repo.raw("UPDATE drepo_items SET age = ? WHERE name = ?", [31, "Alice"]);
       expect((result[0] as { changes: number }).changes).toBe(1);
     });
 
     it("should execute DELETE via raw and report changes", async () => {
-      const repo = storage.getRepository<TestRecord>("drepo", "items");
+      const repo = storage.getRepository<TestRecord>("drepo", "items") as InternalRepository<TestRecord>;
       const result = await repo.raw("DELETE FROM drepo_items WHERE id = ?", ["1"]);
       expect((result[0] as { changes: number }).changes).toBe(1);
     });
 
     it("should execute PRAGMA queries and return results", async () => {
-      const repo = storage.getRepository<TestRecord>("drepo", "items");
+      const repo = storage.getRepository<TestRecord>("drepo", "items") as InternalRepository<TestRecord>;
       const result = await repo.raw("PRAGMA table_info('drepo_items')");
       expect(result.length).toBeGreaterThan(0);
     });
 
     it("should return empty array for SELECT with no matching rows", async () => {
-      const repo = storage.getRepository<TestRecord>("drepo", "items");
+      const repo = storage.getRepository<TestRecord>("drepo", "items") as InternalRepository<TestRecord>;
       const result = await repo.raw("SELECT * FROM drepo_items WHERE age > ?", [999]);
       expect(result).toHaveLength(0);
     });

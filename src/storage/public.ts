@@ -10,6 +10,8 @@ export type {
   Filter,
   FilterCondition,
   FilterOperator,
+  InternalRepository,
+  InternalStorageApi,
   OrderDirection,
   PluginSchema,
   QueryBuilder,

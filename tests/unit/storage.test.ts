@@ -27,7 +27,7 @@ vi.mock("../../src/paths.js", () => ({
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { getStorage, resetStorage } from "../../src/storage/public.js";
-import type { StorageApi } from "../../src/storage/api/plugin-storage.js";
+import type { InternalRepository, StorageApi } from "../../src/storage/api/plugin-storage.js";
 
 // Test schema
 const testSchema = z.object({
@@ -129,22 +129,26 @@ describe("Storage Module (WOP-545)", () => {
     });
 
     it("should set WAL journal mode", async () => {
-      const result = await storage.getRepository("test", "users").raw("PRAGMA journal_mode");
+      const repo = storage.getRepository("test", "users") as InternalRepository<Record<string, unknown>>;
+      const result = await repo.raw("PRAGMA journal_mode");
       expect(result[0]).toHaveProperty("journal_mode", "wal");
     });
 
     it("should set busy timeout to 5000ms", async () => {
-      const result = await storage.getRepository("test", "users").raw("PRAGMA busy_timeout");
+      const repo = storage.getRepository("test", "users") as InternalRepository<Record<string, unknown>>;
+      const result = await repo.raw("PRAGMA busy_timeout");
       expect(result[0]).toHaveProperty("timeout", 5000);
     });
 
     it("should enable foreign keys", async () => {
-      const result = await storage.getRepository("test", "users").raw("PRAGMA foreign_keys");
+      const repo = storage.getRepository("test", "users") as InternalRepository<Record<string, unknown>>;
+      const result = await repo.raw("PRAGMA foreign_keys");
       expect(result[0]).toHaveProperty("foreign_keys", 1);
     });
 
     it("should set synchronous to NORMAL", async () => {
-      const result = await storage.getRepository("test", "users").raw("PRAGMA synchronous");
+      const repo = storage.getRepository("test", "users") as InternalRepository<Record<string, unknown>>;
+      const result = await repo.raw("PRAGMA synchronous");
       expect(result[0]).toHaveProperty("synchronous", 1); // NORMAL = 1
     });
   });
@@ -204,7 +208,7 @@ describe("Storage Module (WOP-545)", () => {
     });
 
     it("should create single-column index", async () => {
-      const repo = storage.getRepository<TestRecord>("test", "users");
+      const repo = storage.getRepository<TestRecord>("test", "users") as InternalRepository<TestRecord>;
       const result = await repo.raw('PRAGMA index_list("test_users")');
       const indexes = result as Array<{ name: string }>;
       const nameIndex = indexes.find(idx => idx.name === "idx_test_users_name");
@@ -212,7 +216,7 @@ describe("Storage Module (WOP-545)", () => {
     });
 
     it("should create multi-column index", async () => {
-      const repo = storage.getRepository<TestRecord>("test", "users");
+      const repo = storage.getRepository<TestRecord>("test", "users") as InternalRepository<TestRecord>;
       const result = await repo.raw('PRAGMA index_list("test_users")');
       const indexes = result as Array<{ name: string }>;
       const multiIndex = indexes.find(idx => idx.name === "idx_test_users_age_name");
@@ -220,7 +224,7 @@ describe("Storage Module (WOP-545)", () => {
     });
 
     it("should create non-unique index by default", async () => {
-      const repo = storage.getRepository<TestRecord>("test", "users");
+      const repo = storage.getRepository<TestRecord>("test", "users") as InternalRepository<TestRecord>;
       const result = await repo.raw('PRAGMA index_list("test_users")');
       const indexes = result as Array<{ unique: number }>;
       const nameIndex = indexes.find(idx => (idx as unknown as { name: string }).name === "idx_test_users_name");
