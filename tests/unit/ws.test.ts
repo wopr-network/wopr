@@ -677,6 +677,28 @@ describe("Subscription stats", () => {
   });
 });
 
+describe("Test-only guards", () => {
+  it("_setTokenVerifier throws outside test environment", () => {
+    const origEnv = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = "production";
+      expect(() => _setTokenVerifier(() => true)).toThrow("_setTokenVerifier is test-only");
+    } finally {
+      process.env.NODE_ENV = origEnv;
+    }
+  });
+
+  it("_resetForTesting throws outside test environment", () => {
+    const origEnv = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = "production";
+      expect(() => _resetForTesting()).toThrow("_resetForTesting is test-only");
+    } finally {
+      process.env.NODE_ENV = origEnv;
+    }
+  });
+});
+
 describe("Multiple clients", () => {
   it("should deliver to all matching clients independently", () => {
     const ws1 = createMockWs();
