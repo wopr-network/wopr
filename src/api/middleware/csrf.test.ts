@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
+import type { SessionAuthEnv } from "../../auth/middleware.js";
 import { csrfProtection, validateCsrfOrigin } from "./csrf.js";
 
 // ---------------------------------------------------------------------------
@@ -53,7 +54,13 @@ describe("validateCsrfOrigin", () => {
 
 describe("csrfProtection middleware", () => {
   function createApp(allowedOrigins: string[]) {
-    const app = new Hono();
+    const app = new Hono<SessionAuthEnv>();
+    // Simulate session user being set (as resolveSessionUser does in production)
+    // so CSRF validation logic actually runs in unit tests.
+    app.use("/*", async (c, next) => {
+      c.set("user", { id: "test-user", roles: ["user"] });
+      return next();
+    });
     app.use("/*", csrfProtection({ allowedOrigins }));
     app.post("/api/fleet/bots", (c) => c.json({ ok: true }));
     app.put("/api/billing/checkout", (c) => c.json({ ok: true }));
