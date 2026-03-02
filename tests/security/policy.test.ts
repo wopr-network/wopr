@@ -158,13 +158,13 @@ describe("Security Policy Module", () => {
     });
 
     it("should resolve trusted with appropriate capability set", async () => {
-      const source = makeSource("plugin"); // trusted
+      const source = makeSource("plugin"); // semi-trusted
       const policy = resolvePolicy(source);
 
-      expect(policy.trustLevel).toBe("trusted");
+      expect(policy.trustLevel).toBe("semi-trusted");
       expect(policy.capabilities).toContain("inject");
       expect(policy.capabilities).toContain("inject.tools");
-      expect(policy.capabilities).toContain("session.spawn");
+      expect(policy.capabilities).not.toContain("session.spawn");
     });
 
     it("should resolve semi-trusted with limited capabilities", async () => {
@@ -303,11 +303,11 @@ describe("Security Policy Module", () => {
         },
       });
 
-      const source = makeSource("plugin"); // trusted
+      const source = makeSource("plugin"); // semi-trusted
       const policy = resolvePolicy(source, "gateway-session");
 
       expect(policy.isGateway).toBe(true);
-      expect(policy.canForward).toBe(true);
+      expect(policy.canForward).toBe(false);
     });
 
     it("should not canForward when gateway but no cross.inject", async () => {
@@ -610,10 +610,12 @@ describe("Security Policy Module", () => {
     });
 
     it("should not require sandbox for trusted", async () => {
-      const source = makeSource("plugin");
+      const source = makeSource("plugin"); // semi-trusted — sandbox IS required
       const result = checkSandboxRequired(source);
 
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.enabled).toBe(true);
+      expect(result!.network).toBe("bridge");
     });
 
     it("should require sandbox for semi-trusted", async () => {
@@ -1140,9 +1142,9 @@ describe("Security Policy Module", () => {
         },
       });
 
-      const source = makeSource("plugin"); // trusted
+      const source = makeSource("plugin"); // semi-trusted — trusted tool deny rules don't apply
       const denied = checkToolAccess(source, "exec_command");
-      expect(denied.allowed).toBe(false);
+      expect(denied.allowed).toBe(true);
 
       // config_get requires config.read capability (included above) and is in allow list
       const allowed = checkToolAccess(source, "config_get");

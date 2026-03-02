@@ -292,9 +292,11 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
   // WebSocket handler factory (shared by /ws and /api/ws)
+  // bearerAuth() middleware has already validated the token during the HTTP upgrade
+  // request, so all connections reaching here are pre-authenticated (WOP-1407)
   const wsHandler = upgradeWebSocket(() => ({
     onOpen(_event, ws) {
-      setupWebSocket(ws as unknown as { send(data: string): void });
+      setupWebSocket(ws as unknown as { send(data: string): void }, { preAuthenticated: true });
     },
     onMessage(event, ws) {
       const data = event.data;

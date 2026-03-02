@@ -63,6 +63,18 @@ interface ClientState {
   lastActivity: number;
 }
 
+/** Auth timeout: close unauthenticated connections after 2 seconds (WOP-1407) */
+const AUTH_TIMEOUT_MS = 2_000;
+
+/** Track auth timeouts so they can be cleared on auth success or close */
+const authTimeouts = new Map<WS, ReturnType<typeof setTimeout>>();
+
+/** Options for setupWebSocket */
+export interface SetupWebSocketOptions {
+  /** When true, skip the auth timeout — the HTTP upgrade already validated the token */
+  preAuthenticated?: boolean;
+}
+
 /** Maximum messages per heartbeat interval before disconnecting as slow consumer */
 const MAX_MESSAGES_PER_HEARTBEAT = 512;
 
@@ -77,24 +89,48 @@ const clients = new Map<WS, ClientState>();
 
 /**
  * Register a new WebSocket client.
+ * If preAuthenticated is true, the auth timeout is skipped because the HTTP
+ * upgrade handler already validated the bearer token (WOP-1407).
  */
-export function setupWebSocket(ws: WS): void {
+export function setupWebSocket(ws: WS, options?: SetupWebSocketOptions): void {
+  const preAuth = options?.preAuthenticated ?? false;
   const state: ClientState = {
     ws,
     topics: new Set(),
-    authenticated: false,
+    authenticated: preAuth,
     messagesSinceHeartbeat: 0,
     backpressured: false,
     lastActivity: Date.now(),
   };
   clients.set(ws, state);
 
-  // Send welcome — client must send { type: "auth", token: "..." } before subscribing
   safeSend(state, {
     type: "connected",
-    message: "WOPR WebSocket connected. Send auth message to authenticate.",
+    message: preAuth
+      ? "WOPR WebSocket connected and authenticated."
+      : "WOPR WebSocket connected. Send auth message to authenticate.",
     ts: Date.now(),
   });
+
+  // Only start auth timeout if not pre-authenticated (WOP-1407)
+  if (!preAuth) {
+    const timeout = setTimeout(() => {
+      authTimeouts.delete(ws);
+      if (!state.authenticated) {
+        safeSend(state, {
+          type: "error",
+          message: "Authentication timeout: connection closed",
+          code: "AUTH_TIMEOUT",
+          ts: Date.now(),
+        });
+        clients.delete(ws);
+        if (typeof (ws as unknown as { close?: () => void }).close === "function") {
+          (ws as unknown as { close: () => void }).close();
+        }
+      }
+    }, AUTH_TIMEOUT_MS);
+    authTimeouts.set(ws, timeout);
+  }
 }
 
 /**
@@ -118,6 +154,11 @@ export function handleWebSocketMessage(ws: WS, data: string): void {
  * Handle WebSocket close.
  */
 export function handleWebSocketClose(ws: WS): void {
+  const timeout = authTimeouts.get(ws);
+  if (timeout) {
+    clearTimeout(timeout);
+    authTimeouts.delete(ws);
+  }
   clients.delete(ws);
 }
 
@@ -129,6 +170,12 @@ function handleMessage(state: ClientState, msg: Record<string, unknown>): void {
       const token = typeof msg.token === "string" ? msg.token : undefined;
       if (token && verifyToken(token)) {
         state.authenticated = true;
+        // Clear the auth timeout now that we're authenticated (WOP-1407)
+        const timeout = authTimeouts.get(state.ws);
+        if (timeout) {
+          clearTimeout(timeout);
+          authTimeouts.delete(state.ws);
+        }
         safeSend(state, { type: "authenticated", ts: Date.now() });
       } else {
         safeSend(state, { type: "error", message: "Authentication failed" });
@@ -448,6 +495,10 @@ export function _resetForTesting(): void {
   if (process.env.NODE_ENV !== "test") {
     throw new Error("_resetForTesting is test-only");
   }
+  for (const timeout of authTimeouts.values()) {
+    clearTimeout(timeout);
+  }
+  authTimeouts.clear();
   clients.clear();
   tokenVerifierOverride = null;
 }
