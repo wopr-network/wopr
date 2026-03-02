@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
 import { logger } from "../../config/logger.js";
+import { applyDependencyConfigs, type DependencyConfigResult } from "../../fleet/apply-dependency-configs.js";
 import type { OnboardingService } from "../../onboarding/onboarding-service.js";
 import type { ProviderStatus } from "../../onboarding/provider-check.js";
 import { deriveInstanceKey, encrypt } from "../../security/encryption.js";
@@ -50,6 +51,7 @@ export interface SetupRouteDeps {
     pluginId: string,
     config: Record<string, unknown>,
   ) => Promise<{ dispatched: boolean; dispatchError?: string }>;
+  fetchPluginDependencies: (botId: string, pluginName: string) => Promise<string[]>;
   platformEncryptionSecret: string;
 }
 
@@ -337,6 +339,26 @@ export function createSetupRoutes(deps: SetupRouteDeps): Hono {
       }
     }
 
+    // 6c. Apply stored configs to dependency plugins (non-fatal)
+    let dependencyConfigResults: DependencyConfigResult[] = [];
+    if (pluginInstallResult.dispatched) {
+      dependencyConfigResults = await applyDependencyConfigs({
+        botId,
+        superpowerPluginName: session.pluginId,
+        pluginRegistry: deps.pluginRegistry,
+        fetchDependencies: deps.fetchPluginDependencies,
+        dispatchConfig: deps.dispatchPluginConfig,
+        findAllForBot: (bId) => deps.pluginConfigRepo.findAllForBot(bId),
+      });
+      if (dependencyConfigResults.length > 0) {
+        logger.info("Dependency config dispatch results", {
+          botId,
+          pluginId: session.pluginId,
+          results: dependencyConfigResults,
+        });
+      }
+    }
+
     // 7. Update collected on setup session
     await deps.setupSessionRepo.update(setupSessionId, {
       collected: JSON.stringify(configValues),
@@ -359,6 +381,7 @@ export function createSetupRoutes(deps: SetupRouteDeps): Hono {
       envKeysInjected: Object.keys(envUpdates),
       pluginInstallDispatched: pluginInstallResult.dispatched,
       pluginConfigDispatched: pluginConfigResult.dispatched,
+      dependencyConfigResults,
     });
   });
 

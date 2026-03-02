@@ -55,6 +55,7 @@ function makeDeps(overrides: Partial<SetupRouteDeps> = {}): SetupRouteDeps {
     pluginConfigRepo: {
       upsert: vi.fn().mockResolvedValue(undefined),
       findByBotAndPlugin: vi.fn().mockResolvedValue(null),
+      findAllForBot: vi.fn().mockResolvedValue([]),
     } as never,
     profileStore: {
       get: vi.fn().mockResolvedValue({ id: TEST_BOT_ID, tenantId: "t1", env: {} }),
@@ -63,6 +64,7 @@ function makeDeps(overrides: Partial<SetupRouteDeps> = {}): SetupRouteDeps {
     dispatchEnvUpdate: vi.fn().mockResolvedValue({ dispatched: true }),
     dispatchPluginInstall: vi.fn().mockResolvedValue({ dispatched: true }),
     dispatchPluginConfig: vi.fn().mockResolvedValue({ dispatched: true }),
+    fetchPluginDependencies: vi.fn().mockResolvedValue([]),
     platformEncryptionSecret: "test-secret-32-bytes-long-padding!",
     ...overrides,
   };

@@ -29,6 +29,7 @@ export type NewPluginConfig = Pick<
 export interface IPluginConfigRepository {
   upsert(config: NewPluginConfig): Promise<PluginConfig>;
   findByBotAndPlugin(botId: string, pluginId: string): Promise<PluginConfig | null>;
+  findAllForBot(botId: string): Promise<PluginConfig[]>;
   deleteBySetupSession(setupSessionId: string): Promise<number>;
   deleteByBotAndPlugin(botId: string, pluginId: string): Promise<boolean>;
 }
@@ -85,6 +86,11 @@ export class DrizzlePluginConfigRepository implements IPluginConfigRepository {
       .from(pluginConfigs)
       .where(and(eq(pluginConfigs.botId, botId), eq(pluginConfigs.pluginId, pluginId)));
     return rows[0] ? toPluginConfig(rows[0]) : null;
+  }
+
+  async findAllForBot(botId: string): Promise<PluginConfig[]> {
+    const rows = await this.db.select().from(pluginConfigs).where(eq(pluginConfigs.botId, botId));
+    return rows.map(toPluginConfig);
   }
 
   async deleteBySetupSession(setupSessionId: string): Promise<number> {
