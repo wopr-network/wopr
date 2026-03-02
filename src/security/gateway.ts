@@ -11,6 +11,7 @@
  * They must go through a gateway.
  */
 
+import { randomBytes } from "node:crypto";
 import { logger } from "../logger.js";
 import { createSecurityContext, type SecurityContext } from "./context.js";
 import { canGatewayForward, getGatewayRules, getSecurityConfig, isGatewaySession } from "./policy.js";
@@ -359,7 +360,7 @@ export function requiresGateway(source: InjectionSource, targetSession: string):
 
 function generateRequestId(): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
+  const random = randomBytes(6).toString("hex");
   return `fwd-${timestamp}-${random}`;
 }
 

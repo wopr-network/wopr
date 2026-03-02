@@ -5,6 +5,7 @@
  * to privileged sessions, with full policy enforcement.
  */
 
+import { randomBytes } from "node:crypto";
 import { logger } from "../logger.js";
 import { clearContext, createSecurityContext, type SecurityContext, storeContext } from "./context.js";
 import {
@@ -49,7 +50,7 @@ export interface ForwardResult {
 
 function generateTrackingId(): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
+  const random = randomBytes(6).toString("hex");
   return `fwd-${timestamp}-${random}`;
 }
 
