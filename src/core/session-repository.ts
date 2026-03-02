@@ -278,3 +278,30 @@ export async function getConversationSessionId(sessionName: string): Promise<str
   const session = await repo.findFirst({ name: sessionName });
   return session?.id ?? null;
 }
+
+/** Find active sessions whose lastActivityAt is older than ttlMs ago */
+export async function findExpiredSessionsAsync(ttlMs: number): Promise<SessionRecord[]> {
+  await initSessionStorage();
+  const cutoff = Date.now() - ttlMs;
+  const rows = await sessionsRepo().findMany({ status: "active" });
+  return rows.filter((s) => s.lastActivityAt < cutoff);
+}
+
+/** Count active sessions */
+export async function countActiveSessionsAsync(): Promise<number> {
+  await initSessionStorage();
+  const rows = await sessionsRepo().findMany({ status: "active" });
+  return rows.length;
+}
+
+/** Find N oldest active sessions by lastActivityAt (LRU candidates) */
+export async function findLruSessionsAsync(count: number): Promise<SessionRecord[]> {
+  await initSessionStorage();
+  const rows = await sessionsRepo()
+    .query()
+    .where("status", "active")
+    .orderBy("lastActivityAt", "asc")
+    .limit(count)
+    .execute();
+  return rows;
+}

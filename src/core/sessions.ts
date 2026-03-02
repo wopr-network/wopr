@@ -70,9 +70,33 @@ if (!existsSync(SESSIONS_DIR)) {
 // ============================================================================
 
 import { type InjectOptions, type InjectResult, type MultimodalMessage, queueManager } from "./queue/index.js";
+import { SessionCleaner, type SessionCleanerStats } from "./session-cleaner.js";
 
 // Flag to track if queue executor has been initialized
 let queueInitialized = false;
+
+// Session cleaner singleton
+let sessionCleaner: SessionCleaner | null = null;
+
+export function startSessionCleaner(config?: { ttlMs?: number; maxCount?: number; cleanupIntervalMs?: number }): void {
+  if (sessionCleaner) return;
+  sessionCleaner = new SessionCleaner({
+    ttlMs: config?.ttlMs ?? (Number(process.env.WOPR_SESSION_TTL_MS) || 24 * 60 * 60 * 1000),
+    maxCount: config?.maxCount ?? (Number(process.env.WOPR_SESSION_MAX_COUNT) || 1000),
+    cleanupIntervalMs:
+      config?.cleanupIntervalMs ?? (Number(process.env.WOPR_SESSION_CLEANUP_INTERVAL_MS) || 5 * 60 * 1000),
+  });
+  sessionCleaner.start();
+}
+
+export function stopSessionCleaner(): void {
+  sessionCleaner?.stop();
+  sessionCleaner = null;
+}
+
+export function getSessionCleanerStats(): SessionCleanerStats | null {
+  return sessionCleaner?.getStats() ?? null;
+}
 
 /**
  * Initialize the queue system with the inject executor
@@ -105,6 +129,9 @@ function initQueue(): void {
   });
 
   logger.info("[sessions] Queue system initialized");
+
+  // Start session cleanup
+  startSessionCleaner();
 }
 
 /**
