@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { logger } from "../config/logger.js";
-import { generateCloudInit } from "./cloud-init.js";
+import { generateCloudInit, validateBotImage } from "./cloud-init.js";
 import type { DOClient, DODroplet } from "./do-client.js";
 import type { INodeRepository } from "./node-repository.js";
 
@@ -54,6 +54,7 @@ export class NodeProvisioner {
     this.defaultRegion = options.defaultRegion ?? "nyc1";
     this.defaultSize = options.defaultSize ?? "s-4vcpu-8gb";
     this.botImage = options.botImage ?? "ghcr.io/wopr-network/wopr:latest";
+    validateBotImage(this.botImage);
   }
 
   /**

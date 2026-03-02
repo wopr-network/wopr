@@ -274,6 +274,19 @@ describe("NodeProvisioner", () => {
     });
   });
 
+  describe("constructor validation", () => {
+    it("rejects invalid botImage at construction time", () => {
+      const nodeRepo = makeNodeRepo();
+      expect(
+        () =>
+          new NodeProvisioner(nodeRepo, doClient, {
+            sshKeyId: 12345,
+            botImage: "image; rm -rf /",
+          }),
+      ).toThrow("Invalid botImage");
+    });
+  });
+
   describe("NodeProvisioningError", () => {
     it("has correct name and stage", () => {
       const err = new NodeProvisioningError("test message", "creating", "node-1");
