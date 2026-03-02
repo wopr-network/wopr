@@ -1,4 +1,15 @@
+import { existsSync } from "node:fs";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { logger } from "../logger.js";
+import type {
+  ModelProvider,
+  ProviderConfig,
+  ProviderCredentials,
+  ProviderRegistration,
+  ResolvedProvider,
+} from "../types/provider.js";
 import { emitProviderAdded, emitProviderRemoved, emitProviderStatus } from "./events.js";
 
 /**
@@ -7,18 +18,6 @@ import { emitProviderAdded, emitProviderRemoved, emitProviderStatus } from "./ev
  * Handles registration, discovery, resolution, and fallback logic
  * for multiple model providers.
  */
-
-import { existsSync } from "node:fs";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import type {
-  ModelProvider,
-  ProviderConfig,
-  ProviderCredentials,
-  ProviderRegistration,
-  ResolvedProvider,
-} from "../types/provider.js";
 
 /**
  * Provider Registry

@@ -191,4 +191,83 @@ describe("ProviderRegistry emits events", () => {
 
     expect(handler).not.toHaveBeenCalled();
   });
+
+  it("should emit provider:status when availability changes from true to false", async () => {
+    const handler = vi.fn();
+
+    const registry = new ProviderRegistry();
+    const provider = makeTestProvider("openai", "OpenAI");
+    registry.register(provider);
+
+    registry["credentials"].set("openai", {
+      providerId: "openai",
+      type: "api-key",
+      credential: "test-key",
+      createdAt: Date.now(),
+    });
+
+    // First check: false -> true
+    await registry.checkHealth();
+
+    // Now make it fail
+    provider.createClient.mockResolvedValue({
+      query: vi.fn(),
+      listModels: vi.fn().mockResolvedValue([]),
+      healthCheck: vi.fn().mockResolvedValue(false),
+    });
+
+    eventBus.on("provider:status", handler);
+
+    // Second check: true -> false
+    await registry.checkHealth();
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "openai",
+        providerName: "OpenAI",
+        previousAvailable: true,
+        currentAvailable: false,
+      }),
+      expect.objectContaining({ type: "provider:status" }),
+    );
+  });
+
+  it("should emit provider:status on checkHealth() error when provider was previously available", async () => {
+    const handler = vi.fn();
+
+    const registry = new ProviderRegistry();
+    const provider = makeTestProvider("openai", "OpenAI");
+    registry.register(provider);
+
+    registry["credentials"].set("openai", {
+      providerId: "openai",
+      type: "api-key",
+      credential: "test-key",
+      createdAt: Date.now(),
+    });
+
+    // First check: false -> true
+    await registry.checkHealth();
+
+    // Now make createClient throw
+    provider.createClient.mockRejectedValue(new Error("Network error"));
+
+    eventBus.on("provider:status", handler);
+
+    // Second check: should catch error and emit status change
+    await registry.checkHealth();
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "openai",
+        providerName: "OpenAI",
+        previousAvailable: true,
+        currentAvailable: false,
+        error: "Network error",
+      }),
+      expect.objectContaining({ type: "provider:status" }),
+    );
+  });
 });
