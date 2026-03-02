@@ -34,6 +34,26 @@ documentation and configuration options.
 
 ---
 
+## [1.6.0](https://github.com/wopr-network/wopr/compare/wopr-v1.5.0...wopr-v1.6.0) (2026-03-02)
+
+
+### Features
+
+* add WOPR marketing bot config and content strategy skill (WOP-1253) ([#1482](https://github.com/wopr-network/wopr/issues/1482)) ([3e568b7](https://github.com/wopr-network/wopr/commit/3e568b7af28f2624a571bc78cd4df2d947ffbf44))
+* **core:** implement unregisterSetupContextProvider in context-factory (WOP-1017) ([#1351](https://github.com/wopr-network/wopr/issues/1351)) ([83bd630](https://github.com/wopr-network/wopr/commit/83bd6308b061ab7633b862178910cff7fa2cb7b2))
+* read WOPR_PLUGINS_* env vars at daemon startup to auto-install plugins (WOP-1327) ([#1559](https://github.com/wopr-network/wopr/issues/1559)) ([676068e](https://github.com/wopr-network/wopr/commit/676068e54fc2628be2c2650c437092609d7bc239))
+
+
+### Tests
+
+* add unit tests for 4 untested security module files (WOP-1066) ([#1301](https://github.com/wopr-network/wopr/issues/1301)) ([ae10954](https://github.com/wopr-network/wopr/commit/ae10954bfab398198dd7b52092ceffc9f3713bf8))
+* add unit tests for unregisterSetupContextProvider (WOP-1017) ([#1352](https://github.com/wopr-network/wopr/issues/1352)) ([6d8910e](https://github.com/wopr-network/wopr/commit/6d8910e85e11ce27581398fc71e5cc5c2164cb1f))
+
+
+### Documentation
+
+* add launch day runbook for April 1 drop (WOP-456) ([#1487](https://github.com/wopr-network/wopr/issues/1487)) ([17d08ad](https://github.com/wopr-network/wopr/commit/17d08ad465aff98a62860ad1e8a7b20a36f1733e))
+
 ## [1.5.0](https://github.com/wopr-network/wopr/compare/wopr-v1.4.1...wopr-v1.5.0) (2026-02-27)
 
 
