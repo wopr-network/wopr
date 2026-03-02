@@ -11,6 +11,7 @@ import { rateLimiter } from "hono-rate-limiter";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { logger } from "../../logger.js";
+import { checkPluginDependencies } from "../../plugins/dependency-check.js";
 import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
 import {
   addRegistry,
@@ -18,6 +19,7 @@ import {
   enablePlugin,
   getAllPluginManifests,
   getConfigSchemas,
+  getInstalledPlugins,
   getLoadedPlugin,
   getPluginExtension,
   getPluginState,
@@ -167,6 +169,53 @@ pluginsRouter.get(
   },
 );
 
+/**
+ * GET /api/plugins/:name/check-deps
+ *
+ * Pre-flight check: returns which of the plugin's manifest.dependencies are
+ * not yet installed. The UI can call this before confirming install to show
+ * the user which required plugins are missing.
+ */
+pluginsRouter.get(
+  "/:name/check-deps",
+  describeRoute({
+    tags: ["Plugins"],
+    summary: "Check plugin dependency satisfaction",
+    responses: {
+      200: { description: "Dependency check result" },
+      400: { description: "Invalid plugin name" },
+      404: { description: "Plugin not found" },
+      401: { description: "Unauthorized" },
+    },
+  }),
+  async (c) => {
+    const name = c.req.param("name");
+
+    try {
+      validatePluginName(name);
+    } catch (err) {
+      if (err instanceof PluginRouteError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      throw err;
+    }
+
+    const plugins = await listPlugins();
+    const plugin = plugins.find((p: PluginEntry) => p.name === name);
+    if (!plugin) {
+      return c.json({ error: "Plugin not found" }, 404);
+    }
+
+    const runtimeManifests = getAllPluginManifests();
+    const manifest = runtimeManifests.get(name) || readPluginManifest(plugin.path);
+    const installed = await getInstalledPlugins();
+    const installedNames = installed.map((p) => p.name);
+
+    const result = checkPluginDependencies(manifest?.dependencies, installedNames);
+    return c.json(result);
+  },
+);
+
 // Search npm registry for available wopr-plugin-* packages
 pluginsRouter.get(
   "/available",
@@ -239,7 +288,26 @@ async function handleInstall(c: Context) {
   }
 
   try {
+    // ── Dependency check: block install if required plugins are missing ──
     const { plugin } = await installAndActivatePlugin(source);
+
+    const manifest = readPluginManifest(plugin.path);
+    if (manifest?.dependencies?.length) {
+      const installed = await getInstalledPlugins();
+      const installedNames = installed.map((p) => p.name);
+      const depCheck = checkPluginDependencies(manifest.dependencies, installedNames);
+      if (!depCheck.ok) {
+        // Roll back: remove the just-installed artifact so it doesn't become orphaned
+        await removePlugin(plugin.name);
+        return c.json(
+          {
+            error: `Missing required dependencies: ${depCheck.missing.join(", ")}`,
+            missingDependencies: depCheck.missing,
+          },
+          422,
+        );
+      }
+    }
 
     return c.json(
       {
@@ -273,6 +341,7 @@ pluginsRouter.post(
     responses: {
       201: { description: "Plugin installed" },
       400: { description: "Validation error" },
+      422: { description: "Missing required dependencies" },
       429: { description: "Rate limit exceeded" },
       401: { description: "Unauthorized" },
     },
@@ -288,6 +357,7 @@ pluginsRouter.post(
     responses: {
       201: { description: "Plugin installed" },
       400: { description: "Validation error" },
+      422: { description: "Missing required dependencies" },
       429: { description: "Rate limit exceeded" },
       401: { description: "Unauthorized" },
     },

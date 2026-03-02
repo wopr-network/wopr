@@ -13,12 +13,14 @@ import { z } from "zod";
 import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { logger } from "../../logger.js";
+import { checkPluginDependencies } from "../../plugins/dependency-check.js";
 import { createInjectors, installAndActivatePlugin } from "../../plugins/install-and-activate.js";
 import {
   disablePlugin,
   enablePlugin,
   getAllPluginManifests,
   getConfigSchemas,
+  getInstalledPlugins,
   getLoadedPlugin,
   listPlugins,
   loadPlugin,
@@ -180,6 +182,7 @@ instancePluginsRouter.post(
     responses: {
       201: { description: "Plugin installed" },
       400: { description: "Validation error or install failed" },
+      422: { description: "Missing required dependencies" },
       401: { description: "Unauthorized" },
     },
   }),
@@ -196,7 +199,26 @@ instancePluginsRouter.post(
     }
 
     try {
+      // ── Dependency check: block install if required plugins are missing ──
       const { plugin } = await installAndActivatePlugin(source);
+
+      const manifest = readPluginManifest(plugin.path);
+      if (manifest?.dependencies?.length) {
+        const installed = await getInstalledPlugins();
+        const installedNames = installed.map((p) => p.name);
+        const depCheck = checkPluginDependencies(manifest.dependencies, installedNames);
+        if (!depCheck.ok) {
+          // Roll back: remove the just-installed artifact so it doesn't become orphaned
+          await removePlugin(plugin.name);
+          return c.json(
+            {
+              error: `Missing required dependencies: ${depCheck.missing.join(", ")}`,
+              missingDependencies: depCheck.missing,
+            },
+            422,
+          );
+        }
+      }
 
       return c.json(
         {
