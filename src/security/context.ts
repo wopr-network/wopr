@@ -284,10 +284,15 @@ export function createDaemonContext(session: string): SecurityContext {
 /**
  * Create a security context for plugin-initiated injections
  */
-export function createPluginContext(session: string, pluginName: string): SecurityContext {
+export function createPluginContext(
+  session: string,
+  pluginName: string,
+  grantedCapabilities?: Capability[],
+): SecurityContext {
   return new SecurityContext(
     createInjectionSource("plugin", {
       identity: { pluginName },
+      grantedCapabilities,
     }),
     session,
   );

@@ -24,7 +24,9 @@ import { inject } from "../core/sessions.js";
 import { logger as winstonLogger } from "../logger.js";
 import { LOG_FILE, PID_FILE } from "../paths.js";
 import { bootstrapEnvPlugins } from "../plugins/bootstrap.js";
+import { pluginManifests } from "../plugins/state.js";
 import { loadAllPlugins, shutdownAllPlugins } from "../plugins.js";
+import type { Capability } from "../security/types.js";
 import { ensureToken } from "./auth-token.js";
 import { buildCorsOrigins } from "./cors.js";
 import { HealthMonitor } from "./health.js";
@@ -354,8 +356,11 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
           source = createInjectionSource("api", { trustLevel: "semi-trusted" });
         } else if (from.startsWith("plugin:")) {
           const pluginName = from.slice(7);
+          const manifest = pluginManifests.get(pluginName);
+          const grantedCapabilities = manifest?.permissions ?? [];
           source = createInjectionSource("plugin", {
             identity: { pluginName },
+            grantedCapabilities: grantedCapabilities as Capability[],
           });
         }
         // else: defaults to CLI (owner) in sessions.ts

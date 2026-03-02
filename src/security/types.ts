@@ -81,7 +81,7 @@ export const CAPABILITY_PROFILES: Record<string, Capability[]> = {
     "event.emit",
     "a2a.call",
   ],
-  "semi-trusted": ["inject", "inject.tools", "session.history", "memory.read", "config.read", "a2a.call"],
+  "semi-trusted": ["inject", "inject.tools", "session.history", "memory.read", "config.read"],
   untrusted: ["inject"], // Can only send messages, no tools
   gateway: ["inject", "inject.tools", "cross.inject", "cross.read", "session.history", "memory.read", "a2a.call"],
 };
@@ -206,7 +206,7 @@ export const DEFAULT_TRUST_BY_SOURCE: Record<InjectionSourceType, TrustLevel> = 
   daemon: "owner",
   p2p: "untrusted", // P2P defaults to untrusted until granted
   "p2p.discovery": "untrusted", // Discovered peers are always untrusted
-  plugin: "trusted", // Plugins are trusted by installation
+  plugin: "semi-trusted", // Plugins are semi-trusted by default; elevated permissions via manifest
   cron: "owner", // Cron jobs run as owner
   api: "semi-trusted", // API requires auth but limited scope
   gateway: "semi-trusted", // Gateway forwarded requests
