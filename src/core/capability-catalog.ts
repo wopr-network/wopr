@@ -37,8 +37,10 @@ export interface CapabilityPluginRef {
  * Uses the bot's platform token from env/config.
  */
 function hostedDefaults(): { baseUrl: string } {
+  const configured = process.env.WOPR_API_BASE_URL?.trim();
+  const baseUrl = configured ? configured.replace(/\/+$/, "") : "https://api.wopr.bot";
   return {
-    baseUrl: "https://api.wopr.bot",
+    baseUrl,
   };
 }
 
