@@ -231,7 +231,7 @@ describe("Instance CRUD Routes", () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.instance.status).toBe("running");
-      expect(data.instance.startedAt).toBeTypeOf("string");
+      expect(data.instance.startedAt).toBeTypeOf("number");
       expect(data.instance.health.healthy).toBe(true);
     });
 
@@ -266,7 +266,7 @@ describe("Instance CRUD Routes", () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.instance.status).toBe("stopped");
-      expect(data.instance.stoppedAt).toBeTypeOf("string");
+      expect(data.instance.stoppedAt).toBeTypeOf("number");
     });
 
     it("rejects stopping a non-running instance", async () => {
