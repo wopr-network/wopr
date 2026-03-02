@@ -35,7 +35,7 @@ loginHistoryRoutes.get("/", async (c) => {
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
   const limitRaw = c.req.query("limit");
-  const limit = limitRaw ? Math.min(Math.max(1, Number.parseInt(limitRaw, 10)), 100) : 20;
+  const limit = limitRaw ? Math.min(Math.max(1, Number.parseInt(limitRaw, 10) || 20), 100) : 20;
 
   const repo = resolveRepo();
   const entries = await repo.findByUserId(user.id, limit);
