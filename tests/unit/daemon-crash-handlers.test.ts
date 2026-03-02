@@ -7,6 +7,7 @@ vi.mock("../../src/logger.js", () => ({
     warn: vi.fn(),
     info: vi.fn(),
   },
+  shouldLogStack: vi.fn().mockReturnValue(false),
 }));
 
 import { handleUncaughtException, handleUnhandledRejection } from "../../src/daemon/index.js";
