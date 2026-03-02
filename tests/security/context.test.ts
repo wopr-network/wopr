@@ -375,7 +375,7 @@ describe("Security Context Module", () => {
         },
       });
 
-      const source = createInjectionSource("plugin"); // semi-trusted
+      const source = createInjectionSource("plugin"); // semi-trusted — cross.inject is trusted-only
       const ctx = new SecurityContext(source, "gw-session");
 
       expect(ctx.canForward()).toBe(false);
@@ -542,7 +542,7 @@ describe("Security Context Module", () => {
       expect(ctx.trustLevel).toBe("owner");
     });
 
-    it("createPluginContext should create trusted context with plugin name", () => {
+    it("createPluginContext should create semi-trusted context with plugin name", () => {
       const ctx = createPluginContext("main", "my-plugin");
 
       expect(ctx.source.type).toBe("plugin");

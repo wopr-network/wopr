@@ -158,7 +158,7 @@ describe("Security Policy Module", () => {
     });
 
     it("should resolve trusted with appropriate capability set", async () => {
-      const source = makeSource("plugin"); // semi-trusted
+      const source = makeSource("plugin"); // semi-trusted (plugin default changed in WOP-1408)
       const policy = resolvePolicy(source);
 
       expect(policy.trustLevel).toBe("semi-trusted");
@@ -303,7 +303,7 @@ describe("Security Policy Module", () => {
         },
       });
 
-      const source = makeSource("plugin"); // semi-trusted
+      const source = makeSource("plugin"); // semi-trusted — cross.inject is trusted-only
       const policy = resolvePolicy(source, "gateway-session");
 
       expect(policy.isGateway).toBe(true);
@@ -610,7 +610,7 @@ describe("Security Policy Module", () => {
     });
 
     it("should not require sandbox for trusted", async () => {
-      const source = makeSource("plugin"); // semi-trusted — sandbox IS required
+      const source = makeSource("plugin"); // semi-trusted — sandbox IS required (WOP-1408)
       const result = checkSandboxRequired(source);
 
       expect(result).not.toBeNull();
@@ -1132,7 +1132,7 @@ describe("Security Policy Module", () => {
       await setSecurityConfig({
         enforcement: "enforce",
         trustLevels: {
-          trusted: {
+          "semi-trusted": {
             capabilities: ["inject", "inject.tools", "config.read"],
             tools: {
               deny: ["exec_command"],
@@ -1142,9 +1142,9 @@ describe("Security Policy Module", () => {
         },
       });
 
-      const source = makeSource("plugin"); // semi-trusted — trusted tool deny rules don't apply
+      const source = makeSource("plugin"); // semi-trusted
       const denied = checkToolAccess(source, "exec_command");
-      expect(denied.allowed).toBe(true);
+      expect(denied.allowed).toBe(false);
 
       // config_get requires config.read capability (included above) and is in allow list
       const allowed = checkToolAccess(source, "config_get");
