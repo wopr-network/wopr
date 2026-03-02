@@ -102,12 +102,15 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     const pkgPath = join(pluginDir, "package.json");
     if (existsSync(pkgPath)) {
       logger.info(`[plugins] Installing dependencies for ${repo}...`);
-      execFileSync("npm", ["install"], { cwd: pluginDir, stdio: "inherit" });
+      execFileSync("npm", ["install", "--ignore-scripts"], { cwd: pluginDir, stdio: "inherit" });
 
-      // Build TypeScript plugins if tsconfig.json exists
+      // Security: build scripts are NOT run automatically — npm lifecycle
+      // scripts can execute arbitrary code (OWASP A08). Users must review
+      // plugin source and run `npm run build` manually for TypeScript plugins.
       if (existsSync(join(pluginDir, "tsconfig.json"))) {
-        logger.info(`[plugins] Building TypeScript plugin...`);
-        execFileSync("npm", ["run", "build"], { cwd: pluginDir, stdio: "inherit" });
+        logger.info(
+          `[plugins] TypeScript plugin detected. Run 'npm run build' manually in ${pluginDir} after reviewing the source.`,
+        );
       }
     }
 
@@ -145,12 +148,12 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     const pkgPath = join(pluginDir, "package.json");
     if (existsSync(pkgPath)) {
       logger.info(`[plugins] Installing dependencies for local plugin...`);
-      execFileSync("npm", ["install"], { cwd: pluginDir, stdio: "inherit" });
+      execFileSync("npm", ["install", "--ignore-scripts"], { cwd: pluginDir, stdio: "inherit" });
 
-      // Build TypeScript plugins if tsconfig.json exists
       if (existsSync(join(pluginDir, "tsconfig.json"))) {
-        logger.info(`[plugins] Building TypeScript plugin...`);
-        execFileSync("npm", ["run", "build"], { cwd: pluginDir, stdio: "inherit" });
+        logger.info(
+          `[plugins] TypeScript plugin detected. Run 'npm run build' manually in ${pluginDir} after reviewing the source.`,
+        );
       }
     }
 
@@ -181,7 +184,7 @@ export async function installPlugin(source: string): Promise<InstalledPlugin> {
     mkdirSync(pluginDir, { recursive: true });
 
     // Use npm to install
-    execFileSync("npm", ["install", npmPackage], { cwd: pluginDir, stdio: "inherit" });
+    execFileSync("npm", ["install", "--ignore-scripts", npmPackage], { cwd: pluginDir, stdio: "inherit" });
 
     // Read installed package metadata (scoped packages are nested: node_modules/@scope/name)
     const pkgPath = join(pluginDir, "node_modules", "@wopr-network", `plugin-${shortName}`, "package.json");
