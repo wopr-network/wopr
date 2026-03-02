@@ -342,4 +342,51 @@ describe("POST /save", () => {
 
     expect(res.status).toBe(400);
   });
+
+  it("dispatches plugin install using manifest.install[0] npm package name", async () => {
+    const installMock = vi.fn().mockResolvedValue({ dispatched: true });
+    const configMock = vi.fn().mockResolvedValue({ dispatched: true });
+    const deps = makeDeps({
+      // TEST_PLUGIN has install: ["@wopr-network/test-plugin"]
+      dispatchPluginInstall: installMock,
+      dispatchPluginConfig: configMock,
+    });
+    const app = createSetupRoutes(deps);
+
+    const res = await app.request("/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        setupSessionId: "setup-1",
+        botId: TEST_BOT_ID,
+        values: { apiKey: "sk-key", region: "us-east-1" },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(installMock).toHaveBeenCalledWith(TEST_BOT_ID, "@wopr-network/test-plugin");
+    expect(configMock).toHaveBeenCalledWith(TEST_BOT_ID, "test-plugin", expect.any(Object));
+  });
+
+  it("skips plugin install dispatch when manifest.install is empty", async () => {
+    const installMock = vi.fn().mockResolvedValue({ dispatched: true });
+    const deps = makeDeps({
+      pluginRegistry: [{ ...TEST_PLUGIN, install: [] }],
+      dispatchPluginInstall: installMock,
+    });
+    const app = createSetupRoutes(deps);
+
+    const res = await app.request("/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        setupSessionId: "setup-1",
+        botId: TEST_BOT_ID,
+        values: { apiKey: "sk-key" },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(installMock).not.toHaveBeenCalled();
+  });
 });
