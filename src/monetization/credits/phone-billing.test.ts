@@ -58,7 +58,7 @@ describe("runMonthlyPhoneBilling", () => {
     queryEvents: ReturnType<typeof vi.fn>;
   };
 
-  const NOW = new Date("2026-02-15T12:00:00.000Z");
+  const NOW = new Date();
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -137,7 +137,8 @@ describe("runMonthlyPhoneBilling", () => {
     expect(chargeAmount.toRaw()).toBe(expectedCharge.toRaw());
     expect(type).toBe("addon");
     expect(description).toBe("Monthly phone number fee");
-    expect(referenceId).toMatch(/^phone-billing:PN-abc123:2026-02$/);
+    const expectedMonth = `${NOW.getFullYear()}-${String(NOW.getMonth() + 1).padStart(2, "0")}`;
+    expect(referenceId).toMatch(new RegExp(`^phone-billing:PN-abc123:${expectedMonth}$`));
     expect(allowNegative).toBe(true);
 
     // Verify meter emission
