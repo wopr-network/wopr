@@ -46,6 +46,28 @@ const DEFAULT_HOOK_COMMAND_ALLOWLIST: ReadonlySet<string> = new Set([
 const SHELL_METACHAR_PATTERN = /[;|&`$(){}!<>\\]/;
 
 /**
+ * Hardcoded denylist of shell executables that can NEVER be used in hook
+ * commands, even if added to allowedHookCommands via config. Shells allow
+ * arbitrary command execution via -c, bypassing all argument validation.
+ *
+ * This list cannot be overridden by configuration. OWASP A03 Injection.
+ * See: WOP-1423
+ */
+const SHELL_DENYLIST: ReadonlySet<string> = new Set([
+  "bash",
+  "sh",
+  "zsh",
+  "fish",
+  "dash",
+  "ksh",
+  "csh",
+  "tcsh",
+  "cmd",
+  "powershell",
+  "pwsh",
+]);
+
+/**
  * Get the effective allowlist (default + user-configured).
  */
 function getHookCommandAllowlist(): ReadonlySet<string> {
@@ -78,6 +100,13 @@ export function parseHookCommand(command: string): { executable: string; args: s
   // Block absolute/relative paths — only bare executable names allowed
   if (executable.includes("/") || executable.includes("\\") || isAbsolute(executable)) {
     logger.warn(`[hooks] Hook command rejected: paths not allowed in executable (${executable})`);
+    return null;
+  }
+
+  // Block shell executables — hardcoded, cannot be overridden by config.
+  // Shells allow arbitrary execution via -c, bypassing argument validation.
+  if (SHELL_DENYLIST.has(executable.toLowerCase())) {
+    logger.warn(`[hooks] Hook command rejected: '${executable}' is a denied shell executable`);
     return null;
   }
 
