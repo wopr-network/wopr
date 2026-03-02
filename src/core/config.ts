@@ -4,6 +4,7 @@
 
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 import { logger } from "../logger.js";
 import { CONFIG_FILE, WOPR_HOME } from "../paths.js";
 import type { SoulEvilConfig } from "./workspace.js";
@@ -90,6 +91,83 @@ export interface WoprConfig {
   };
 }
 
+const ProviderDefaultsSchema = z.object({
+  model: z.string().optional(),
+  temperature: z.number().optional(),
+  maxTokens: z.number().optional(),
+  topP: z.number().optional(),
+  reasoningEffort: z.string().optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
+});
+
+const WoprConfigSchema = z.object({
+  daemon: z.object({
+    port: z.number(),
+    host: z.string(),
+    autoStart: z.boolean(),
+    cronScriptsEnabled: z.boolean(),
+  }),
+  anthropic: z.object({
+    apiKey: z.string().optional(),
+  }),
+  oauth: z.object({
+    clientId: z.string().optional(),
+    clientSecret: z.string().optional(),
+    redirectUri: z.string().optional(),
+  }),
+  discord: z
+    .object({
+      token: z.string().optional(),
+      guildId: z.string().optional(),
+    })
+    .optional(),
+  discovery: z.object({
+    topics: z.array(z.string()),
+    autoJoin: z.boolean(),
+  }),
+  plugins: z.object({
+    autoLoad: z.boolean(),
+    directories: z.array(z.string()),
+    data: z.record(z.string(), z.unknown()).optional(),
+  }),
+  agents: z
+    .object({
+      a2a: z.object({ enabled: z.boolean() }).optional(),
+    })
+    .optional(),
+  providers: z.record(z.string(), ProviderDefaultsSchema).optional(),
+  memory: z.record(z.string(), z.unknown()).optional(),
+  soulEvil: z
+    .object({
+      file: z.string().optional(),
+      chance: z.number().optional(),
+      purge: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+  sandbox: z
+    .object({
+      mode: z.enum(["off", "non-main", "all"]).optional(),
+      scope: z.enum(["session", "shared"]).optional(),
+      workspaceAccess: z.enum(["none", "ro", "rw"]).optional(),
+      workspaceRoot: z.string().optional(),
+      docker: z
+        .object({
+          image: z.string().optional(),
+          memory: z.string().optional(),
+          cpus: z.number().optional(),
+          network: z.string().optional(),
+        })
+        .optional(),
+      tools: z
+        .object({
+          allow: z.array(z.string()).optional(),
+          deny: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
 const DEFAULT_CONFIG: WoprConfig = {
   daemon: {
     port: 7437,
@@ -132,6 +210,11 @@ export class ConfigManager {
 
     // Apply environment variable overrides (for Docker/container deployment)
     this.applyEnvironmentOverrides();
+
+    const result = WoprConfigSchema.safeParse(this.config);
+    if (!result.success) {
+      throw new Error(`Invalid WOPR config at ${CONFIG_FILE}:\n${result.error.message}`);
+    }
 
     return this.config;
   }
