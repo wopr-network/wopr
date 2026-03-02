@@ -240,9 +240,17 @@ body`;
 
     const result = parseSkillFrontmatter(input);
     expect(result.warnings).toHaveLength(2);
-    expect(result.warnings[0].message).toContain('unknown frontmatter field "unknown-field"');
-    expect(result.warnings[1].message).toContain('unknown frontmatter field "another-bad"');
-    expect(result.warnings[0].skillPath).toBe("");
+    const messages = result.warnings.map((w) => w.message);
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('unknown frontmatter field "unknown-field"'),
+        expect.stringContaining('unknown frontmatter field "another-bad"'),
+      ]),
+    );
+    const unknownFieldWarning = result.warnings.find((w) =>
+      w.message.includes('unknown frontmatter field "unknown-field"'),
+    );
+    expect(unknownFieldWarning?.skillPath).toBe("");
   });
 
   it("handles unicode characters in field values", () => {
@@ -253,7 +261,7 @@ description: A skill with unicode: café
 body`;
 
     const result = parseSkillFrontmatter(input);
-    expect(result.frontmatter.description).toContain("caf");
+    expect(result.frontmatter.description).toBe("A skill with unicode: café");
   });
 
   it("handles values containing colons", () => {
