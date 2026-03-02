@@ -11,6 +11,8 @@ describe("package exports", () => {
     const mod = await import("../../src/index.js");
     expect(mod.PROTOCOL_VERSION).toBeDefined();
     expect(typeof mod.PROTOCOL_VERSION).toBe("number");
+    expect(mod.MIN_PROTOCOL_VERSION).toBeDefined();
+    expect(typeof mod.MIN_PROTOCOL_VERSION).toBe("number");
   });
 
   it("exports exit code constants", async () => {
