@@ -209,7 +209,7 @@ describe("POST /save", () => {
 
     const res = await app.request("/save", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-authenticated-tenant-id": "t1" },
       body: JSON.stringify({
         setupSessionId: "setup-1",
         botId: TEST_BOT_ID,
@@ -322,7 +322,7 @@ describe("POST /save", () => {
 
     const res = await app.request("/save", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-authenticated-tenant-id": "t1" },
       body: JSON.stringify({ setupSessionId: "setup-1", botId: TEST_BOT_ID, values: { noEnvField: "val" } }),
     });
 
@@ -402,7 +402,7 @@ describe("POST /save", () => {
 
     const res = await app.request("/save", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-authenticated-tenant-id": "t1" },
       body: JSON.stringify({
         setupSessionId: "setup-1",
         botId: TEST_BOT_ID,
@@ -425,7 +425,7 @@ describe("POST /save", () => {
 
     const res = await app.request("/save", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-authenticated-tenant-id": "t1" },
       body: JSON.stringify({
         setupSessionId: "setup-1",
         botId: TEST_BOT_ID,
