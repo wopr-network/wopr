@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { ADDON_CATALOG, ADDON_KEYS, type AddonKey } from "../../monetization/addons/addon-catalog.js";
 import type { ITenantAddonRepository } from "../../monetization/addons/addon-repository.js";
-import { protectedProcedure, router } from "../init.js";
+import { protectedProcedure, router, tenantProcedure } from "../init.js";
 
 export interface AddonRouterDeps {
   addonRepo: ITenantAddonRepository;
@@ -31,8 +31,8 @@ export const addonRouter = router({
   }),
 
   /** List enabled add-ons for the authenticated tenant. */
-  list: protectedProcedure.query(async ({ ctx }) => {
-    const tenantId = ctx.tenantId ?? ctx.user.id;
+  list: tenantProcedure.query(async ({ ctx }) => {
+    const tenantId = ctx.tenantId;
     const { addonRepo } = getDeps();
     const addons = await addonRepo.list(tenantId);
     return addons.map((a) => ({
@@ -44,20 +44,20 @@ export const addonRouter = router({
   }),
 
   /** Enable an add-on. */
-  enable: protectedProcedure
+  enable: tenantProcedure
     .input(z.object({ key: z.enum([...ADDON_KEYS] as [AddonKey, ...AddonKey[]]) }))
     .mutation(async ({ input, ctx }) => {
-      const tenantId = ctx.tenantId ?? ctx.user.id;
+      const tenantId = ctx.tenantId;
       const { addonRepo } = getDeps();
       await addonRepo.enable(tenantId, input.key as AddonKey);
       return { enabled: true, key: input.key };
     }),
 
   /** Disable an add-on. */
-  disable: protectedProcedure
+  disable: tenantProcedure
     .input(z.object({ key: z.enum([...ADDON_KEYS] as [AddonKey, ...AddonKey[]]) }))
     .mutation(async ({ input, ctx }) => {
-      const tenantId = ctx.tenantId ?? ctx.user.id;
+      const tenantId = ctx.tenantId;
       const { addonRepo } = getDeps();
       await addonRepo.disable(tenantId, input.key as AddonKey);
       return { disabled: true, key: input.key };
