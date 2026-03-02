@@ -206,7 +206,7 @@ export const DEFAULT_TRUST_BY_SOURCE: Record<InjectionSourceType, TrustLevel> = 
   daemon: "owner",
   p2p: "untrusted", // P2P defaults to untrusted until granted
   "p2p.discovery": "untrusted", // Discovered peers are always untrusted
-  plugin: "trusted", // Plugins run in the same process and are trusted by default
+  plugin: "semi-trusted", // Plugins are semi-trusted by default; elevated permissions via manifest
   cron: "owner", // Cron jobs run as owner
   api: "semi-trusted", // API requires auth but limited scope
   gateway: "semi-trusted", // Gateway forwarded requests
