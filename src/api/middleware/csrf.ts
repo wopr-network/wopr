@@ -81,6 +81,13 @@ export function csrfProtection(options: CsrfOptions): MiddlewareHandler {
       return next();
     }
 
+    // Unauthenticated requests (no session user, no bearer token) cannot be CSRF attacks —
+    // there is no credential to hijack. Let auth middleware return 401 naturally.
+    const user = c.get("user" as never);
+    if (!user) {
+      return next();
+    }
+
     // Validate Origin/Referer
     if (!validateCsrfOrigin(c.req.raw.headers, options.allowedOrigins)) {
       return c.json({ error: "CSRF validation failed" }, 403);
