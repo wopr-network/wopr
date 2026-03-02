@@ -8,7 +8,7 @@ import type { NetworkPolicy } from "../network/network-policy.js";
 import type { ProxyManagerInterface } from "../proxy/types.js";
 import type { IBotInstanceRepository } from "./bot-instance-repository.js";
 import type { INodeCommandBus } from "./node-command-bus.js";
-import type { ProfileStore } from "./profile-store.js";
+import type { IProfileStore } from "./profile-store.js";
 import { getSharedVolumeConfig } from "./shared-volume-config.js";
 import type { BotProfile, BotStatus, ContainerStats } from "./types.js";
 
@@ -17,7 +17,7 @@ const CONTAINER_ID_LABEL = "wopr.bot-id";
 
 export class FleetManager {
   private readonly docker: Docker;
-  private readonly store: ProfileStore;
+  private readonly store: IProfileStore;
   private readonly platformDiscovery: PlatformDiscoveryConfig | undefined;
   private readonly networkPolicy: NetworkPolicy | undefined;
   private readonly proxyManager: ProxyManagerInterface | undefined;
@@ -43,7 +43,7 @@ export class FleetManager {
 
   constructor(
     docker: Docker,
-    store: ProfileStore,
+    store: IProfileStore,
     platformDiscovery?: PlatformDiscoveryConfig,
     networkPolicy?: NetworkPolicy,
     proxyManager?: ProxyManagerInterface,
@@ -435,7 +435,7 @@ export class FleetManager {
   }
 
   /** Get the underlying profile store */
-  get profiles(): ProfileStore {
+  get profiles(): IProfileStore {
     return this.store;
   }
 

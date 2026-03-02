@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { AuthEnv } from "../../auth/index.js";
 import { buildTokenMetadataMap, scopedBearerAuthWithTenant } from "../../auth/index.js";
-import type { BackupStatusStore } from "../../backup/backup-status-store.js";
+import type { IBackupStatusStore } from "../../backup/backup-status-store.js";
 import { SpacesClient } from "../../backup/spaces-client.js";
 import { logger } from "../../config/logger.js";
 import { getAdminAuditLog, getBackupStatusStore } from "../../fleet/services.js";
@@ -11,7 +11,7 @@ const S3_BUCKET = process.env.S3_BUCKET || "wopr-backups";
 const metadataMap = buildTokenMetadataMap();
 const adminAuth = scopedBearerAuthWithTenant(metadataMap, "admin");
 
-function getStore(): BackupStatusStore {
+function getStore(): IBackupStatusStore {
   return getBackupStatusStore();
 }
 
@@ -35,7 +35,7 @@ function isRemotePathOwnedBy(remotePath: string, containerId: string): boolean {
   return segments.includes(containerId);
 }
 
-function buildRoutes(storeFactory: () => BackupStatusStore, spacesFactory: () => SpacesClient): Hono<AuthEnv> {
+function buildRoutes(storeFactory: () => IBackupStatusStore, spacesFactory: () => SpacesClient): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
 
   /**
@@ -169,7 +169,7 @@ function buildRoutes(storeFactory: () => BackupStatusStore, spacesFactory: () =>
 /**
  * Create admin backup routes with an explicit store (for testing).
  */
-export function createAdminBackupRoutes(store: BackupStatusStore, spaces?: SpacesClient): Hono<AuthEnv> {
+export function createAdminBackupRoutes(store: IBackupStatusStore, spaces?: SpacesClient): Hono<AuthEnv> {
   const spacesClient = spaces ?? getSpaces();
   return buildRoutes(
     () => store,

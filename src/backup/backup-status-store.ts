@@ -7,7 +7,16 @@ export interface BackupStatusEntry extends BackupStatusRow {
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-export class BackupStatusStore {
+export interface IBackupStatusStore {
+  recordSuccess(containerId: string, nodeId: string, sizeMb: number, remotePath: string): Promise<void>;
+  recordFailure(containerId: string, nodeId: string, error: string): Promise<void>;
+  get(containerId: string): Promise<BackupStatusEntry | null>;
+  listAll(): Promise<BackupStatusEntry[]>;
+  listStale(): Promise<BackupStatusEntry[]>;
+  count(): Promise<number>;
+}
+
+export class BackupStatusStore implements IBackupStatusStore {
   private readonly repo: IBackupStatusRepository;
 
   constructor(repo: IBackupStatusRepository) {

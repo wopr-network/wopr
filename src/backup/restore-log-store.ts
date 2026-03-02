@@ -3,7 +3,19 @@ import type { IRestoreLogRepository, RestoreLogEntry } from "./repository-types.
 
 export type { RestoreLogEntry };
 
-export class RestoreLogStore {
+export interface IRestoreLogStore {
+  record(params: {
+    tenant: string;
+    snapshotKey: string;
+    preRestoreKey: string | null;
+    restoredBy: string;
+    reason?: string;
+  }): Promise<RestoreLogEntry>;
+  listForTenant(tenant: string, limit?: number): Promise<RestoreLogEntry[]>;
+  get(id: string): Promise<RestoreLogEntry | null>;
+}
+
+export class RestoreLogStore implements IRestoreLogStore {
   private readonly repo: IRestoreLogRepository;
 
   constructor(repo: IRestoreLogRepository) {

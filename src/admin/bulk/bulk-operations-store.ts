@@ -70,7 +70,23 @@ export interface BulkExportInput {
 // Store
 // ---------------------------------------------------------------------------
 
-export class BulkOperationsStore {
+export interface IBulkOperationsStore {
+  dryRun(tenantIds: string[]): Promise<Array<{ tenantId: string; name: string | null; email: string; status: string }>>;
+  bulkGrant(input: BulkGrantInput, adminUser: string): Promise<BulkGrantResult>;
+  undoGrant(operationId: string, adminUser: string): Promise<BulkResult>;
+  bulkSuspend(input: BulkSuspendInput, adminUser: string): Promise<BulkResult>;
+  bulkReactivate(input: BulkReactivateInput, adminUser: string): Promise<BulkResult>;
+  bulkExport(input: BulkExportInput, adminUser: string): Promise<BulkExportResult>;
+  listMatchingTenantIds(filters: {
+    search?: string;
+    status?: string;
+    role?: string;
+    hasCredits?: boolean;
+    lowBalance?: boolean;
+  }): Promise<string[]>;
+}
+
+export class BulkOperationsStore implements IBulkOperationsStore {
   constructor(
     private readonly repo: IBulkOperationsRepository,
     private readonly creditStore: ICreditLedger,

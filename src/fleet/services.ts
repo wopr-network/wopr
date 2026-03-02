@@ -15,10 +15,10 @@ import { DrizzleRateLimitRepository } from "../api/drizzle-rate-limit-repository
 import type { IRateLimitRepository } from "../api/rate-limit-repository.js";
 import { DrizzleAuditLogRepository } from "../audit/audit-log-repository.js";
 import { DrizzleBackupStatusRepository } from "../backup/backup-status-repository.js";
-import { BackupStatusStore } from "../backup/backup-status-store.js";
+import { BackupStatusStore, type IBackupStatusStore } from "../backup/backup-status-store.js";
 import { BackupVerifier } from "../backup/backup-verifier.js";
 import { DrizzleRestoreLogRepository } from "../backup/restore-log-repository.js";
-import { RestoreLogStore } from "../backup/restore-log-store.js";
+import { type IRestoreLogStore, RestoreLogStore } from "../backup/restore-log-store.js";
 import { RestoreService } from "../backup/restore-service.js";
 import { SnapshotManager } from "../backup/snapshot-manager.js";
 import { DrizzleSnapshotRepository } from "../backup/snapshot-repository.js";
@@ -176,9 +176,9 @@ let _nodeProvider: INodeProvider | null = null;
 let _nodeProvisioner: NodeProvisioner | null = null;
 let _gpuNodeProvisioner: GpuNodeProvisioner | null = null;
 let _adminAuditLog: AdminAuditLog | null = null;
-let _restoreLogStore: RestoreLogStore | null = null;
+let _restoreLogStore: IRestoreLogStore | null = null;
 let _restoreService: RestoreService | null = null;
-let _backupStatusStore: BackupStatusStore | null = null;
+let _backupStatusStore: IBackupStatusStore | null = null;
 let _snapshotManager: SnapshotManager | null = null;
 
 const S3_BUCKET = process.env.S3_BUCKET || "wopr-backups";
@@ -556,7 +556,7 @@ export function getAdminAuditLog(): AdminAuditLog {
   return _adminAuditLog;
 }
 
-export function getRestoreLogStore(): RestoreLogStore {
+export function getRestoreLogStore(): IRestoreLogStore {
   if (!_restoreLogStore) {
     const repo = new DrizzleRestoreLogRepository(getDb());
     _restoreLogStore = new RestoreLogStore(repo);
@@ -564,7 +564,7 @@ export function getRestoreLogStore(): RestoreLogStore {
   return _restoreLogStore;
 }
 
-export function getBackupStatusStore(): BackupStatusStore {
+export function getBackupStatusStore(): IBackupStatusStore {
   if (!_backupStatusStore) {
     const repo = new DrizzleBackupStatusRepository(getDb());
     _backupStatusStore = new BackupStatusStore(repo);

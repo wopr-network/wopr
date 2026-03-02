@@ -1,5 +1,5 @@
 import { type DeletionExecutorDeps, type DeletionResult, executeDeletion } from "./deletion-executor.js";
-import type { AccountDeletionStore } from "./deletion-store.js";
+import type { IAccountDeletionStore } from "./deletion-store.js";
 
 export interface DeletionCronResult {
   processed: number;
@@ -15,7 +15,7 @@ type ExecutorFn = (deps: DeletionExecutorDeps, tenantId: string) => Promise<Dele
  * Called on a timer (e.g., every hour or daily).
  */
 export async function runDeletionCron(
-  store: AccountDeletionStore,
+  store: IAccountDeletionStore,
   executorDeps: DeletionExecutorDeps,
 ): Promise<DeletionCronResult> {
   return runDeletionCronWithExecutor(store, executorDeps, executeDeletion);
@@ -25,7 +25,7 @@ export async function runDeletionCron(
  * Testable variant that accepts an executor function injection.
  */
 export async function runDeletionCronWithExecutor(
-  store: AccountDeletionStore,
+  store: IAccountDeletionStore,
   executorDeps: DeletionExecutorDeps,
   executor: ExecutorFn,
 ): Promise<DeletionCronResult> {

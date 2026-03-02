@@ -6,7 +6,16 @@ export type { DeletionRequest } from "./repository-types.js";
 
 export const DELETION_GRACE_DAYS = 30;
 
-export class AccountDeletionStore {
+export interface IAccountDeletionStore {
+  create(tenantId: string, requestedBy: string): Promise<DeletionRequest>;
+  getById(id: string): Promise<DeletionRequest | null>;
+  getPendingForTenant(tenantId: string): Promise<DeletionRequest | null>;
+  cancel(id: string, reason: string): Promise<void>;
+  markCompleted(id: string, summary: Record<string, number>): Promise<void>;
+  findExpired(): Promise<DeletionRequest[]>;
+}
+
+export class AccountDeletionStore implements IAccountDeletionStore {
   constructor(private readonly repo: IDeletionRepository) {}
 
   /** Create a new deletion request with a 30-day grace period. Returns the created request. */
