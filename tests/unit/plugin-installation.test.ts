@@ -260,3 +260,92 @@ describe("installPlugin — valid local plugin directory", () => {
     expect(result.name).toBe("existing-plugin");
   });
 });
+
+// ============================================================================
+// npm --ignore-scripts flag (WOP-1388)
+// ============================================================================
+
+describe("installPlugin — npm install uses --ignore-scripts", () => {
+  it("passes --ignore-scripts for github source", async () => {
+    const cp = await import("node:child_process");
+    const execFileSyncMock = vi.mocked(cp.execFileSync);
+
+    const pluginSrc = join(testExternalDir, "gh-plugin");
+    mkdirSync(pluginSrc, { recursive: true });
+
+    await installPlugin("github:test-org/gh-plugin");
+
+    // Find the npm install call (not the git clone/pull call)
+    const calls = execFileSyncMock.mock.calls;
+    const npmInstallCall = calls.find(
+      (c) => c[0] === "npm" && Array.isArray(c[1]) && c[1][0] === "install",
+    );
+    expect(npmInstallCall).toBeDefined();
+    expect(npmInstallCall![1]).toContain("--ignore-scripts");
+  });
+
+  it("passes --ignore-scripts for local source", async () => {
+    const cp = await import("node:child_process");
+    const execFileSyncMock = vi.mocked(cp.execFileSync);
+
+    const pluginSrc = join(testExternalDir, "local-safe");
+    mkdirSync(pluginSrc, { recursive: true });
+    writeFileSync(
+      join(pluginSrc, "package.json"),
+      JSON.stringify({ name: "local-safe", version: "1.0.0" }),
+    );
+
+    await installPlugin(pluginSrc);
+
+    const calls = execFileSyncMock.mock.calls;
+    const npmInstallCall = calls.find(
+      (c) => c[0] === "npm" && Array.isArray(c[1]) && c[1][0] === "install",
+    );
+    expect(npmInstallCall).toBeDefined();
+    expect(npmInstallCall![1]).toContain("--ignore-scripts");
+  });
+
+  it("passes --ignore-scripts for npm package source", async () => {
+    const cp = await import("node:child_process");
+    const execFileSyncMock = vi.mocked(cp.execFileSync);
+
+    await installPlugin("discord");
+
+    const calls = execFileSyncMock.mock.calls;
+    // Find the call that installs the scoped package (npm path)
+    const npmInstallCall = calls.find(
+      (c) =>
+        c[0] === "npm" &&
+        Array.isArray(c[1]) &&
+        (c[1] as string[]).some((arg) => arg.includes("@wopr-network")),
+    );
+    expect(npmInstallCall).toBeDefined();
+    expect(npmInstallCall![1]).toContain("--ignore-scripts");
+    expect(npmInstallCall![1]).toContain("@wopr-network/plugin-discord");
+  });
+
+  it("does not call npm run build automatically", async () => {
+    const cp = await import("node:child_process");
+    const execFileSyncMock = vi.mocked(cp.execFileSync);
+
+    const pluginSrc = join(testExternalDir, "ts-plugin");
+    mkdirSync(pluginSrc, { recursive: true });
+    writeFileSync(
+      join(pluginSrc, "package.json"),
+      JSON.stringify({ name: "ts-plugin", version: "1.0.0" }),
+    );
+    writeFileSync(join(pluginSrc, "tsconfig.json"), JSON.stringify({}));
+
+    await installPlugin(pluginSrc);
+
+    const calls = execFileSyncMock.mock.calls;
+    const buildCall = calls.find(
+      (c) =>
+        c[0] === "npm" &&
+        Array.isArray(c[1]) &&
+        c[1][0] === "run" &&
+        c[1][1] === "build",
+    );
+    expect(buildCall).toBeUndefined();
+  });
+});
