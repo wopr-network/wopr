@@ -826,6 +826,7 @@ if (process.env.NODE_ENV !== "test") {
       },
       getCreditLedger: () => getCreditLedger(),
       getBotBilling: () => getBotBilling(),
+      getNodeRepo: () => getNodeRepo(),
     });
     logger.info("tRPC fleet router initialized");
 

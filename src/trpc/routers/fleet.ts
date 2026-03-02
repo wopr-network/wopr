@@ -15,6 +15,8 @@ import type { IBotInstanceRepository } from "../../fleet/bot-instance-repository
 import { CAPABILITY_ENV_MAP } from "../../fleet/capability-env-map.js";
 import type { FleetManager } from "../../fleet/fleet-manager.js";
 import { BotNotFoundError } from "../../fleet/fleet-manager.js";
+import type { INodeRepository } from "../../fleet/node-repository.js";
+import { findPlacement } from "../../fleet/placement.js";
 import type { ProfileTemplate } from "../../fleet/profile-schema.js";
 import { RESOURCE_TIERS, type ResourceTierKey, tierToResourceLimits } from "../../fleet/resource-tiers.js";
 import { getTenantCustomerStore, getVpsRepo } from "../../fleet/services.js";
@@ -24,6 +26,7 @@ import { Credit } from "../../monetization/credit.js";
 import type { IBotBilling } from "../../monetization/credits/bot-billing.js";
 import type { ICreditLedger as CreditLedger } from "../../monetization/credits/credit-ledger.js";
 import { checkInstanceQuota, DEFAULT_INSTANCE_LIMITS } from "../../monetization/quotas/quota-check.js";
+import { buildResourceLimits } from "../../monetization/quotas/resource-limits.js";
 import { createVpsCheckoutSession } from "../../monetization/stripe/checkout.js";
 import { createStripeClient, loadStripeConfig } from "../../monetization/stripe/client.js";
 import { assertSafeRedirectUrl } from "../../security/redirect-allowlist.js";
@@ -50,6 +53,7 @@ export interface FleetRouterDeps {
   getBotBilling?: () => IBotBilling | null;
   getBotInstanceRepo?: () => IBotInstanceRepository | null;
   getRoleStore?: () => RoleStore | null;
+  getNodeRepo?: () => INodeRepository | null;
 }
 
 let _deps: FleetRouterDeps | null = null;
@@ -132,8 +136,36 @@ export const fleetRouter = router({
       // Billing DB unavailable (e.g., in tests) — skip quota enforcement
     }
 
+    // Placement: find best node for this bot
+    let nodeId: string | undefined;
     try {
-      const profile = await fleet.create({ ...input, tenantId: ctx.tenantId });
+      const nodeRepo = deps().getNodeRepo?.();
+      if (nodeRepo) {
+        const activeNodes = await nodeRepo.list(["active"]);
+        const resourceLimits = buildResourceLimits();
+        const requiredMb = resourceLimits.Memory ? Math.ceil(resourceLimits.Memory / (1024 * 1024)) : 100;
+        const placement = findPlacement(activeNodes, requiredMb);
+        if (!placement) {
+          throw new TRPCError({
+            code: "SERVICE_UNAVAILABLE",
+            message: "No node has sufficient capacity",
+          });
+        }
+        nodeId = placement.nodeId;
+      }
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      // Re-throw unexpected errors (DB failures, network errors, etc.)
+      // Only silently skip when nodeRepo is simply not wired (getNodeRepo?.() returned null/undefined above)
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: err instanceof Error ? err.message : "Placement failed",
+        cause: err,
+      });
+    }
+
+    try {
+      const profile = await fleet.create({ ...input, tenantId: ctx.tenantId, nodeId });
       return profile;
     } catch (err) {
       if (err instanceof TRPCError) throw err;

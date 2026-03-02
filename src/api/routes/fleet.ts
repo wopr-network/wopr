@@ -8,10 +8,11 @@ import { type IEmailVerifier, requireEmailVerified } from "../../email/require-v
 import { CAPABILITY_ENV_MAP } from "../../fleet/capability-env-map.js";
 import { BotNotFoundError, FleetManager } from "../../fleet/fleet-manager.js";
 import { ImagePoller } from "../../fleet/image-poller.js";
+import { findPlacement } from "../../fleet/placement.js";
 import { defaultTemplatesDir, loadProfileTemplates } from "../../fleet/profile-loader.js";
 import type { ProfileTemplate } from "../../fleet/profile-schema.js";
 import { ProfileStore } from "../../fleet/profile-store.js";
-import { getRecoveryOrchestrator } from "../../fleet/services.js";
+import { getNodeRepo, getRecoveryOrchestrator } from "../../fleet/services.js";
 import { createBotSchema, updateBotSchema } from "../../fleet/types.js";
 import { ContainerUpdater } from "../../fleet/updater.js";
 import { Credit } from "../../monetization/credit.js";
@@ -239,8 +240,36 @@ fleetRoutes.post(
     // Build default resource limits for bot container
     const resourceLimits = buildResourceLimits();
 
+    // Placement: find best node for this bot
+    let nodeId: string | undefined;
     try {
-      const profile = await fleet.create(parsed.data, resourceLimits);
+      const nodeRepo = getNodeRepo();
+      const activeNodes = await nodeRepo.list(["active"]);
+      const requiredMb = resourceLimits?.Memory ? Math.ceil(resourceLimits.Memory / (1024 * 1024)) : 100;
+      const placement = findPlacement(activeNodes, requiredMb);
+      if (!placement) {
+        return c.json({ error: "no_capacity", message: "No node has sufficient capacity" }, 503);
+      }
+      nodeId = placement.nodeId;
+      logger.info("Placement selected", {
+        nodeId: placement.nodeId,
+        host: placement.host,
+        availableMb: placement.availableMb,
+      });
+    } catch (placementErr) {
+      const msg = placementErr instanceof Error ? placementErr.message : String(placementErr);
+      if (msg.includes("DATABASE_URL")) {
+        // Node repo not configured (single-node dev mode) — skip placement
+        logger.warn("Placement skipped: node repo unavailable (no DATABASE_URL)");
+      } else {
+        // Unexpected error (DB connection failure, network error, etc.) — propagate
+        logger.error("Placement failed with unexpected error", { err: placementErr });
+        throw placementErr;
+      }
+    }
+
+    try {
+      const profile = await fleet.create({ ...parsed.data, nodeId }, resourceLimits);
 
       // Register bot in billing system for lifecycle tracking
       try {
