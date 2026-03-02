@@ -256,8 +256,20 @@ app.get("/health/certs", async (c) => {
 });
 app.route("/fleet", fleetRoutes);
 app.route("/fleet", botPluginRoutes);
-// Plugin proxy routes — forward install/config/enable/disable to running daemon
-app.route("/api/bots", createBotPluginProxyRoutes({ pluginConfigRepo: getPluginConfigRepo() }));
+// Plugin proxy routes — forward install/config/enable/disable to running daemon.
+// Deps factory defers getPluginConfigRepo() until first request so the DB
+// is not opened at module load time (tests import app.ts without a live DB).
+{
+  let _botPluginProxyRoutes: ReturnType<typeof createBotPluginProxyRoutes> | null = null;
+  const _botPluginProxy = new Hono();
+  _botPluginProxy.all("*", (c) => {
+    if (!_botPluginProxyRoutes) {
+      _botPluginProxyRoutes = createBotPluginProxyRoutes({ pluginConfigRepo: getPluginConfigRepo() });
+    }
+    return _botPluginProxyRoutes.fetch(c.req.raw);
+  });
+  app.route("/api/bots", _botPluginProxy);
+}
 app.route("/api/quota", quotaRoutes);
 app.route("/api/billing", billingRoutes);
 app.route("/api", secretsRoutes);
