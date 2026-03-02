@@ -199,16 +199,29 @@ export interface PostInjectResult {
  * execution. Shell metacharacters and path-based executables are rejected
  * to prevent RCE even if an attacker can modify security.json.
  */
-async function runCommandHook(command: string, context: HookContext): Promise<PreInjectResult | PostInjectResult> {
+async function runCommandHook(
+  command: string,
+  context: HookContext,
+  failOpen = false,
+): Promise<PreInjectResult | PostInjectResult> {
   if (!command || typeof command !== "string" || command.trim().length === 0) {
     logger.warn("[hooks] Empty or invalid hook command, skipping");
     return {};
   }
 
+  const errorResult = (reason: string): PreInjectResult => {
+    if (failOpen) {
+      logger.warn(`[hooks] ${reason} (failOpen=true, allowing)`);
+      return { allow: true };
+    }
+    logger.warn(`[hooks] ${reason} (failing closed)`);
+    return { allow: false, reason: `Hook execution failed: ${reason}` };
+  };
+
   const parsed = parseHookCommand(command);
   if (!parsed) {
     logger.warn(`[hooks] Hook command rejected by validation: ${command}`);
-    return { allow: true }; // Fail open — don't block injections on config error
+    return errorResult(`Hook command rejected by validation: ${command}`);
   }
 
   return new Promise((resolve) => {
@@ -243,8 +256,7 @@ async function runCommandHook(command: string, context: HookContext): Promise<Pr
 
     proc.on("close", (code: number | null) => {
       if (code !== 0) {
-        logger.warn(`[hooks] Hook command failed: ${stderr}`);
-        settle({ allow: true }); // Allow by default on hook failure
+        settle(errorResult(`Hook command exited with code ${code}: ${stderr}`));
         return;
       }
 
@@ -252,23 +264,20 @@ async function runCommandHook(command: string, context: HookContext): Promise<Pr
         const result = JSON.parse(stdout);
         settle(result);
       } catch {
-        logger.warn(`[hooks] Hook returned invalid JSON: ${stdout}`);
-        settle({ allow: true });
+        settle(errorResult(`Hook returned invalid JSON: ${stdout}`));
       }
     });
 
     proc.on("error", (err: Error) => {
-      logger.warn(`[hooks] Hook command error: ${err.message}`);
-      settle({ allow: true });
+      settle(errorResult(`Hook command error: ${err.message}`));
     });
 
     // Timeout after 5 seconds
     setTimeout(() => {
       if (!settled) {
         proc.kill();
-        logger.warn("[hooks] Hook timed out");
+        settle(errorResult("Hook timed out after 5000ms"));
       }
-      settle({ allow: true });
     }, 5000);
   });
 }
@@ -287,7 +296,7 @@ export async function runPreInjectHooks(context: HookContext): Promise<PreInject
     const hookContext = { ...context, message: currentMessage, metadata };
 
     if (hook.command) {
-      const result = (await runCommandHook(hook.command, hookContext)) as PreInjectResult;
+      const result = (await runCommandHook(hook.command, hookContext, hook.failOpen)) as PreInjectResult;
 
       if (result.allow === false) {
         return {
@@ -328,7 +337,7 @@ export async function runPostInjectHooks(context: HookContext, response: string)
   for (const hook of hooks) {
     if (hook.command) {
       try {
-        await runCommandHook(hook.command, postContext as unknown as HookContext);
+        await runCommandHook(hook.command, postContext as unknown as HookContext, hook.failOpen);
       } catch (err) {
         logger.warn(`[hooks] Post-inject hook ${hook.name} failed: ${err}`);
       }

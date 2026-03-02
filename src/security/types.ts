@@ -427,6 +427,9 @@ export interface HookConfig {
 
   /** Enable/disable */
   enabled: boolean;
+
+  /** If true, hook errors allow the injection to proceed. Default: false (fail closed). */
+  failOpen?: boolean;
 }
 
 /**
