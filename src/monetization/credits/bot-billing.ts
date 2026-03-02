@@ -50,7 +50,10 @@ export class DrizzleBotBilling implements IBotBilling {
         payload: { name: bot.name },
       });
     } catch (err) {
-      logger.error(`[BotBilling] Failed to send ${type} for bot ${botId}:`, err);
+      logger.error(`[BotBilling] Failed to send ${type} for bot ${botId}:`, {
+        error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
     }
   }
 
