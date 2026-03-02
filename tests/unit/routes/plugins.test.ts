@@ -308,6 +308,15 @@ describe("POST /uninstall — uninstall plugin", () => {
     const json = await res.json();
     expect(json.error).toBe("Plugin uninstall failed");
   });
+
+  it("returns 400 when removePlugin throws after unload succeeds", async () => {
+    mockUnloadPlugin.mockResolvedValue(undefined);
+    mockRemovePlugin.mockRejectedValue(new Error("remove failed"));
+    const res = await req("POST", "/uninstall", { name: "test-plugin" });
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe("Plugin uninstall failed");
+  });
 });
 
 describe("DELETE /:name — remove plugin (legacy)", () => {
@@ -337,6 +346,12 @@ describe("DELETE /:name — remove plugin (legacy)", () => {
 
   it("returns 400 for invalid name", async () => {
     const res = await req("DELETE", "/..bad");
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when unloadPlugin throws", async () => {
+    mockUnloadPlugin.mockRejectedValue(new Error("unload failed"));
+    const res = await req("DELETE", "/test-plugin");
     expect(res.status).toBe(400);
   });
 
@@ -648,6 +663,18 @@ describe("GET /available", () => {
     expect(json.results).toHaveLength(1);
   });
 
+  it("passes query string to searchPlugins", async () => {
+    mockSearchPlugins.mockResolvedValue([]);
+    await req("GET", "/available?q=voice");
+    expect(mockSearchPlugins).toHaveBeenCalledWith("voice");
+  });
+
+  it("passes empty string to searchPlugins when q is omitted", async () => {
+    mockSearchPlugins.mockResolvedValue([]);
+    await req("GET", "/available");
+    expect(mockSearchPlugins).toHaveBeenCalledWith("");
+  });
+
   it("respects limit query param (capped at 100)", async () => {
     const manyResults = Array.from({ length: 150 }, (_, i) => ({ name: `p${i}` }));
     mockSearchPlugins.mockResolvedValue(manyResults);
@@ -748,6 +775,11 @@ describe("registries", () => {
     const json = await res.json();
     expect(json.removed).toBe(true);
     expect(mockRemoveRegistry).toHaveBeenCalledWith("custom");
+  });
+
+  it("POST /registries returns 400 when url is missing", async () => {
+    const res = await req("POST", "/registries", { url: "https://example.com" });
+    expect(res.status).toBe(400);
   });
 });
 
