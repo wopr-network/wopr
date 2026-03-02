@@ -1,5 +1,6 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DrizzleAnalyticsRepository } from "../../../src/admin/analytics/analytics-repository.js";
 import { AnalyticsStore } from "../../../src/admin/analytics/analytics-store.js";
 import type { DrizzleDb } from "../../../src/db/index.js";
 import { createTestDb, truncateAllTables } from "../../../src/test/db.js";
@@ -42,9 +43,14 @@ async function seedMeterEvent(
   charge: number,
   timestamp: number,
 ): Promise<void> {
+  // meter_events stores cost/charge as bigint raw units (Credit.toRaw())
+  // Credit.SCALE = 1_000_000_000 raw per dollar; seed values are in dollars
+  // e.g. cost=0.3 means $0.30 = 30 cents; raw = 0.3 * 1_000_000_000 = 300_000_000
+  const costRaw = Math.round(cost * 1_000_000_000);
+  const chargeRaw = Math.round(charge * 1_000_000_000);
   await pool.query(
     "INSERT INTO meter_events (id, tenant, cost, charge, capability, provider, timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-    [crypto.randomUUID(), tenant, cost, charge, capability, provider, timestamp],
+    [crypto.randomUUID(), tenant, costRaw, chargeRaw, capability, provider, timestamp],
   );
 }
 
@@ -79,7 +85,7 @@ describe("AnalyticsStore — getRevenueOverview", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("returns all zeros for an empty database", async () => {
@@ -145,7 +151,7 @@ describe("AnalyticsStore — getFloat", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("returns zeros for an empty database", async () => {
@@ -191,7 +197,7 @@ describe("AnalyticsStore — getRevenueBreakdown", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("returns per-use and monthly rows", async () => {
@@ -236,7 +242,7 @@ describe("AnalyticsStore — getMarginByCapability", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("calculates margin per capability correctly", async () => {
@@ -290,7 +296,7 @@ describe("AnalyticsStore — getProviderSpend", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("aggregates provider spend with call counts", async () => {
@@ -335,7 +341,7 @@ describe("AnalyticsStore — getTenantHealth", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("counts tenants from both credit_balances and tenant_status", async () => {
@@ -382,7 +388,7 @@ describe("AnalyticsStore — getTimeSeries", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("buckets data into daily periods", async () => {
@@ -478,7 +484,7 @@ describe("AnalyticsStore — exportCsv", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   const range = { from: THIRTY_DAYS_AGO, to: NOW };
@@ -594,7 +600,7 @@ describe("AnalyticsStore — getAutoTopupMetrics", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("returns all zeros for an empty database", async () => {
@@ -666,7 +672,7 @@ describe("AnalyticsStore — getTenantHealth (atRisk with auto-topup)", () => {
 
   beforeEach(async () => {
     await truncateAllTables(pool);
-    store = new AnalyticsStore(db);
+    store = new AnalyticsStore(new DrizzleAnalyticsRepository(db));
   });
 
   it("counts tenants with low balance and no auto-topup as at-risk", async () => {
