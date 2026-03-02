@@ -743,6 +743,54 @@ describe("Security Policy Module", () => {
       // Async config should apply the same env override as the sync version
       expect(asyncConfig.enforcement).toBe("warn");
     });
+
+    it("should ignore env var override when NODE_ENV is 'production'", () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = "production";
+        process.env.WOPR_SECURITY_ENFORCEMENT = "off";
+        const config = getSecurityConfig();
+        expect(config.enforcement).toBe("enforce"); // default, not overridden
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+
+    it("should allow env var override when NODE_ENV is 'development'", () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = "development";
+        process.env.WOPR_SECURITY_ENFORCEMENT = "warn";
+        const config = getSecurityConfig();
+        expect(config.enforcement).toBe("warn");
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+
+    it("should allow env var override when NODE_ENV is undefined", () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      try {
+        delete process.env.NODE_ENV;
+        process.env.WOPR_SECURITY_ENFORCEMENT = "warn";
+        const config = getSecurityConfig();
+        expect(config.enforcement).toBe("warn");
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+
+    it("should ignore env var override in async version when NODE_ENV is 'production'", async () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = "production";
+        process.env.WOPR_SECURITY_ENFORCEMENT = "off";
+        const config = await getSecurityConfigAsync();
+        expect(config.enforcement).toBe("enforce");
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
   });
 
   // ==========================================================================

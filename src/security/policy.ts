@@ -84,10 +84,14 @@ export function getSecurityConfig(): SecurityConfig {
   }
 
   // Allow environment variable override for enforcement mode
-  // This lets developers use WOPR_SECURITY_ENFORCEMENT=warn during local dev
+  // ONLY in non-production environments (dev/test)
+  // In production, env var override is blocked to prevent attackers from
+  // disabling enforcement via environment variable injection (OWASP A01)
   const envEnforcement = process.env.WOPR_SECURITY_ENFORCEMENT;
   if (envEnforcement === "off" || envEnforcement === "warn" || envEnforcement === "enforce") {
-    if (envEnforcement !== config.enforcement) {
+    if (process.env.NODE_ENV === "production") {
+      logger.warn(`[security] WOPR_SECURITY_ENFORCEMENT env var ignored in production (attempted: ${envEnforcement})`);
+    } else if (envEnforcement !== config.enforcement) {
       return { ...config, enforcement: envEnforcement };
     }
   }
@@ -110,10 +114,14 @@ export async function getSecurityConfigAsync(): Promise<SecurityConfig> {
   }
 
   // Allow environment variable override for enforcement mode
-  // This lets developers use WOPR_SECURITY_ENFORCEMENT=warn during local dev
+  // ONLY in non-production environments (dev/test)
+  // In production, env var override is blocked to prevent attackers from
+  // disabling enforcement via environment variable injection (OWASP A01)
   const envEnforcement = process.env.WOPR_SECURITY_ENFORCEMENT;
   if (envEnforcement === "off" || envEnforcement === "warn" || envEnforcement === "enforce") {
-    if (envEnforcement !== config.enforcement) {
+    if (process.env.NODE_ENV === "production") {
+      logger.warn(`[security] WOPR_SECURITY_ENFORCEMENT env var ignored in production (attempted: ${envEnforcement})`);
+    } else if (envEnforcement !== config.enforcement) {
       return { ...config, enforcement: envEnforcement };
     }
   }
