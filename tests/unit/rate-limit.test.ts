@@ -202,4 +202,99 @@ describe("Rate Limiting Middleware", () => {
     });
     expect(res2.status).toBe(200);
   });
+
+  // -----------------------------------------------------------------
+  // WOP-1404: Document spoofable X-Forwarded-For behavior
+  // SECURITY NOTE: When keyByIp is true, the rate limiter trusts
+  // X-Forwarded-For and X-Real-IP headers sent by the client.
+  // These are trivially spoofable unless a trusted reverse proxy
+  // strips and resets them upstream. This is a known limitation.
+  // -----------------------------------------------------------------
+
+  it("should use X-Forwarded-For for key derivation when keyByIp is true (WOP-1404)", async () => {
+    const app = new Hono();
+    app.use("*", rateLimit({ windowMs: 60_000, limit: 1, keyByIp: true }));
+    app.get("/api/test", (c) => c.json({ ok: true }));
+
+    // First request from "1.2.3.4" — allowed
+    const res1 = await app.request("/api/test", {
+      headers: { "X-Forwarded-For": "1.2.3.4" },
+    });
+    expect(res1.status).toBe(200);
+
+    // Second request from same "IP" — rate limited
+    const res2 = await app.request("/api/test", {
+      headers: { "X-Forwarded-For": "1.2.3.4" },
+    });
+    expect(res2.status).toBe(429);
+  });
+
+  it("should allow bypass by rotating X-Forwarded-For value (WOP-1404 — documents spoofable behavior)", async () => {
+    const app = new Hono();
+    app.use("*", rateLimit({ windowMs: 60_000, limit: 1, keyByIp: true }));
+    app.get("/api/test", (c) => c.json({ ok: true }));
+
+    // Each "different IP" gets its own bucket — an attacker can rotate to bypass
+    const res1 = await app.request("/api/test", {
+      headers: { "X-Forwarded-For": "10.0.0.1" },
+    });
+    expect(res1.status).toBe(200);
+
+    const res2 = await app.request("/api/test", {
+      headers: { "X-Forwarded-For": "10.0.0.2" },
+    });
+    expect(res2.status).toBe(200);
+
+    const res3 = await app.request("/api/test", {
+      headers: { "X-Forwarded-For": "10.0.0.3" },
+    });
+    expect(res3.status).toBe(200);
+
+    // Meanwhile the "real" IP (10.0.0.1) bucket is exhausted
+    const res4 = await app.request("/api/test", {
+      headers: { "X-Forwarded-For": "10.0.0.1" },
+    });
+    expect(res4.status).toBe(429);
+  });
+
+  it("should fall back to 'anonymous' bucket when no X-Forwarded-For header is present (WOP-1404)", async () => {
+    const app = new Hono();
+    app.use("*", rateLimit({ windowMs: 60_000, limit: 2, keyByIp: true }));
+    app.get("/api/test", (c) => c.json({ ok: true }));
+
+    // Request without X-Forwarded-For or X-Real-IP — falls back to "anonymous"
+    const res1 = await app.request("/api/test");
+    expect(res1.status).toBe(200);
+
+    const res2 = await app.request("/api/test");
+    expect(res2.status).toBe(200);
+
+    // Third request hits the "anonymous" bucket limit
+    const res3 = await app.request("/api/test");
+    expect(res3.status).toBe(429);
+  });
+
+  it("should share the 'anonymous' bucket across multiple clients without X-Forwarded-For (WOP-1404)", async () => {
+    const app = new Hono();
+    app.use("*", rateLimit({ windowMs: 60_000, limit: 2, keyByIp: true }));
+    app.get("/api/test", (c) => c.json({ ok: true }));
+
+    // "Client A" — no identifying headers
+    const resA = await app.request("/api/test", {
+      headers: { Authorization: "Bearer client-a" },
+    });
+    expect(resA.status).toBe(200);
+
+    // "Client B" — different auth but still no IP header, shares anonymous bucket
+    const resB = await app.request("/api/test", {
+      headers: { Authorization: "Bearer client-b" },
+    });
+    expect(resB.status).toBe(200);
+
+    // "Client C" — bucket exhausted even though this is a "new" client
+    const resC = await app.request("/api/test", {
+      headers: { Authorization: "Bearer client-c" },
+    });
+    expect(resC.status).toBe(429);
+  });
 });
