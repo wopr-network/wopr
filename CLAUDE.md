@@ -90,3 +90,9 @@ The short version: never sell the feature, sell what happened. "Voice support" i
 At the start of every WOPR session, **read `~/.wopr-memory.md` if it exists.** It contains recent session context: which repos were active, what branches are in flight, and how many uncommitted changes exist. Use it to orient quickly without re-investigating.
 
 The `Stop` hook writes to this file automatically at session end. Only non-main branches are recorded — if everything is on `main`, nothing is written for that repo.
+
+## Gotchas
+
+- **WebSocket auth**: Upgrade requests require auth token in `Sec-WebSocket-Protocol: auth.<token>` header. Remove `/ws` and `/api/ws` from SKIP_AUTH_PATHS; browser clients that can't set custom headers use this mechanism (WOP-1407).
+- **Trust level defaults cascade**: When changing `DEFAULT_TRUST_BY_SOURCE` values, ALL downstream test assertions must be updated. Grep for hardcoded trust expectations in tests and fix them proactively (WOP-1408).
+- **Always run `npm run check` before committing** — catches unused imports and type errors that block merge queue.
