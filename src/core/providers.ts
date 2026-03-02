@@ -1,4 +1,5 @@
 import { logger } from "../logger.js";
+import { emitProviderAdded, emitProviderRemoved, emitProviderStatus } from "./events.js";
 
 /**
  * Provider Registry & Management System
@@ -44,6 +45,25 @@ export class ProviderRegistry {
       lastChecked: 0,
     });
     logger.info(`[provider-registry]   ✓ ${provider.id} registered. Total: ${this.providers.size}`);
+
+    emitProviderAdded(provider.id, provider.name).catch((err) => {
+      logger.error(`[provider-registry] Failed to emit provider:added for ${provider.id}:`, err);
+    });
+  }
+
+  /**
+   * Unregister a provider
+   */
+  unregister(id: string): void {
+    const reg = this.providers.get(id);
+    if (!reg) return;
+
+    logger.info(`[provider-registry] Unregistering: ${id}`);
+    this.providers.delete(id);
+
+    emitProviderRemoved(id, reg.provider.name).catch((err) => {
+      logger.error(`[provider-registry] Failed to emit provider:removed for ${id}:`, err);
+    });
   }
 
   /**
@@ -150,6 +170,7 @@ export class ProviderRegistry {
   async checkHealth(): Promise<void> {
     logger.info(`[provider-registry] Checking health for ${this.providers.size} providers`);
     const checks = Array.from(this.providers.values()).map(async (reg) => {
+      const previousAvailable = reg.available;
       try {
         logger.info(`[provider-registry] Checking ${reg.provider.id}...`);
         const cred = this.credentials.get(reg.provider.id);
@@ -161,6 +182,9 @@ export class ProviderRegistry {
           reg.available = false;
           reg.error = "No credentials configured";
           logger.info(`[provider-registry] ${reg.provider.id}: skipped - no credentials`);
+          if (previousAvailable !== reg.available) {
+            await emitProviderStatus(reg.provider.id, reg.provider.name, previousAvailable, reg.available, reg.error);
+          }
           return;
         }
 
@@ -177,11 +201,19 @@ export class ProviderRegistry {
         } else {
           reg.error = undefined;
         }
+
+        if (previousAvailable !== reg.available) {
+          await emitProviderStatus(reg.provider.id, reg.provider.name, previousAvailable, reg.available, reg.error);
+        }
       } catch (error) {
         logger.error(`[provider-registry] ${reg.provider.id}: health check error:`, error);
         reg.available = false;
         reg.lastChecked = Date.now();
         reg.error = error instanceof Error ? error.message : "Unknown error";
+
+        if (previousAvailable !== reg.available) {
+          await emitProviderStatus(reg.provider.id, reg.provider.name, previousAvailable, reg.available, reg.error);
+        }
       }
     });
 
