@@ -51,45 +51,45 @@ export function generatePostMortemTemplate(incident: IncidentSummary): PostMorte
 | ${incident.resolvedAt?.toISOString() ?? "ONGOING"} | Incident resolved |
 | _Add more events_ | _Add description_ |`,
 
-    rootCause: `_[TODO: Describe the root cause. What technical failure triggered this incident?]_
+    rootCause: `_[PENDING: Describe the root cause. What technical failure triggered this incident?]_
 
 Contributing factors:
-- _[TODO: List contributing factors]_`,
+- _[PENDING: List contributing factors]_`,
 
     impact: `- **Customer impact:** ${incident.affectedTenantCount} tenants affected
 - **Revenue impact:** ${revenueImpact}
 - **Systems affected:** ${systems}
 - **Duration of impact:** ${durationStr}
 
-_[TODO: Add specific impact details — which features were unavailable, error rates observed, etc.]_`,
+_[PENDING: Add specific impact details — which features were unavailable, error rates observed, etc.]_`,
 
     detection: `- **Time to detect (TTD):** ${formatDuration(ttdMs)}
-- **Detection method:** _[TODO: How was this detected? Alert, customer report, health probe, etc.]_
-- **Alert that fired:** _[TODO: Which alert(s) fired first?]_
+- **Detection method:** _[PENDING: How was this detected? Alert, customer report, health probe, etc.]_
+- **Alert that fired:** _[PENDING: Which alert(s) fired first?]_
 
-_[TODO: Describe how the incident was detected and whether detection was timely.]_`,
+_[PENDING: Describe how the incident was detected and whether detection was timely.]_`,
 
     resolution: `- **Time to resolve (TTR):** ${durationStr}
-- **Resolved by:** _[TODO: Who resolved it?]_
+- **Resolved by:** _[PENDING: Who resolved it?]_
 - **Resolution steps:**
-  1. _[TODO: List the steps taken to resolve the incident]_
+  1. _[PENDING: List the steps taken to resolve the incident]_
 
-_[TODO: Describe what fixed the issue and how service was restored.]_`,
+_[PENDING: Describe what fixed the issue and how service was restored.]_`,
 
     actionItems: `| Action | Owner | Due Date | Priority |
 |--------|-------|----------|----------|
-| _[TODO: Add action item]_ | _[TODO: Owner]_ | _[TODO: Date]_ | P1 |
+| _[PENDING: Add action item]_ | _[PENDING: Owner]_ | _[PENDING: Date]_ | P1 |
 | Improve detection alert thresholds | on-call-engineer | TBD | P2 |
 | Add runbook link to alert notification | on-call-engineer | TBD | P2 |`,
 
     lessonsLearned: `**What went well:**
-- _[TODO: What worked well in detection and response?]_
+- _[PENDING: What worked well in detection and response?]_
 
 **What could be improved:**
-- _[TODO: What could we do better next time?]_
+- _[PENDING: What could we do better next time?]_
 
 **Process improvements:**
-- _[TODO: List process improvements to prevent recurrence]_`,
+- _[PENDING: List process improvements to prevent recurrence]_`,
   };
 
   const markdown = `# Post-Mortem: ${incident.title}
