@@ -34,10 +34,12 @@ export class BotMetricsTracker {
   }
 
   recordError(botId: string): void {
-    const entry = this.bots.get(botId);
-    if (entry) {
-      entry.errorCount++;
+    let entry = this.bots.get(botId);
+    if (!entry) {
+      entry = { requestCount: 0, errorCount: 0, latencies: [] };
+      this.bots.set(botId, entry);
     }
+    entry.errorCount++;
   }
 
   getMetrics(botId: string): BotApplicationMetrics | null {
