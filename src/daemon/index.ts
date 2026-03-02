@@ -23,6 +23,7 @@ import { providerRegistry } from "../core/providers.js";
 import { inject } from "../core/sessions.js";
 import { logger as winstonLogger } from "../logger.js";
 import { LOG_FILE, PID_FILE } from "../paths.js";
+import { bootstrapEnvPlugins } from "../plugins/bootstrap.js";
 import { loadAllPlugins, shutdownAllPlugins } from "../plugins.js";
 import { ensureToken } from "./auth-token.js";
 import { buildCorsOrigins } from "./cors.js";
@@ -373,6 +374,20 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   // Memory system (indexing, FTS5, file watching, session hooks) delegated to memory-semantic plugin
   daemonLog("Memory system delegated to memory-semantic plugin");
+
+  // Bootstrap plugins declared in WOPR_PLUGINS_* env vars (WOP-1327)
+  const bootstrapResult = await bootstrapEnvPlugins();
+  if (bootstrapResult.installed.length > 0) {
+    daemonLog(
+      `Env bootstrap: installed ${bootstrapResult.installed.length} plugin(s): ${bootstrapResult.installed.join(", ")}`,
+    );
+  }
+  if (bootstrapResult.failed.length > 0) {
+    daemonLog(`Env bootstrap: ${bootstrapResult.failed.length} plugin(s) failed`);
+    for (const f of bootstrapResult.failed) {
+      startupWarnings.push(`Env plugin ${f.name}: ${f.error}`);
+    }
+  }
 
   // Load plugins (this is where providers register themselves)
   await loadAllPlugins(injectors);
