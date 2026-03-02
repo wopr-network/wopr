@@ -19,6 +19,7 @@ function makeTx(tenantId: string): CreditTransaction {
     fundingSource: null,
     attributedUserId: null,
     createdAt: new Date().toISOString(),
+    expiresAt: null,
   };
 }
 

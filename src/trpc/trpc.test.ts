@@ -82,6 +82,7 @@ function makeMockLedger(): ICreditLedger {
         fundingSource: null,
         attributedUserId: null,
         createdAt: new Date().toISOString(),
+        expiresAt: null,
       };
       txns.push(tx);
       return tx;
@@ -100,6 +101,7 @@ function makeMockLedger(): ICreditLedger {
         fundingSource: null,
         attributedUserId: null,
         createdAt: new Date().toISOString(),
+        expiresAt: null,
       };
       txns.push(tx);
       return tx;
@@ -116,6 +118,9 @@ function makeMockLedger(): ICreditLedger {
         .slice(opts?.offset ?? 0, (opts?.offset ?? 0) + (opts?.limit ?? 50));
     },
     async tenantsWithBalance() {
+      return [];
+    },
+    async expiredCredits(_now: string) {
       return [];
     },
     async memberUsage(_tenantId: string) {

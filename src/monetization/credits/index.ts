@@ -11,6 +11,8 @@ export {
 } from "./auto-topup-settings-repository.js";
 export type { BillingState, IBotBilling } from "./bot-billing.js";
 export { BotBilling, DrizzleBotBilling, SUSPENSION_GRACE_DAYS } from "./bot-billing.js";
+export type { CreditExpiryCronConfig, CreditExpiryCronResult } from "./credit-expiry-cron.js";
+export { runCreditExpiryCron } from "./credit-expiry-cron.js";
 export type {
   CreditTransaction,
   CreditType,

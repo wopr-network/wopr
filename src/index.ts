@@ -66,6 +66,7 @@ import { createCachedRateLookup } from "./gateway/rate-lookup.js";
 import type { GatewayTenant } from "./gateway/types.js";
 import { BudgetChecker } from "./monetization/budget/budget-checker.js";
 import { Credit } from "./monetization/credit.js";
+import { runCreditExpiryCron } from "./monetization/credits/credit-expiry-cron.js";
 import { runDividendCron } from "./monetization/credits/dividend-cron.js";
 import { runDividendDigestCron } from "./monetization/credits/dividend-digest-cron.js";
 import { startRuntimeScheduler } from "./monetization/credits/runtime-scheduler.js";
@@ -880,6 +881,27 @@ if (process.env.NODE_ENV !== "test") {
     process.on("SIGTERM", runtimeScheduler.stop);
     process.on("SIGINT", runtimeScheduler.stop);
     logger.info("Runtime deduction scheduler started (24h interval)");
+  }
+
+  // Hourly credit expiry cron — reclaims expired promotional credit grants.
+  {
+    const expiryLedger = getCreditLedger();
+    const HOURLY_MS = 60 * 60 * 1000;
+    setInterval(() => {
+      const now = new Date().toISOString();
+      void runCreditExpiryCron({ ledger: expiryLedger, now })
+        .then((result) => {
+          if (result.processed > 0) {
+            logger.info("Credit expiry cron complete", result);
+          }
+        })
+        .catch((err) => {
+          logger.error("Credit expiry cron failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+    }, HOURLY_MS);
+    logger.info("Hourly credit expiry cron scheduled (1h interval)");
   }
 
   // Daily community dividend distribution — pool = sum(purchases) × matchRate, split among active users.

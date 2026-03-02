@@ -57,6 +57,13 @@
       "when": 1772220012000,
       "tag": "0058_billing_email",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1772220013000,
+      "tag": "0059_credit_expiry",
+      "breakpoints": true
     }
   ]
 }
