@@ -210,7 +210,7 @@ describe("Topic-based subscriptions (WOP-204)", () => {
 
     const messages = ws.allMessages();
     const statusEvent = messages.find((m) => m.type === "instance:status");
-    expect(statusEvent).toBeDefined();
+    expect(statusEvent).toMatchObject({ type: "instance:status", id: "abc123", status: "healthy" });
     expect(statusEvent?.id).toBe("abc123");
     expect(statusEvent?.status).toBe("healthy");
     expect(statusEvent?.ts).toBeTypeOf("number");
@@ -456,8 +456,8 @@ describe("Legacy broadcast functions", () => {
 
     broadcast({ type: "system", message: "test" });
 
-    expect(ws1.allMessages().find((m) => m.type === "system")).toBeDefined();
-    expect(ws2.allMessages().find((m) => m.type === "system")).toBeDefined();
+    expect(ws1.allMessages().find((m) => m.type === "system")).toMatchObject({ type: "system", message: "test" });
+    expect(ws2.allMessages().find((m) => m.type === "system")).toMatchObject({ type: "system", message: "test" });
   });
 });
 
@@ -555,7 +555,6 @@ describe("Backpressure handling", () => {
     const backpressureMsg = allMsgs.find(
       (m) => m.code === "BACKPRESSURE_DISCONNECT",
     );
-    expect(backpressureMsg).toBeDefined();
     expect(backpressureMsg?.type).toBe("error");
   });
 
@@ -614,8 +613,8 @@ describe("Heartbeat", () => {
 
     heartbeatTick();
 
-    expect(ws1.allMessages().find((m) => m.type === "ping")).toBeDefined();
-    expect(ws2.allMessages().find((m) => m.type === "ping")).toBeDefined();
+    expect(ws1.allMessages().filter((m) => m.type === "ping")).toHaveLength(1);
+    expect(ws2.allMessages().filter((m) => m.type === "ping")).toHaveLength(1);
   });
 
   it("should disconnect stale clients", () => {
@@ -648,7 +647,7 @@ describe("publishToTopic", () => {
 
     publishToTopic("instance:a:logs", { type: "instance:log", id: "a", message: "test" });
 
-    expect(ws1.allMessages().find((m) => m.type === "instance:log")).toBeDefined();
+    expect(ws1.allMessages().find((m) => m.type === "instance:log")).toMatchObject({ type: "instance:log", id: "a", message: "test" });
     expect(ws2.allMessages().find((m) => m.type === "instance:log")).toBeUndefined();
   });
 });

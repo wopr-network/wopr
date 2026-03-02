@@ -202,14 +202,10 @@ describe("loadBootstrapFiles", () => {
     const files = await workspace.loadBootstrapFiles("/test/ws");
 
     const agents = files.find((f) => f.name === "AGENTS.md");
-    expect(agents).toBeDefined();
-    expect(agents!.content).toBe("agents content");
-    expect(agents!.missing).toBe(false);
+    expect(agents).toMatchObject({ name: "AGENTS.md", content: "agents content", missing: false });
 
     const soul = files.find((f) => f.name === "SOUL.md");
-    expect(soul).toBeDefined();
-    expect(soul!.content).toBe("soul content");
-    expect(soul!.missing).toBe(false);
+    expect(soul).toMatchObject({ name: "SOUL.md", content: "soul content", missing: false });
   });
 
   it("marks missing files appropriately", async () => {
@@ -229,7 +225,6 @@ describe("loadBootstrapFiles", () => {
     const files = await workspace.loadBootstrapFiles("/test/ws");
     const identity = files.find((f) => f.name === "IDENTITY.md");
 
-    expect(identity).toBeDefined();
     expect(identity!.content).toBe("global identity");
     expect(identity!.path).toBe(path.join(MOCK_GLOBAL_IDENTITY_DIR, "IDENTITY.md"));
   });
@@ -241,7 +236,6 @@ describe("loadBootstrapFiles", () => {
     const files = await workspace.loadBootstrapFiles("/test/ws");
     const identity = files.find((f) => f.name === "IDENTITY.md");
 
-    expect(identity).toBeDefined();
     expect(identity!.content).toBe("workspace identity");
     expect(identity!.path).toBe(path.join(dir, "IDENTITY.md"));
   });
@@ -692,9 +686,7 @@ describe("applySoulEvilOverride", () => {
     const result = await workspace.applySoulEvilOverride(baseSoulFiles, "/test/ws", { chance: 1 });
 
     const soul = result.find((f) => f.name === "SOUL.md");
-    expect(soul).toBeDefined();
-    expect(soul!.content).toBe("evil soul content");
-    expect(soul!.missing).toBe(false);
+    expect(soul).toMatchObject({ name: "SOUL.md", content: "evil soul content", missing: false });
   });
 
   it("does not modify non-SOUL files", async () => {

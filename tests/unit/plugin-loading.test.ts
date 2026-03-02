@@ -157,8 +157,7 @@ describe("readPluginManifest", () => {
     };
 
     const result = readPluginManifest("/fake/path", mockPkg);
-    expect(result).toBeDefined();
-    expect(result!.category).toBe("superpower");
+    expect(result).toMatchObject({ category: "superpower" });
     expect(result!.marketplace).toEqual({ pitch: "./SUPERPOWER.md" });
   });
 
@@ -173,7 +172,7 @@ describe("readPluginManifest", () => {
     };
 
     const result = readPluginManifest("/fake/path", mockPkg);
-    expect(result).toBeDefined();
+    expect(result).toMatchObject({ name: "test-utility" });
     expect(result!.marketplace).toBeUndefined();
   });
 });

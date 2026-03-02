@@ -106,7 +106,7 @@ describe("Setup Context Providers", () => {
     beginSetupContext("no-schema-plugin", "sess-1", {});
 
     const cp = contextProviders.get("setup:no-schema-plugin:sess-1")!;
-    expect(cp).toBeDefined();
+    expect(cp).toBeTypeOf("function");
     // Provider was called with empty fallback schema on getContext
   });
 

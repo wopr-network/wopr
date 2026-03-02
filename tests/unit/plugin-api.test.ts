@@ -158,15 +158,14 @@ describe("GET /api/instances/:id/plugins", () => {
     expect(body.plugins).toHaveLength(2);
 
     const discord = body.plugins.find((p: any) => p.name === "discord");
-    expect(discord).toBeDefined();
+    expect(discord).toMatchObject({ name: "discord" });
     expect(discord.enabled).toBe(true);
     expect(discord.loaded).toBe(true);
-    expect(discord.manifest).toBeDefined();
     expect(discord.manifest.capabilities).toEqual(["channel"]);
     expect(discord.manifest.category).toBe("channel");
 
     const openai = body.plugins.find((p: any) => p.name === "openai");
-    expect(openai).toBeDefined();
+    expect(openai).toMatchObject({ name: "openai" });
     expect(openai.enabled).toBe(false);
     expect(openai.loaded).toBe(false);
   });
@@ -276,8 +275,7 @@ describe("GET /api/instances/:id/plugins/:name/config", () => {
     expect(body.name).toBe("discord");
     expect(body.config.token).toBe("secret");
     expect(body.config.prefix).toBe("!");
-    expect(body.configSchema).toBeDefined();
-    expect(body.configSchema.title).toBe("Discord Settings");
+    expect(body.configSchema).toMatchObject({ title: "Discord Settings" });
   });
 
   it("should return 404 for non-existent plugin", async () => {

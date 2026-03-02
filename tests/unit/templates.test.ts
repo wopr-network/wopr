@@ -43,8 +43,10 @@ describe("BUILTIN_TEMPLATES", () => {
 
   it("each template should have required fields", () => {
     for (const template of BUILTIN_TEMPLATES) {
-      expect(template.name).toBeTruthy();
-      expect(template.description).toBeTruthy();
+      expect(template.name).toBeTypeOf("string");
+      expect(template.name.length).toBeGreaterThan(0);
+      expect(template.description).toBeTypeOf("string");
+      expect(template.description.length).toBeGreaterThan(0);
       expect(Array.isArray(template.plugins)).toBe(true);
       expect(Array.isArray(template.providers)).toBe(true);
       expect(typeof template.config).toBe("object");
@@ -54,21 +56,21 @@ describe("BUILTIN_TEMPLATES", () => {
 
   it("minimal template should have no plugins or providers", () => {
     const minimal = BUILTIN_TEMPLATES.find((t) => t.name === "minimal");
-    expect(minimal).toBeDefined();
+    expect(minimal).toMatchObject({ name: "minimal" });
     expect(minimal!.plugins).toHaveLength(0);
     expect(minimal!.providers).toHaveLength(0);
   });
 
   it("discord-bot template should include Discord plugin and Anthropic provider", () => {
     const discordBot = BUILTIN_TEMPLATES.find((t) => t.name === "discord-bot");
-    expect(discordBot).toBeDefined();
+    expect(discordBot).toMatchObject({ name: "discord-bot" });
     expect(discordBot!.plugins).toContain("@wopr-network/plugin-discord");
     expect(discordBot!.providers).toContain("@wopr-network/provider-anthropic");
   });
 
   it("multi-channel template should include multiple channel plugins", () => {
     const multi = BUILTIN_TEMPLATES.find((t) => t.name === "multi-channel");
-    expect(multi).toBeDefined();
+    expect(multi).toMatchObject({ name: "multi-channel" });
     expect(multi!.plugins.length).toBeGreaterThanOrEqual(3);
   });
 });
@@ -95,14 +97,14 @@ describe("listTemplates", () => {
 
     const templates = listTemplates();
     expect(templates).toHaveLength(BUILTIN_TEMPLATES.length + 1);
-    expect(templates.find((t) => t.name === "custom-one")).toBeDefined();
+    expect(templates.find((t) => t.name === "custom-one")).toMatchObject({ name: "custom-one", description: "Custom template" });
   });
 });
 
 describe("getTemplate", () => {
   it("should return a built-in template by name", () => {
     const template = getTemplate("discord-bot");
-    expect(template).toBeDefined();
+    expect(template).toMatchObject({ name: "discord-bot" });
     expect(template!.name).toBe("discord-bot");
   });
 
@@ -117,7 +119,7 @@ describe("getTemplate", () => {
     });
 
     const template = getTemplate("my-custom");
-    expect(template).toBeDefined();
+    expect(template).toMatchObject({ name: "my-custom", description: "My custom template" });
     expect(template!.description).toBe("My custom template");
   });
 
@@ -153,7 +155,7 @@ describe("createCustomTemplate", () => {
       tags: [],
     });
 
-    expect(getTemplate("test-template")).toBeDefined();
+    expect(getTemplate("test-template")).toMatchObject({ name: "test-template", description: "Test" });
   });
 
   it("should throw when trying to overwrite a built-in template", () => {

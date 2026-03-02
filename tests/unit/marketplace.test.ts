@@ -178,12 +178,10 @@ describe("GET /api/marketplace", () => {
 
     const body = await res.json();
     expect(body.total).toBeGreaterThanOrEqual(2);
-    expect(body.plugins).toBeDefined();
+    expect(body.plugins).toBeInstanceOf(Array);
 
     const discord = body.plugins.find((p: any) => p.name === "discord");
-    expect(discord).toBeDefined();
-    expect(discord.installed).toBe(true);
-    expect(discord.manifest).toBeDefined();
+    expect(discord).toMatchObject({ name: "discord", installed: true });
     expect(discord.manifest.capabilities).toEqual(["channel"]);
   });
 
@@ -192,9 +190,7 @@ describe("GET /api/marketplace", () => {
     const body = await res.json();
 
     const slack = body.plugins.find((p: any) => p.name === "wopr-plugin-slack");
-    expect(slack).toBeDefined();
-    expect(slack.installed).toBe(false);
-    expect(slack.source).toBe("npm");
+    expect(slack).toMatchObject({ name: "wopr-plugin-slack", installed: false, source: "npm" });
   });
 
   it("should filter by search query", async () => {
@@ -261,14 +257,14 @@ describe("GET /api/marketplace/:name", () => {
     expect(body.category).toBe("channel");
     expect(body.author).toBe("WOPR Team");
     expect(body.license).toBe("MIT");
-    expect(body.requires).toBeDefined();
-    expect(body.requirementsStatus).toBeDefined();
+    expect(body.requires).toMatchObject({ env: ["DISCORD_TOKEN"], node: ">=22.0.0" });
     expect(body.requirementsStatus.satisfied).toBe(false);
     expect(body.requirementsStatus.missing.env).toContain("DISCORD_TOKEN");
-    expect(body.configSchema).toBeDefined();
-    expect(body.setup).toBeDefined();
-    expect(body.install).toBeDefined();
-    expect(body.lifecycle).toBeDefined();
+    expect(body.configSchema).toMatchObject({ title: "Discord Settings" });
+    expect(body.setup).toBeInstanceOf(Array);
+    expect(body.setup).toHaveLength(1);
+    expect(body.install).toEqual([{ kind: "manual", instructions: "Set DISCORD_TOKEN in environment" }]);
+    expect(body.lifecycle).toEqual({ hotReload: true, shutdownBehavior: "graceful" });
     expect(body.installed).toBe(true);
     expect(body.loaded).toBe(true);
   });
@@ -303,7 +299,6 @@ describe("GET /api/marketplace/:name/schema", () => {
 
     const body = await res.json();
     expect(body.name).toBe("discord");
-    expect(body.configSchema).toBeDefined();
     expect(body.configSchema.title).toBe("Discord Settings");
     expect(body.configSchema.fields).toHaveLength(2);
     expect(body.configSchema.fields[0].name).toBe("token");

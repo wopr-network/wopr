@@ -51,7 +51,7 @@ describe("CapabilityHealthProber", () => {
     const snapshot = await prober.check();
     expect(snapshot.overallHealthy).toBe(true);
     expect(snapshot.capabilities).toEqual([]);
-    expect(snapshot.timestamp).toBeDefined();
+    expect(snapshot.timestamp).toBeTypeOf("string");
   });
 
   it("marks providers healthy when no probe is registered (optimistic default)", async () => {

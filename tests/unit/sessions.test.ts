@@ -363,13 +363,11 @@ describe("listSessions", () => {
     expect(result).toHaveLength(2);
 
     const s1 = result.find((s) => s.name === "s1");
-    expect(s1).toBeDefined();
-    expect(s1!.id).toBe("id-1");
+    expect(s1).toMatchObject({ name: "s1", id: "id-1" });
     expect(s1!.context).toBe("Context for s1");
 
     const s2 = result.find((s) => s.name === "s2");
-    expect(s2).toBeDefined();
-    expect(s2!.id).toBe("id-2");
+    expect(s2).toMatchObject({ name: "s2", id: "id-2" });
     expect(s2!.context).toBeUndefined();
   });
 

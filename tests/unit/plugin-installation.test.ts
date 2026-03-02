@@ -280,8 +280,7 @@ describe("installPlugin — npm install uses --ignore-scripts", () => {
     const npmInstallCall = calls.find(
       (c) => c[0] === "npm" && Array.isArray(c[1]) && c[1][0] === "install",
     );
-    expect(npmInstallCall).toBeDefined();
-    expect(npmInstallCall![1]).toContain("--ignore-scripts");
+    expect(npmInstallCall).toMatchObject(["npm", expect.arrayContaining(["install", "--ignore-scripts"])]);
   });
 
   it("passes --ignore-scripts for local source", async () => {
@@ -301,8 +300,7 @@ describe("installPlugin — npm install uses --ignore-scripts", () => {
     const npmInstallCall = calls.find(
       (c) => c[0] === "npm" && Array.isArray(c[1]) && c[1][0] === "install",
     );
-    expect(npmInstallCall).toBeDefined();
-    expect(npmInstallCall![1]).toContain("--ignore-scripts");
+    expect(npmInstallCall).toMatchObject(["npm", expect.arrayContaining(["install", "--ignore-scripts"])]);
   });
 
   it("passes --ignore-scripts for npm package source", async () => {
@@ -319,9 +317,7 @@ describe("installPlugin — npm install uses --ignore-scripts", () => {
         Array.isArray(c[1]) &&
         (c[1] as string[]).some((arg) => arg.includes("@wopr-network")),
     );
-    expect(npmInstallCall).toBeDefined();
-    expect(npmInstallCall![1]).toContain("--ignore-scripts");
-    expect(npmInstallCall![1]).toContain("@wopr-network/plugin-discord");
+    expect(npmInstallCall).toMatchObject(["npm", expect.arrayContaining(["install", "--ignore-scripts", "@wopr-network/plugin-discord"])]);
   });
 
   it("does not call npm run build automatically", async () => {
