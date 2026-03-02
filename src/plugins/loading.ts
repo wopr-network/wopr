@@ -11,7 +11,7 @@ import { getCapabilityDependencyGraph } from "../core/capability-deps.js";
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
 import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
-import { logger } from "../logger.js";
+import { logger, shouldLogStack } from "../logger.js";
 import type { InstallMethod, PluginManifest, PluginRequirements } from "../plugin-types/manifest.js";
 import {
   checkNodeRequirement,
@@ -578,7 +578,7 @@ export async function loadAllPlugins(
     } catch (err: unknown) {
       const error = err as Error;
       logger.error(`[plugins]   Failed to load ${plugin.name}:`, error.message);
-      if (error.stack) {
+      if (error.stack && shouldLogStack()) {
         logger.error(`[plugins]     Stack:`, error.stack.substring(0, 200));
       }
       failed.push({ name: plugin.name, error: error.message });

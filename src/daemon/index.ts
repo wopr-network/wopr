@@ -21,7 +21,7 @@ import { config as centralConfig } from "../core/config.js";
 // Provider registry imports
 import { providerRegistry } from "../core/providers.js";
 import { inject } from "../core/sessions.js";
-import { logger as winstonLogger } from "../logger.js";
+import { shouldLogStack, logger as winstonLogger } from "../logger.js";
 import { LOG_FILE, PID_FILE } from "../paths.js";
 import { bootstrapEnvPlugins } from "../plugins/bootstrap.js";
 import { pluginManifests } from "../plugins/state.js";
@@ -71,7 +71,7 @@ const DEFAULT_HOST = process.env.WOPR_DAEMON_HOST || "127.0.0.1";
 // After an uncaught exception Node's state is undefined; continuing risks silent corruption.
 export function handleUncaughtException(error: Error): void {
   winstonLogger.error(`[daemon] Uncaught exception: ${error.message}`);
-  winstonLogger.error(`[daemon] Stack: ${error.stack}`);
+  if (shouldLogStack()) winstonLogger.error(`[daemon] Stack: ${error.stack}`);
   process.exit(1);
 }
 
@@ -79,7 +79,7 @@ export function handleUnhandledRejection(reason: unknown, _promise: Promise<unkn
   const msg = reason instanceof Error ? reason.message : String(reason);
   const stack = reason instanceof Error ? reason.stack : undefined;
   winstonLogger.error(`[daemon] Unhandled rejection: ${msg}`);
-  if (stack) winstonLogger.error(`[daemon] Stack: ${stack}`);
+  if (stack && shouldLogStack()) winstonLogger.error(`[daemon] Stack: ${stack}`);
   process.exit(1);
 }
 

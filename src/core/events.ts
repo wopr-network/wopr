@@ -9,7 +9,7 @@
  */
 
 import { EventEmitter } from "node:events";
-import { logger } from "../logger.js";
+import { logger, shouldLogStack } from "../logger.js";
 
 // ============================================================================
 // Core Event Types
@@ -304,7 +304,7 @@ class WOPREventBusImpl implements WOPREventBus {
         const errMsg = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
         logger.error(`[events] Handler error for '${String(event)}' (source: ${meta?.source || "unknown"}): ${errMsg}`);
-        if (stack) logger.error(`[events] Stack: ${stack}`);
+        if (stack && shouldLogStack()) logger.error(`[events] Stack: ${stack}`);
       }
     };
 
@@ -338,7 +338,7 @@ class WOPREventBusImpl implements WOPREventBus {
         const errMsg = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
         logger.error(`[events] Handler error for '${String(event)}' (source: ${meta?.source || "unknown"}): ${errMsg}`);
-        if (stack) logger.error(`[events] Stack: ${stack}`);
+        if (stack && shouldLogStack()) logger.error(`[events] Stack: ${stack}`);
       }
     };
 
