@@ -10,6 +10,7 @@ import type { RoleStore } from "../../admin/roles/role-store.js";
 import type { IBotInstanceRepository } from "../../fleet/bot-instance-repository.js";
 import type { FleetManager } from "../../fleet/fleet-manager.js";
 import { BotNotFoundError } from "../../fleet/fleet-manager.js";
+import type { INodeRepository } from "../../fleet/node-repository.js";
 import type { ProfileTemplate } from "../../fleet/profile-schema.js";
 import type { BotInstance } from "../../fleet/repository-types.js";
 import { Credit } from "../../monetization/credit.js";
@@ -256,6 +257,66 @@ describe("fleet.createInstance", () => {
   it("rejects unauthenticated", async () => {
     const caller = createCaller(unauthContext());
     await expect(caller.fleet.createInstance(createInput)).rejects.toThrow("Authentication required");
+  });
+
+  it("calls findPlacement and passes nodeId to fleet.create", async () => {
+    const mockNodeRepo: Partial<INodeRepository> = {
+      list: vi
+        .fn()
+        .mockResolvedValue([{ id: "node-1", host: "10.0.0.1", status: "active", capacityMb: 2000, usedMb: 500 }]),
+    };
+    setFleetRouterDeps({
+      getFleetManager: () => fleetMock as unknown as FleetManager,
+      getTemplates: () => mockTemplates,
+      getCreditLedger: () => null,
+      getBotBilling: () => null,
+      getBotInstanceRepo: () => mockBotInstanceRepo,
+      getRoleStore: () => mockRoleStore,
+      getNodeRepo: () => mockNodeRepo as INodeRepository,
+    });
+
+    const caller = createCaller(authedContext());
+    await caller.fleet.createInstance(createInput);
+    expect(fleetMock.create).toHaveBeenCalledWith(expect.objectContaining({ nodeId: "node-1" }));
+  });
+
+  it("throws UNAVAILABLE when no node has sufficient capacity", async () => {
+    const mockNodeRepo: Partial<INodeRepository> = {
+      list: vi
+        .fn()
+        .mockResolvedValue([{ id: "node-1", host: "10.0.0.1", status: "active", capacityMb: 100, usedMb: 100 }]),
+    };
+    setFleetRouterDeps({
+      getFleetManager: () => fleetMock as unknown as FleetManager,
+      getTemplates: () => mockTemplates,
+      getCreditLedger: () => null,
+      getBotBilling: () => null,
+      getBotInstanceRepo: () => mockBotInstanceRepo,
+      getRoleStore: () => mockRoleStore,
+      getNodeRepo: () => mockNodeRepo as INodeRepository,
+    });
+
+    const caller = createCaller(authedContext());
+    await expect(caller.fleet.createInstance(createInput)).rejects.toMatchObject({
+      message: "No node has sufficient capacity",
+    });
+  });
+
+  it("proceeds without nodeId when getNodeRepo is not set (dev mode)", async () => {
+    setFleetRouterDeps({
+      getFleetManager: () => fleetMock as unknown as FleetManager,
+      getTemplates: () => mockTemplates,
+      getCreditLedger: () => null,
+      getBotBilling: () => null,
+      getBotInstanceRepo: () => mockBotInstanceRepo,
+      getRoleStore: () => mockRoleStore,
+      // no getNodeRepo
+    });
+
+    const caller = createCaller(authedContext());
+    const result = await caller.fleet.createInstance(createInput);
+    expect(result).toEqual(mockProfile);
+    expect(fleetMock.create).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "test-tenant" }));
   });
 });
 

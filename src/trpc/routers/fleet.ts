@@ -15,6 +15,8 @@ import type { IBotInstanceRepository } from "../../fleet/bot-instance-repository
 import { CAPABILITY_ENV_MAP } from "../../fleet/capability-env-map.js";
 import type { FleetManager } from "../../fleet/fleet-manager.js";
 import { BotNotFoundError } from "../../fleet/fleet-manager.js";
+import type { INodeRepository } from "../../fleet/node-repository.js";
+import { findPlacement } from "../../fleet/placement.js";
 import type { ProfileTemplate } from "../../fleet/profile-schema.js";
 import { RESOURCE_TIERS, type ResourceTierKey, tierToResourceLimits } from "../../fleet/resource-tiers.js";
 import { getTenantCustomerStore, getVpsRepo } from "../../fleet/services.js";
@@ -50,6 +52,7 @@ export interface FleetRouterDeps {
   getBotBilling?: () => IBotBilling | null;
   getBotInstanceRepo?: () => IBotInstanceRepository | null;
   getRoleStore?: () => RoleStore | null;
+  getNodeRepo?: () => INodeRepository | null;
 }
 
 let _deps: FleetRouterDeps | null = null;
@@ -132,8 +135,28 @@ export const fleetRouter = router({
       // Billing DB unavailable (e.g., in tests) — skip quota enforcement
     }
 
+    // Placement: find best node for this bot
+    let nodeId: string | undefined;
     try {
-      const profile = await fleet.create({ ...input, tenantId: ctx.tenantId });
+      const nodeRepo = deps().getNodeRepo?.();
+      if (nodeRepo) {
+        const activeNodes = await nodeRepo.list(["active"]);
+        const placement = findPlacement(activeNodes);
+        if (!placement) {
+          throw new TRPCError({
+            code: "SERVICE_UNAVAILABLE",
+            message: "No node has sufficient capacity",
+          });
+        }
+        nodeId = placement.nodeId;
+      }
+    } catch (err) {
+      if (err instanceof TRPCError) throw err;
+      // Node repo unavailable — skip placement (single-node dev)
+    }
+
+    try {
+      const profile = await fleet.create({ ...input, tenantId: ctx.tenantId, nodeId });
       return profile;
     } catch (err) {
       if (err instanceof TRPCError) throw err;

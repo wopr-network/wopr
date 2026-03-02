@@ -71,6 +71,8 @@ export const botProfileSchema = z.object({
   updatePolicy: updatePolicySchema.default("manual"),
   /** Optional P2P discovery configuration. Defaults to enabled with no extra topics. */
   discovery: discoveryConfigSchema.optional(),
+  /** Node this bot was placed on at creation time (optional, for future multi-node routing). */
+  nodeId: z.string().uuid().optional(),
 });
 
 export type BotProfile = z.infer<typeof botProfileSchema>;
@@ -91,6 +93,8 @@ export const createBotSchema = z.object({
   updatePolicy: updatePolicySchema.default("manual"),
   /** Optional P2P discovery configuration. */
   discovery: discoveryConfigSchema.optional(),
+  /** Node this bot was placed on at creation time (optional, for future multi-node routing). */
+  nodeId: z.string().uuid().optional(),
 });
 
 /** Schema for updating a bot via the API */
