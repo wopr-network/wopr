@@ -180,24 +180,30 @@ function deps(): BillingRouterDeps {
 
 export const billingRouter = router({
   /** Get credits balance for a tenant. Uses validated ctx.tenantId. */
-  creditsBalance: tenantProcedure.input(z.object({}).optional()).query(async ({ ctx }) => {
-    const tenant = ctx.tenantId;
-    const { creditLedger, meterAggregator } = deps();
-    const balance = await creditLedger.balance(tenant);
+  creditsBalance: tenantProcedure
+    .input(z.object({ tenant: tenantIdSchema.optional() }).optional())
+    .query(async ({ input, ctx }) => {
+      if (input?.tenant && input.tenant !== ctx.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+      }
+      const tenant = input?.tenant ?? ctx.tenantId;
+      const { creditLedger, meterAggregator } = deps();
+      const balance = await creditLedger.balance(tenant);
 
-    // Compute 7-day average daily burn from usage summaries.
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const { totalCharge } = await meterAggregator.getTenantTotal(tenant, sevenDaysAgo);
-    const daily_burn_credits = Math.round(totalCharge / 7);
-    const runway_days = daily_burn_credits > 0 ? Math.floor(balance.toCents() / daily_burn_credits) : null;
+      // Compute 7-day average daily burn from usage summaries.
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const { totalCharge } = await meterAggregator.getTenantTotal(tenant, sevenDaysAgo);
+      const daily_burn_credits = Math.round(totalCharge / 7);
+      const runway_days = daily_burn_credits > 0 ? Math.floor(balance.toCents() / daily_burn_credits) : null;
 
-    return { tenant, balance_credits: balance.toCentsRounded(), daily_burn_credits, runway_days };
-  }),
+      return { tenant, balance_credits: balance.toCentsRounded(), daily_burn_credits, runway_days };
+    }),
 
   /** Get credit transaction history for a tenant. Uses validated ctx.tenantId. */
   creditsHistory: tenantProcedure
     .input(
       z.object({
+        tenant: tenantIdSchema.optional(),
         type: z.enum(["grant", "refund", "correction"]).optional(),
         from: z.number().int().optional(),
         to: z.number().int().optional(),
@@ -206,7 +212,10 @@ export const billingRouter = router({
       }),
     )
     .query(async ({ input, ctx }) => {
-      const tenant = ctx.tenantId;
+      if (input.tenant && input.tenant !== ctx.tenantId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+      }
+      const tenant = input.tenant ?? ctx.tenantId;
       const { creditLedger } = deps();
       const entries = await creditLedger.history(tenant, input);
       return { entries, total: entries.length };
