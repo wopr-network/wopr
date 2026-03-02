@@ -174,11 +174,15 @@ export async function listSessionsAsync(): Promise<
 /** Get next sequence number for a session */
 async function getNextSequence(sessionId: string): Promise<number> {
   const repo = messagesRepo();
-  const rows = await repo.raw(`SELECT MAX(sequence) as maxSeq FROM sessions_session_messages WHERE "sessionId" = ?`, [
-    sessionId,
-  ]);
-  const row = rows[0] as { maxSeq: number | null } | undefined;
-  return (row?.maxSeq ?? -1) + 1;
+  const messages = await repo
+    .query()
+    .where("sessionId", sessionId)
+    .orderBy("sequence", "desc")
+    .limit(1)
+    .select("sequence")
+    .execute();
+  const maxSeq = messages[0]?.sequence as number | undefined;
+  return (maxSeq ?? -1) + 1;
 }
 
 /** Append a conversation entry (replaces appendToConversationLog) */

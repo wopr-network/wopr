@@ -146,11 +146,6 @@ export interface Repository<T extends Record<string, unknown>, PK extends keyof 
   query(): QueryBuilder<T>;
 
   /**
-   * Execute raw SQL (plugins are trusted)
-   */
-  raw(sql: string, params?: unknown[]): Promise<unknown[]>;
-
-  /**
    * Run operation in transaction
    */
   transaction<R>(fn: (repo: Repository<T>) => Promise<R>): Promise<R>;
@@ -229,16 +224,6 @@ export interface StorageApi {
   getVersion(namespace: string): Promise<number>;
 
   /**
-   * Execute raw SQL across the database (for SELECT queries)
-   */
-  raw(sql: string, params?: unknown[]): Promise<unknown[]>;
-
-  /**
-   * Execute a statement that doesn't return rows (INSERT, UPDATE, DELETE)
-   */
-  run(sql: string, params?: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }>;
-
-  /**
    * Run cross-table transaction
    */
   transaction<R>(fn: (storage: StorageApi) => Promise<R>): Promise<R>;
@@ -248,4 +233,32 @@ export interface StorageApi {
    * Safe to call multiple times. No-op if already closed.
    */
   close(): void;
+}
+
+/**
+ * Internal repository interface — extends Repository with raw SQL access.
+ * ONLY for core code. Never exposed to plugins.
+ */
+export interface InternalRepository<T extends Record<string, unknown>, PK extends keyof T = "id", PKType = T[PK]>
+  extends Repository<T, PK, PKType> {
+  /**
+   * Execute raw SQL (core-only, not available to plugins)
+   */
+  raw(sql: string, params?: unknown[]): Promise<unknown[]>;
+}
+
+/**
+ * Internal storage API — extends StorageApi with raw SQL access.
+ * ONLY for core code. Never exposed to plugins.
+ */
+export interface InternalStorageApi extends StorageApi {
+  /**
+   * Execute raw SQL across the database (core-only)
+   */
+  raw(sql: string, params?: unknown[]): Promise<unknown[]>;
+
+  /**
+   * Execute a statement that doesn't return rows (core-only)
+   */
+  run(sql: string, params?: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }>;
 }

@@ -15,7 +15,7 @@ import { type blob, integer, type real, sqliteTable, text } from "drizzle-orm/sq
 import { z } from "zod";
 import { logger } from "../logger.js";
 import { WOPR_HOME } from "../paths.js";
-import type { PluginSchema, Repository, StorageApi, TableSchema } from "./api/plugin-storage.js";
+import type { InternalStorageApi, PluginSchema, Repository, StorageApi, TableSchema } from "./api/plugin-storage.js";
 import { DrizzleRepository } from "./repositories/drizzle-repository.js";
 
 /**
@@ -154,7 +154,7 @@ function generateCreateTableSQL(namespace: string, tableName: string, tableSchem
 /**
  * Storage implementation
  */
-export class Storage implements StorageApi {
+export class Storage implements InternalStorageApi {
   readonly driver: "sqlite" | "postgres" = "sqlite";
   readonly dbPath: string;
   private db: BetterSQLite3Database;
@@ -382,7 +382,7 @@ export class Storage implements StorageApi {
 /**
  * Transaction-aware storage wrapper
  */
-class TransactionStorage implements StorageApi {
+class TransactionStorage implements InternalStorageApi {
   readonly driver: "sqlite" | "postgres" = "sqlite";
 
   constructor(
