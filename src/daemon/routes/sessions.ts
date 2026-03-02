@@ -19,7 +19,17 @@ import { createInjectionSource } from "../../security/index.js";
 import { validateSessionName } from "../validation.js";
 import { broadcastInjection, broadcastStream } from "../ws.js";
 
-export const sessionsRouter = new Hono();
+type AuthEnv = {
+  Variables: {
+    user: { id: string } | undefined;
+    role: string;
+    session: unknown;
+    authMethod: string;
+    apiKeyScope: string;
+  };
+};
+
+export const sessionsRouter = new Hono<AuthEnv>();
 
 // List all sessions
 sessionsRouter.get(
@@ -199,6 +209,13 @@ sessionsRouter.post(
   async (c) => {
     const name = c.req.param("name");
     validateSessionName(name);
+
+    // WOP-1422: Enforce API key scope — read-only keys cannot inject
+    const apiKeyScope = c.get("apiKeyScope") as string | undefined;
+    if (apiKeyScope === "read-only") {
+      return c.json({ error: "Forbidden: insufficient scope for inject" }, 403);
+    }
+
     const body = await c.req.json();
     const { message, from = "api" } = body;
 
@@ -221,7 +238,10 @@ sessionsRouter.post(
           from,
           // SECURITY: API requests come from daemon with owner trust level
           // (daemon is local, authenticated implicitly)
-          source: createInjectionSource("daemon"),
+          source:
+            apiKeyScope === "full"
+              ? createInjectionSource("daemon", { trustLevel: "owner" })
+              : createInjectionSource("daemon"),
           onStream: (msg) => {
             // Send SSE event
             const data = JSON.stringify({
@@ -253,7 +273,10 @@ sessionsRouter.post(
         silent: true,
         from,
         // SECURITY: API requests come from daemon with owner trust level
-        source: createInjectionSource("daemon"),
+        source:
+          apiKeyScope === "full"
+            ? createInjectionSource("daemon", { trustLevel: "owner" })
+            : createInjectionSource("daemon"),
         onStream: (msg) => {
           broadcastStream(name, from, msg);
         },
