@@ -183,11 +183,23 @@ let _snapshotManager: SnapshotManager | null = null;
 
 const S3_BUCKET = process.env.S3_BUCKET || "wopr-backups";
 
+function envInt(key: string, fallback: number): number {
+  const raw = process.env[key];
+  if (raw === undefined) return fallback;
+  const parsed = parseInt(raw, 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 export function getPool(): Pool {
   if (!_pool) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error("DATABASE_URL environment variable is required");
-    _pool = new Pool({ connectionString });
+    _pool = new Pool({
+      connectionString,
+      max: envInt("DB_POOL_MAX", 20),
+      idleTimeoutMillis: envInt("DB_POOL_IDLE_TIMEOUT_MS", 30_000),
+      connectionTimeoutMillis: envInt("DB_POOL_CONNECTION_TIMEOUT_MS", 5_000),
+    });
   }
   return _pool;
 }
