@@ -128,20 +128,8 @@ export class DrizzleNodeRepository implements INodeRepository {
       return this.transition(data.nodeId, "returning", "re_registration", "node_agent");
     }
 
-    if (existing.status === "unhealthy") {
-      await this.db
-        .update(nodes)
-        .set({
-          host: data.host,
-          capacityMb: data.capacityMb,
-          agentVersion: data.agentVersion,
-          updatedAt: now,
-        })
-        .where(eq(nodes.id, data.nodeId));
-      return this.transition(data.nodeId, "active", "re_registration", "node_agent");
-    }
-
-    // Healthy node re-registering — metadata update only, no transition
+    // Healthy node re-registering (including unhealthy) — metadata update only, no transition
+    // Recovery from unhealthy → active is driven by health checks, not re-registration
     const rows = await this.db
       .update(nodes)
       .set({
