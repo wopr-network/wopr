@@ -49,6 +49,7 @@ import { instancesRouter } from "./routes/instances.js";
 import { marketplaceRouter } from "./routes/marketplace.js";
 import { observabilityRouter } from "./routes/observability.js";
 import { openaiRouter } from "./routes/openai.js";
+import { openaiCapabilitiesRouter } from "./routes/openai-capabilities.js";
 import { pluginsRouter } from "./routes/plugins.js";
 import { providersRouter } from "./routes/providers.js";
 import { restartRouter } from "./routes/restart.js";
@@ -129,6 +130,10 @@ export function createApp(healthMonitor?: HealthMonitor) {
   app.route("/providers", providersRouter);
   app.route("/templates", templatesRouter);
   app.route("/observability", observabilityRouter);
+  // openaiCapabilitiesRouter mounts first so its /embeddings, /audio/transcriptions,
+  // /audio/speech, and /images/generations handlers take precedence. openaiRouter
+  // only handles /chat/completions and /models — no route conflict.
+  app.route("/v1", openaiCapabilitiesRouter);
   app.route("/v1", openaiRouter);
   app.route("/api/daemon", restartRouter);
 

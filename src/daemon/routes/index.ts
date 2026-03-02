@@ -10,6 +10,7 @@ export { instancesRouter } from "./instances.js";
 export { marketplaceRouter } from "./marketplace.js";
 export { observabilityRouter } from "./observability.js";
 export { openaiRouter } from "./openai.js";
+export { openaiCapabilitiesRouter } from "./openai-capabilities.js";
 export { pluginsRouter } from "./plugins.js";
 export { providersRouter } from "./providers.js";
 export { sessionsRouter } from "./sessions.js";
