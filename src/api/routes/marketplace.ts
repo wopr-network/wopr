@@ -124,9 +124,10 @@ marketplaceRoutes.get("/plugins", async (c) => {
   let startIndex = 0;
   if (cursor) {
     const cursorIndex = merged.findIndex((p) => p.id === cursor);
-    if (cursorIndex !== -1) {
-      startIndex = cursorIndex + 1;
+    if (cursorIndex === -1) {
+      return c.json({ error: "Invalid or expired cursor" }, 400);
     }
+    startIndex = cursorIndex + 1;
   }
 
   const page = merged.slice(startIndex, startIndex + limit);
