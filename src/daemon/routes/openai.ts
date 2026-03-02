@@ -15,7 +15,17 @@ import { deleteSession, inject, setSessionContext, setSessionProvider } from "..
 import { createInjectionSource } from "../../security/index.js";
 import type { ProviderConfig } from "../../types/provider.js";
 
-export const openaiRouter = new Hono();
+type AuthEnv = {
+  Variables: {
+    user: { id: string } | undefined;
+    role: string;
+    session: unknown;
+    authMethod: string;
+    apiKeyScope: string;
+  };
+};
+
+export const openaiRouter = new Hono<AuthEnv>();
 
 /** Valid roles for OpenAI chat messages */
 const VALID_ROLES = new Set(["system", "user", "assistant", "tool"]);
@@ -265,6 +275,22 @@ openaiRouter.post(
     }
     await setSessionProvider(sessionName, providerConfig);
 
+    // WOP-1422: Enforce API key scope — read-only keys cannot inject
+    const apiKeyScope = c.get("apiKeyScope") as string | undefined;
+    if (apiKeyScope === "read-only") {
+      await deleteSession(sessionName, "scope-rejected").catch(() => {});
+      return c.json(
+        {
+          error: {
+            message: "Forbidden: insufficient scope for inject",
+            type: "invalid_request_error",
+            code: "insufficient_scope",
+          },
+        },
+        403,
+      );
+    }
+
     if (body.stream) {
       // ---- Streaming response (SSE) ----
       c.header("Content-Type", "text/event-stream");
@@ -281,7 +307,10 @@ openaiRouter.post(
           await inject(sessionName, userPrompt, {
             silent: true,
             from: "openai-api",
-            source: createInjectionSource("daemon"),
+            source:
+              apiKeyScope === "full"
+                ? createInjectionSource("daemon", { trustLevel: "owner" })
+                : createInjectionSource("daemon"),
             onStream: (msg) => {
               if (msg.type === "text" && msg.content) {
                 const chunk = {
@@ -339,7 +368,10 @@ openaiRouter.post(
       const result = await inject(sessionName, userPrompt, {
         silent: true,
         from: "openai-api",
-        source: createInjectionSource("daemon"),
+        source:
+          apiKeyScope === "full"
+            ? createInjectionSource("daemon", { trustLevel: "owner" })
+            : createInjectionSource("daemon"),
       });
 
       return c.json({
