@@ -220,14 +220,28 @@ billingRoutes.post("/portal", adminAuth, async (c) => {
     return c.json({ error: "Invalid redirect URL" }, 400);
   }
 
+  // Intentional 501: not all payment processors support a self-service portal (e.g. PayRam).
+  // Clients should check for this error code and hide the "Manage Billing" button.
   if (!processor.supportsPortal()) {
-    return c.json({ error: "Billing portal not supported by current payment processor" }, 501);
+    return c.json(
+      {
+        error: "billing_portal_not_supported",
+        message: "Customer billing portal is not available for the current payment processor",
+      },
+      501,
+    );
   }
 
   try {
     const session = await processor.createPortalSession({ tenant, returnUrl });
     if (!session?.url) {
-      return c.json({ error: "Billing portal not supported by current payment processor" }, 501);
+      return c.json(
+        {
+          error: "billing_portal_not_supported",
+          message: "Customer billing portal is not available for the current payment processor",
+        },
+        501,
+      );
     }
     return c.json({ url: session.url });
   } catch (err) {

@@ -385,7 +385,8 @@ describe("billing routes", () => {
 
       expect(res.status).toBe(501);
       const body = await res.json();
-      expect(body.error).toContain("not supported");
+      expect(body.error).toBe("billing_portal_not_supported");
+      expect(body.message).toBe("Customer billing portal is not available for the current payment processor");
     });
 
     it("returns 500 when processor API fails", async () => {
