@@ -110,6 +110,15 @@ export class NotificationService {
     });
   }
 
+  notifyDisputeLost(tenantId: string, email: string, disputeId: string, amountDollars: string): void {
+    this.queue.enqueue(tenantId, "dispute-lost", {
+      email,
+      disputeId,
+      amountDollars,
+      creditsUrl: this.creditsUrl(),
+    });
+  }
+
   notifySpendThresholdAlert(
     tenantId: string,
     email: string,

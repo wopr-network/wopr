@@ -582,6 +582,15 @@ export async function handleWebhookEvent(deps: WebhookDeps, event: Stripe.Event)
         result = { handled: true, event_type: event.type, tenant, disputeId, reactivatedBots };
       } else {
         // Dispute lost or other terminal status — hold stays, credits remain debited.
+        // Send admin alert so the hold doesn't silently linger with no visibility.
+        if (deps.notificationService && deps.getEmailForTenant) {
+          const email = deps.getEmailForTenant(tenant);
+          if (email) {
+            const amountDollars = `$${(disputedCents / 100).toFixed(2)}`;
+            deps.notificationService.notifyDisputeLost(tenant, email, disputeId, amountDollars);
+          }
+        }
+
         logger.warn("Charge dispute closed (not won)", {
           tenant,
           customerId,
