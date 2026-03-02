@@ -418,8 +418,8 @@ export async function initContextSystem(): Promise<void> {
         registerContextProvider(mod.selfDocContextProvider);
       }
     })
-    .catch(() => {
-      // Self-doc provider is optional
+    .catch((err) => {
+      logger.debug("[context] selfdoc provider unavailable:", err);
     });
 
   // Ensure workspace exists with bootstrap files
