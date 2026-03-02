@@ -63,12 +63,11 @@ import { DrizzleSpendingCapStore } from "./fleet/spending-cap-repository.js";
 import { mountGateway } from "./gateway/index.js";
 import { createCachedRateLookup } from "./gateway/rate-lookup.js";
 import type { GatewayTenant } from "./gateway/types.js";
-import { buildAddonCosts } from "./monetization/addons/addon-cron.js";
 import { BudgetChecker } from "./monetization/budget/budget-checker.js";
 import { Credit } from "./monetization/credit.js";
 import { runDividendCron } from "./monetization/credits/dividend-cron.js";
 import { runDividendDigestCron } from "./monetization/credits/dividend-digest-cron.js";
-import { buildResourceTierCosts, runRuntimeDeductions } from "./monetization/credits/runtime-cron.js";
+import { startRuntimeScheduler } from "./monetization/credits/runtime-scheduler.js";
 import { DrizzleWebhookSeenRepository } from "./monetization/drizzle-webhook-seen-repository.js";
 import { MeterEmitter } from "./monetization/metering/emitter.js";
 import { runReconciliation } from "./monetization/metering/reconciliation-cron.js";
@@ -858,48 +857,19 @@ if (process.env.NODE_ENV !== "test") {
   }
 
   // Runtime deduction scheduler — charges tenants for active bots + resource tier surcharges.
-  // Runs every 60s. Idempotent per (date, tenantId) via referenceId check.
+  // Runs once per day. referenceId is date-only so running more frequently wastes DB round-trips.
   {
-    const cronLedger = getCreditLedger();
-    const botInstanceRepo = getBotInstanceRepo();
-    const getResourceTierCosts = buildResourceTierCosts(botInstanceRepo, async (tenantId) => {
-      const bots = await botInstanceRepo.listByTenant(tenantId);
-      return bots.filter((b) => b.billingState === "active").map((b) => b.id);
+    const runtimeScheduler = startRuntimeScheduler({
+      ledger: getCreditLedger(),
+      botInstanceRepo: getBotInstanceRepo(),
+      tenantAddonRepo: getTenantAddonRepo(),
+      onSuspend: (tenantId) => {
+        logger.warn("Tenant suspended due to insufficient credits", { tenantId });
+      },
     });
-    const getAddonCosts = buildAddonCosts(getTenantAddonRepo());
-    const RUNTIME_INTERVAL_MS = 60_000;
-    const runtimeInterval = setInterval(() => {
-      const today = new Date().toISOString().slice(0, 10);
-      void runRuntimeDeductions({
-        ledger: cronLedger,
-        date: today,
-        getActiveBotCount: async (tenantId) => {
-          const bots = await botInstanceRepo.listByTenant(tenantId);
-          return bots.filter((b) => b.billingState === "active").length;
-        },
-        getResourceTierCosts,
-        getAddonCosts,
-        onSuspend: (tenantId) => {
-          logger.warn("Tenant suspended due to insufficient credits", { tenantId });
-        },
-      })
-        .then((result) => {
-          logger.info("Runtime deductions complete", result);
-        })
-        .catch((err) => {
-          logger.error("Runtime deductions failed", {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
-    }, RUNTIME_INTERVAL_MS);
-
-    const shutdownRuntimeCron = () => {
-      clearInterval(runtimeInterval);
-      logger.info("Runtime deduction scheduler stopped");
-    };
-    process.on("SIGTERM", shutdownRuntimeCron);
-    process.on("SIGINT", shutdownRuntimeCron);
-    logger.info("Runtime deduction scheduler started (60s interval)");
+    process.on("SIGTERM", runtimeScheduler.stop);
+    process.on("SIGINT", runtimeScheduler.stop);
+    logger.info("Runtime deduction scheduler started (24h interval)");
   }
 
   // Daily community dividend distribution — pool = sum(purchases) × matchRate, split among active users.
