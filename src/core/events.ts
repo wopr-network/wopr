@@ -153,6 +153,25 @@ export interface CapabilityProviderHealthChangeEvent {
   error?: string;
 }
 
+// Provider registry events
+export interface ProviderAddedEvent {
+  providerId: string;
+  providerName: string;
+}
+
+export interface ProviderRemovedEvent {
+  providerId: string;
+  providerName: string;
+}
+
+export interface ProviderStatusEvent {
+  providerId: string;
+  providerName: string;
+  previousAvailable: boolean;
+  currentAvailable: boolean;
+  error?: string;
+}
+
 // ============================================================================
 // Event Map - defines all core events and their payloads
 // ============================================================================
@@ -191,6 +210,11 @@ export interface WOPREventMap {
 
   // Capability health events
   "capability:providerHealthChange": CapabilityProviderHealthChangeEvent;
+
+  // Provider registry events
+  "provider:added": ProviderAddedEvent;
+  "provider:removed": ProviderRemovedEvent;
+  "provider:status": ProviderStatusEvent;
 
   // Wildcard - catch all
   "*": WOPREvent;
@@ -577,6 +601,28 @@ export async function emitPluginActivated(plugin: string, version: string): Prom
 
 export async function emitPluginDeactivated(plugin: string, version: string, drained: boolean): Promise<void> {
   await eventBus.emit("plugin:deactivated", { plugin, version, drained }, "core");
+}
+
+export async function emitProviderAdded(providerId: string, providerName: string): Promise<void> {
+  await eventBus.emit("provider:added", { providerId, providerName }, "core");
+}
+
+export async function emitProviderRemoved(providerId: string, providerName: string): Promise<void> {
+  await eventBus.emit("provider:removed", { providerId, providerName }, "core");
+}
+
+export async function emitProviderStatus(
+  providerId: string,
+  providerName: string,
+  previousAvailable: boolean,
+  currentAvailable: boolean,
+  error?: string,
+): Promise<void> {
+  await eventBus.emit(
+    "provider:status",
+    { providerId, providerName, previousAvailable, currentAvailable, error },
+    "core",
+  );
 }
 
 // ============================================================================
