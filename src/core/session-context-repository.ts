@@ -184,9 +184,9 @@ export async function migrateSessionContextFromFilesystem(
     } catch (err) {
       if (isENOENT(err)) return; // directory removed between existsSync and readdirSync
       logger.error(
-        `[session-context-migrate] Failed to read sessions directory ${sessionsDir} — check permissions: ${err}`,
+        `[session-context-migrate] Failed to read sessions directory ${sessionsDir} — check permissions: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`,
       );
-      throw err;
+      return;
     }
 
     for (const entry of entries) {
