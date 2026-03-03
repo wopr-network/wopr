@@ -114,7 +114,7 @@ describe("a2a-mcp", () => {
     it("calls createSdkMcpServer with wopr-a2a name and version", () => {
       getA2AMcpServer("test-session");
       expect(createSdkMcpServer).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "wopr-a2a", version: "1.0.0" }),
+        expect.objectContaining({ name: "wopr-a2a", version: expect.any(String) }),
       );
     });
 

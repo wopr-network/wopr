@@ -63,7 +63,7 @@ describe("RestartOnIdleManager", () => {
       await manager.scheduleRestart({ idleThresholdSeconds: 1 });
 
       // Advance past idle threshold — system is idle (mock returns empty map)
-      vi.advanceTimersByTime(2000);
+      await vi.advanceTimersByTimeAsync(2000);
 
       expect(callback).toHaveBeenCalled();
       // Now scheduling again should throw
@@ -95,7 +95,7 @@ describe("RestartOnIdleManager", () => {
       await manager.scheduleRestart({ idleThresholdSeconds: 5 });
 
       // Advance 6 seconds (6 ticks of 1s interval, idle from the start)
-      vi.advanceTimersByTime(6000);
+      await vi.advanceTimersByTimeAsync(6000);
 
       expect(callback).toHaveBeenCalledTimes(1);
     });
