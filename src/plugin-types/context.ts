@@ -6,13 +6,13 @@
  */
 
 import type { StorageApi } from "../storage/api/plugin-storage.js";
-import type { ModelProvider } from "../types/provider.js";
 import type { A2AServerConfig, A2AToolResult } from "./a2a.js";
 import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
 import type { ConfigSchema } from "./config.js";
 import type { ContextProvider } from "./context-provider.js";
 import type { WOPREventBus, WOPRHookManager } from "./events.js";
 import type { AdapterCapability, ProviderOption } from "./manifest.js";
+import type { ModelProvider } from "./provider.js";
 
 /**
  * Input provided to a setup context provider so it can generate
