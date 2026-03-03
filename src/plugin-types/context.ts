@@ -6,6 +6,7 @@
  */
 
 import type { StorageApi } from "../storage/api/plugin-storage.js";
+import type { ModelProvider } from "../types/provider.js";
 import type { A2AServerConfig, A2AToolResult } from "./a2a.js";
 import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
 import type { ConfigSchema } from "./config.js";
@@ -204,9 +205,9 @@ export interface WOPRPluginContext {
   getMainConfig(key?: string): unknown;
 
   // LLM providers (credential management + dispatch)
-  registerLLMProvider(provider: unknown): void;
+  registerLLMProvider(provider: ModelProvider): void;
   unregisterLLMProvider(id: string): void;
-  getLLMProvider(id: string): unknown;
+  getLLMProvider(id: string): ModelProvider | undefined;
 
   // Config schemas
   registerConfigSchema(pluginId: string, schema: ConfigSchema): void;
