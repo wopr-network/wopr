@@ -18,6 +18,7 @@ import { pluginCommand } from "./commands/plugin.js";
 import { tryPluginCommand } from "./commands/plugin-commands.js";
 import { providersCommand } from "./commands/providers.js";
 import { sessionCommand } from "./commands/session.js";
+import { statusCommand } from "./commands/status.js";
 
 const [, , command, subcommand, ...args] = process.argv;
 
@@ -46,6 +47,8 @@ const [, , command, subcommand, ...args] = process.argv;
   } else if (command === "configure") {
     const { onboardCommand } = await import("./commands/onboard/index.js");
     await onboardCommand(process.argv.slice(3));
+  } else if (command === "status") {
+    await statusCommand();
   } else {
     // Check for plugin commands
     const handled = await tryPluginCommand(command, [subcommand, ...args].filter(Boolean));
