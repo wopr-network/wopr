@@ -128,12 +128,14 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
   }
 
   const rangeMatch = trimmed.match(
-    /^(\d{4}-\d{2}-\d{2})(?:[tT][\d:]+)?(?:\s*(?:-|to)\s*)(\d{4}-\d{2}-\d{2})(?:[tT][\d:]+)?$/i,
+    /^(\d{4}-\d{2}-\d{2})(?:[tT]([\d:]+))?(?:\s*(?:-|to)\s*)(\d{4}-\d{2}-\d{2})(?:[tT]([\d:]+))?$/i,
   );
   if (rangeMatch) {
-    const startDate = new Date(rangeMatch[1]);
-    const endDate = new Date(rangeMatch[2]);
-    endDate.setHours(23, 59, 59, 999);
+    const startIso = `${rangeMatch[1]}T${rangeMatch[2] ?? "00:00:00"}`;
+    const endIso = `${rangeMatch[3]}T${rangeMatch[4] ?? "23:59:59.999"}`;
+
+    const startDate = new Date(startIso);
+    const endDate = new Date(endIso);
 
     if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
       return {
@@ -143,11 +145,13 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     }
   }
 
-  const singleDateMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})$/);
+  const singleDateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (singleDateMatch) {
-    const startDate = new Date(singleDateMatch[1]);
-    const endDate = new Date(singleDateMatch[1]);
-    endDate.setHours(23, 59, 59, 999);
+    const year = Number.parseInt(singleDateMatch[1], 10);
+    const month = Number.parseInt(singleDateMatch[2], 10) - 1;
+    const day = Number.parseInt(singleDateMatch[3], 10);
+    const startDate = new Date(year, month, day, 0, 0, 0, 0);
+    const endDate = new Date(year, month, day, 23, 59, 59, 999);
 
     if (!Number.isNaN(startDate.getTime())) {
       return {

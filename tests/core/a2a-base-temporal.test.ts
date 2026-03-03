@@ -12,13 +12,21 @@ describe("parseTemporalFilter", () => {
     // When user passes "2024-01-01t10:00:00" it should still parse
     const result = parseTemporalFilter("2024-01-01t10:00:00");
     expect(result).not.toBeNull();
+    expect(result?.after).toBe(new Date("2024-01-01T10:00:00").getTime());
   });
 
-  it("parses date range with uppercase T in times", () => {
+  it("parses date range with uppercase T in times, preserving time components", () => {
     const result = parseTemporalFilter("2024-01-01T08:00 to 2024-01-31T18:00");
     expect(result).not.toBeNull();
-    expect(result?.after).toBeDefined();
-    expect(result?.before).toBeDefined();
+    expect(result?.after).toBe(new Date("2024-01-01T08:00").getTime());
+    expect(result?.before).toBe(new Date("2024-01-31T18:00").getTime());
+  });
+
+  it("parses date range without times using full-day defaults", () => {
+    const result = parseTemporalFilter("2024-01-01 to 2024-01-31");
+    expect(result).not.toBeNull();
+    expect(result?.after).toBe(new Date("2024-01-01T00:00:00").getTime());
+    expect(result?.before).toBe(new Date("2024-01-31T23:59:59.999").getTime());
   });
 
   it("parses relative expressions", () => {
