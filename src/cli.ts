@@ -11,6 +11,7 @@ import { authCommand } from "./commands/auth.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
 import { daemonCommand } from "./commands/daemon.js";
+import { doctorCommand } from "./commands/doctor.js";
 import { help } from "./commands/help.js";
 import { initCommand } from "./commands/init.js";
 import { middlewareCommand } from "./commands/middleware.js";
@@ -49,6 +50,8 @@ const [, , command, subcommand, ...args] = process.argv;
     await onboardCommand(process.argv.slice(3));
   } else if (command === "status") {
     await statusCommand();
+  } else if (command === "doctor") {
+    await doctorCommand();
   } else {
     // Check for plugin commands
     const handled = await tryPluginCommand(command, [subcommand, ...args].filter(Boolean));
