@@ -48,6 +48,8 @@ Usage:
   wopr daemon status                         Check if daemon is running
   wopr daemon logs                           Show daemon logs
 
+  wopr status                                Show system status overview
+
   wopr auth                                  Show auth status
   wopr auth login                            Login with Claude Max/Pro (OAuth)
   wopr auth api-key <key>                    Use API key instead

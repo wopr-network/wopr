@@ -469,8 +469,10 @@ export class WoprClient {
   }
 
   // Providers
-  async getProviders(): Promise<unknown[]> {
-    const data = await this.request<{ providers: unknown[] }>("/providers");
+  async getProviders(): Promise<Array<{ id: string; name?: string; available?: boolean }>> {
+    const data = await this.request<{
+      providers: Array<{ id: string; name?: string; available?: boolean }>;
+    }>("/providers");
     return data.providers;
   }
 
