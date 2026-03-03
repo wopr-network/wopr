@@ -108,7 +108,7 @@ describe("RestartOnIdleManager", () => {
       vi.mocked(queueManager.getActiveStats).mockReturnValue(activeMap as any);
 
       await manager.scheduleRestart({ idleThresholdSeconds: 2 });
-      vi.advanceTimersByTime(3000);
+      await vi.advanceTimersByTimeAsync(3000);
 
       expect(callback).not.toHaveBeenCalled();
     });
@@ -120,22 +120,22 @@ describe("RestartOnIdleManager", () => {
       await manager.scheduleRestart({ idleThresholdSeconds: 3 });
 
       // Idle for 2 seconds (not enough)
-      vi.advanceTimersByTime(2000);
+      await vi.advanceTimersByTimeAsync(2000);
       expect(callback).not.toHaveBeenCalled();
 
       // Injects become active — resets idle timer
       const activeMap = new Map([["s1", {}]]);
       vi.mocked(queueManager.getActiveStats).mockReturnValue(activeMap as any);
-      vi.advanceTimersByTime(1000);
+      await vi.advanceTimersByTimeAsync(1000);
 
       // Back to idle
       vi.mocked(queueManager.getActiveStats).mockReturnValue(new Map());
       // Only 2s idle since reset, need 3s
-      vi.advanceTimersByTime(2000);
+      await vi.advanceTimersByTimeAsync(2000);
       expect(callback).not.toHaveBeenCalled();
 
       // Now 3s of idle since reset
-      vi.advanceTimersByTime(2000);
+      await vi.advanceTimersByTimeAsync(2000);
       expect(callback).toHaveBeenCalledTimes(1);
     });
 
@@ -147,7 +147,7 @@ describe("RestartOnIdleManager", () => {
       vi.mocked(queueManager.getActiveStats).mockReturnValue(activeMap as any);
 
       await manager.scheduleRestart({ maxWaitSeconds: 10, idleThresholdSeconds: 5 });
-      vi.advanceTimersByTime(11000);
+      await vi.advanceTimersByTimeAsync(11000);
 
       expect(callback).toHaveBeenCalledTimes(1);
     });
@@ -157,7 +157,7 @@ describe("RestartOnIdleManager", () => {
       vi.mocked(queueManager.getActiveStats).mockReturnValue(activeMap as any);
 
       await manager.scheduleRestart({ drainMode: "force", idleThresholdSeconds: 5 });
-      vi.advanceTimersByTime(1000);
+      await vi.advanceTimersByTimeAsync(1000);
 
       const status = manager.getStatus();
       expect(status.state).toBe("DRAINING");
@@ -181,9 +181,9 @@ describe("RestartOnIdleManager", () => {
       manager.onRestart(callback);
       await manager.scheduleRestart({ idleThresholdSeconds: 2 });
 
-      vi.advanceTimersByTime(1000);
+      await vi.advanceTimersByTimeAsync(1000);
       manager.cancel();
-      vi.advanceTimersByTime(5000);
+      await vi.advanceTimersByTimeAsync(5000);
 
       expect(callback).not.toHaveBeenCalled();
     });
@@ -216,7 +216,7 @@ describe("RestartOnIdleManager", () => {
       await manager.scheduleRestart({ idleThresholdSeconds: 2 });
       manager.shutdown();
 
-      vi.advanceTimersByTime(10000);
+      await vi.advanceTimersByTimeAsync(10000);
       expect(callback).not.toHaveBeenCalled();
     });
   });
