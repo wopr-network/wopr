@@ -3,7 +3,7 @@
  */
 
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { logger } from "../logger.js";
 import { CONFIG_FILE, getConfigFilePath, WOPR_HOME } from "../paths.js";
@@ -256,8 +256,9 @@ export class ConfigManager {
 
   async save(): Promise<void> {
     try {
-      await mkdir(WOPR_HOME, { recursive: true, mode: 0o700 });
-      await writeFile(getConfigFilePath(), JSON.stringify(this.config, null, 2), { mode: 0o600 });
+      const configPath = getConfigFilePath();
+      await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
+      await writeFile(configPath, JSON.stringify(this.config, null, 2), { mode: 0o600 });
     } catch (err: unknown) {
       const error = err as Error;
       throw new Error(`Failed to save config: ${error.message}`);
