@@ -179,8 +179,7 @@ export async function migrateSessionContextFromFilesystem(
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return; // directory removed between existsSync and readdirSync
       logger.error(
-        { err, sessionsDir },
-        "[session-context-migrate] Failed to read sessions directory — check permissions",
+        `[session-context-migrate] Failed to read sessions directory ${sessionsDir} — check permissions: ${err}`,
       );
       throw err;
     }
@@ -191,7 +190,7 @@ export async function migrateSessionContextFromFilesystem(
         if (!statSync(entryPath).isDirectory()) continue;
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue; // entry removed between readdir and stat
-        logger.warn({ err, entryPath }, "[session-context-migrate] Failed to stat session entry — skipping");
+        logger.warn(`[session-context-migrate] Failed to stat session entry ${entryPath} — skipping: ${err}`);
         continue;
       }
 
@@ -203,7 +202,7 @@ export async function migrateSessionContextFromFilesystem(
         rootFiles = readdirSync(entryPath).filter((f: string) => f.endsWith(".md"));
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue; // directory removed during migration
-        logger.warn({ err, entryPath }, "[session-context-migrate] Failed to read session directory — skipping");
+        logger.warn(`[session-context-migrate] Failed to read session directory ${entryPath} — skipping: ${err}`);
         continue;
       }
       for (const file of rootFiles) {
