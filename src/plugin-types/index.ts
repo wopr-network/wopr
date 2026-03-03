@@ -45,6 +45,8 @@ export type {
   PluginInjectOptions,
   PluginLogger,
   PluginUiComponentProps,
+  SetupContextInput,
+  SetupContextProvider,
   StreamCallback,
   StreamMessage,
   UiComponentExtension,
