@@ -28,7 +28,7 @@ describe("voice-channels types", () => {
 });
 
 describe("createBroadcaster", () => {
-  it("sends PCM audio directly to PCM participants", () => {
+  it("sends PCM audio directly to PCM participants", async () => {
     const received: Buffer[] = [];
     const participant: VoiceParticipant = {
       id: "pcm-user",
@@ -38,14 +38,14 @@ describe("createBroadcaster", () => {
 
     const broadcaster = createBroadcaster({ participants: [participant] });
     const pcmData = Buffer.alloc(3840); // 20ms of 48kHz stereo 16-bit PCM
-    broadcaster.broadcast(pcmData);
+    await broadcaster.broadcast(pcmData);
 
     expect(received).toHaveLength(1);
     // PCM passthrough — same buffer reference (zero-copy)
     expect(received[0]).toBe(pcmData);
   });
 
-  it("encodes audio to Opus for Opus participants via injected encoder factory", () => {
+  it("encodes audio to Opus for Opus participants via injected encoder factory", async () => {
     const received: Buffer[] = [];
     const participant: VoiceParticipant = {
       id: "opus-user",
@@ -55,7 +55,7 @@ describe("createBroadcaster", () => {
 
     // Simulate encoder that produces compressed output (smaller than input)
     const fakeOpusOutput = Buffer.from([0x01, 0x02, 0x03]); // 3 bytes, much less than 3840
-    const mockFactory = () => ({
+    const mockFactory = async () => ({
       encode: (_pcm: Buffer) => fakeOpusOutput,
       destroy: () => {},
     });
@@ -65,7 +65,7 @@ describe("createBroadcaster", () => {
       _encoderFactory: mockFactory,
     });
     const pcmData = Buffer.alloc(3840); // 20ms of 48kHz stereo 16-bit PCM
-    broadcaster.broadcast(pcmData);
+    await broadcaster.broadcast(pcmData);
 
     expect(received).toHaveLength(1);
     // Opus participant received the encoder's output, not the raw PCM
@@ -73,7 +73,7 @@ describe("createBroadcaster", () => {
     expect(Buffer.isBuffer(received[0])).toBe(true);
   });
 
-  it("broadcasts to mixed PCM and Opus participants simultaneously via injected encoder factory", () => {
+  it("broadcasts to mixed PCM and Opus participants simultaneously via injected encoder factory", async () => {
     const pcmReceived: Buffer[] = [];
     const opusReceived: Buffer[] = [];
 
@@ -89,7 +89,7 @@ describe("createBroadcaster", () => {
     };
 
     const fakeOpusOutput = Buffer.from([0x01, 0x02, 0x03]);
-    const mockFactory = () => ({
+    const mockFactory = async () => ({
       encode: (_pcm: Buffer) => fakeOpusOutput,
       destroy: () => {},
     });
@@ -99,7 +99,7 @@ describe("createBroadcaster", () => {
       _encoderFactory: mockFactory,
     });
     const pcmData = Buffer.alloc(3840);
-    broadcaster.broadcast(pcmData);
+    await broadcaster.broadcast(pcmData);
 
     expect(pcmReceived).toHaveLength(1);
     expect(opusReceived).toHaveLength(1);
@@ -241,7 +241,7 @@ describe("createBroadcaster", () => {
     expect(received).toHaveLength(1);
   });
 
-  it("PCM participants still receive audio when Opus encoder is unavailable", () => {
+  it("PCM participants still receive audio when Opus encoder is unavailable", async () => {
     const pcmReceived: Buffer[] = [];
     const opusReceived: Buffer[] = [];
 
@@ -257,7 +257,7 @@ describe("createBroadcaster", () => {
     };
 
     // Inject a factory that simulates @discordjs/opus being unavailable
-    const throwingFactory = () => {
+    const throwingFactory = async () => {
       throw new Error(
         "Failed to load @discordjs/opus. Install it with: npm install @discordjs/opus",
       );
@@ -269,7 +269,7 @@ describe("createBroadcaster", () => {
     });
     const pcmData = Buffer.alloc(3840);
 
-    expect(() => broadcaster.broadcast(pcmData)).not.toThrow();
+    await broadcaster.broadcast(pcmData);
     // PCM participant receives audio even when Opus encoder is unavailable
     expect(pcmReceived).toHaveLength(1);
     expect(pcmReceived[0]).toBe(pcmData);
