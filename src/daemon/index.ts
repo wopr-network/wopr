@@ -376,9 +376,9 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
       const result = await inject(session, message, { silent: true, ...options, source });
       return result.response;
     },
-    getSessions: () => {
-      const { getSessions } = require("../core/sessions.js");
-      return Object.keys(getSessions());
+    getSessions: async () => {
+      const { getSessions } = await import("../core/sessions.js");
+      return Object.keys(await getSessions());
     },
   };
 

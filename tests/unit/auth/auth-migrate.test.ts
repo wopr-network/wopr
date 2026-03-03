@@ -21,7 +21,7 @@ const dbState: {
   prepare: ((sql: string) => { all: () => unknown[] }) | null;
 } = { prepare: null };
 
-vi.mock("node:module", () => {
+vi.mock("node:sqlite", () => {
   class MockDatabaseSync {
     constructor(_path: string, _opts?: unknown) {}
     prepare(sql: string): { all: () => unknown[] } {
@@ -30,11 +30,7 @@ vi.mock("node:module", () => {
     }
     close() {}
   }
-  const mockRequire = (mod: string) => {
-    if (mod === "node:sqlite") return { DatabaseSync: MockDatabaseSync };
-    throw new Error(`Unexpected require: ${mod}`);
-  };
-  return { createRequire: vi.fn(() => mockRequire) };
+  return { DatabaseSync: MockDatabaseSync };
 });
 
 import { existsSync, readFileSync, renameSync } from "node:fs";

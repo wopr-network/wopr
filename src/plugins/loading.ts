@@ -154,7 +154,7 @@ export async function loadPlugin(
   installed: InstalledPlugin,
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
   options: LoadPluginOptions = {},
 ): Promise<WOPRPlugin> {
@@ -375,7 +375,7 @@ export async function resolveDependencies(
   dependencies: string[] | undefined,
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
   options: LoadPluginOptions,
 ): Promise<void> {
@@ -619,7 +619,7 @@ export async function switchProvider(
   options: ProviderSwitchOptions,
   injectors: {
     inject: (session: string, message: string, opts?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
 ): Promise<void> {
   const { fromPlugin, toPlugin, drainTimeoutMs } = options;
@@ -660,7 +660,7 @@ export async function switchProvider(
 export async function loadAllPlugins(
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
   options: LoadPluginOptions = {},
 ): Promise<void> {

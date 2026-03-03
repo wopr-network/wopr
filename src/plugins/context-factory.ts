@@ -68,7 +68,7 @@ export function createPluginContext(
   plugin: InstalledPlugin,
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
 ): WOPRPluginContext {
   const pluginName = plugin.name;
