@@ -3,7 +3,9 @@
  */
 
 export {
+  accumulateChunks,
   cachedMcpServer,
+  isAsyncIterable,
   listA2ATools,
   markDirty,
   mcpServerDirty,

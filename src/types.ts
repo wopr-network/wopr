@@ -316,13 +316,21 @@ export interface A2AToolResult {
 }
 
 /**
+ * A single chunk yielded by a streaming A2A tool handler.
+ */
+export interface ToolResultChunk {
+  text: string;
+  isError?: boolean;
+}
+
+/**
  * Definition of an A2A tool that plugins can register
  */
 export interface A2AToolDefinition {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>; // JSON Schema format
-  handler: (args: Record<string, unknown>) => Promise<A2AToolResult>;
+  handler: (args: Record<string, unknown>) => Promise<A2AToolResult> | AsyncIterable<ToolResultChunk>;
 }
 
 /**

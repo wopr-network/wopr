@@ -6,7 +6,7 @@
  * of tool proxies per plugin that context-factory uses for getA2ATool().
  */
 
-import { pluginTools, type RegisteredTool } from "../core/a2a-tools/_base.js";
+import { accumulateChunks, isAsyncIterable, pluginTools, type RegisteredTool } from "../core/a2a-tools/_base.js";
 import { logger } from "../logger.js";
 import type { A2AToolResult } from "../plugin-types/a2a.js";
 import { pluginManifests } from "./state.js";
@@ -69,7 +69,11 @@ export function resolveA2AToolDependencies(): ResolveResult {
       if (registeredTool) {
         const proxy = async (args: Record<string, unknown>): Promise<A2AToolResult> => {
           // Use a sentinel session name to make the absence of a real user session explicit
-          return registeredTool.handler(args, { sessionName: "a2a-dependency" }) as Promise<A2AToolResult>;
+          const handlerResult = registeredTool.handler(args, { sessionName: "a2a-dependency" });
+          if (isAsyncIterable(handlerResult)) {
+            return accumulateChunks(handlerResult) as Promise<A2AToolResult>;
+          }
+          return handlerResult as Promise<A2AToolResult>;
         };
 
         pluginToolMap.set(dep.toolName, proxy);

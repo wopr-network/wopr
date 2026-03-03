@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/core/a2a-tools/_base.js", () => ({
   pluginTools: new Map(),
+  isAsyncIterable: vi.fn((v: unknown) => v != null && typeof (v as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function"),
 }));
 
 vi.mock("../../src/plugins/state.js", () => ({
