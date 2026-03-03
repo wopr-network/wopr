@@ -6,7 +6,7 @@ import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { logger } from "../logger.js";
-import { CONFIG_FILE, WOPR_HOME } from "../paths.js";
+import { getConfigFilePath, WOPR_HOME } from "../paths.js";
 import type { SoulEvilConfig } from "./workspace.js";
 /**
  * Per-provider default settings
@@ -195,11 +195,11 @@ export class ConfigManager {
 
   async load(): Promise<WoprConfig> {
     try {
-      const data = await readFile(CONFIG_FILE, "utf-8");
+      const data = await readFile(getConfigFilePath(), "utf-8");
       const loaded = JSON.parse(data) as Partial<WoprConfig>;
       this.config = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
       // Fix permissions on existing config files (migration for pre-WOP-621 deployments)
-      await chmod(CONFIG_FILE, 0o600).catch(() => {});
+      await chmod(getConfigFilePath(), 0o600).catch(() => {});
     } catch (err: unknown) {
       const error = err as NodeJS.ErrnoException;
       if (error.code !== "ENOENT") {
@@ -214,7 +214,7 @@ export class ConfigManager {
 
     const result = WoprConfigSchema.safeParse(this.config);
     if (!result.success) {
-      throw new Error(`Invalid WOPR config at ${CONFIG_FILE}:\n${result.error.message}`);
+      throw new Error(`Invalid WOPR config at ${getConfigFilePath()}:\n${result.error.message}`);
     }
 
     return this.config;
@@ -253,7 +253,7 @@ export class ConfigManager {
   async save(): Promise<void> {
     try {
       await mkdir(WOPR_HOME, { recursive: true, mode: 0o700 });
-      await writeFile(CONFIG_FILE, JSON.stringify(this.config, null, 2), { mode: 0o600 });
+      await writeFile(getConfigFilePath(), JSON.stringify(this.config, null, 2), { mode: 0o600 });
     } catch (err: unknown) {
       const error = err as Error;
       throw new Error(`Failed to save config: ${error.message}`);

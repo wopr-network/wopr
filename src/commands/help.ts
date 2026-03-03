@@ -90,6 +90,9 @@ Usage:
   wopr context disable <name>                Disable context provider
   wopr context priority <name> <n>           Set context provider priority
 
+Global Options:
+  --config <path>                        Path to config file (default: ~/wopr/config.json)
+
 Environment:
   WOPR_HOME                              Base directory (default: ~/wopr)
   ANTHROPIC_API_KEY                      API key for Claude (Anthropic)

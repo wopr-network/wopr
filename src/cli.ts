@@ -7,6 +7,8 @@
  * src/commands/ -- this file only parses the top-level command and dispatches.
  */
 
+import { existsSync } from "node:fs";
+import { parseGlobalFlags } from "./cli-flags.js";
 import { authCommand } from "./commands/auth.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
@@ -20,8 +22,17 @@ import { tryPluginCommand } from "./commands/plugin-commands.js";
 import { providersCommand } from "./commands/providers.js";
 import { sessionCommand } from "./commands/session.js";
 import { statusCommand } from "./commands/status.js";
+import { setConfigFileOverride } from "./paths.js";
 
-const [, , command, subcommand, ...args] = process.argv;
+const { configPath, remainingArgs } = parseGlobalFlags(process.argv.slice(2));
+if (configPath) {
+  if (!existsSync(configPath)) {
+    console.error(`Config file not found: ${configPath}`);
+    process.exit(1);
+  }
+  setConfigFileOverride(configPath);
+}
+const [command, subcommand, ...args] = remainingArgs;
 
 (async () => {
   if (command === "providers") {
