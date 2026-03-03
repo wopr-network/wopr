@@ -351,9 +351,13 @@ async function executeInjectInternal(
       timestamp: Date.now(),
     };
 
+    // Fetch provider config early to pass model for token-aware context windowing
+    const earlyProviderConfig = await getSessionProvider(name);
+
     // Plugins can control which providers to use via contextProviders option
     const assembled = await assembleContext(name, messageInfo, {
       providers: options?.contextProviders,
+      model: earlyProviderConfig?.model,
     });
 
     if (!silent) {
@@ -427,8 +431,8 @@ async function executeInjectInternal(
     // System context is the assembled system + any session file context as fallback
     const fullContext = assembled.system || context || `You are WOPR session "${name}".`;
 
-    // Load provider config from session or auto-detect available provider
-    let providerConfig = await getSessionProvider(name);
+    // Reuse early provider config (fetched above for context windowing)
+    let providerConfig = earlyProviderConfig;
     if (!providerConfig) {
       // Auto-detect: use first available provider
       const available = providerRegistry.listProviders().filter((p) => p.available);
