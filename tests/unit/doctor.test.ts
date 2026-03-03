@@ -18,13 +18,6 @@ vi.mock("node:fs/promises", () => ({
   constants: { W_OK: 2 },
 }));
 
-vi.mock("node:fs", () => ({
-  existsSync: vi.fn(),
-  readFileSync: vi.fn(),
-  mkdirSync: vi.fn(),
-  unlinkSync: vi.fn(),
-}));
-
 vi.mock("../../src/paths.js", () => ({
   WOPR_HOME: "/tmp/test-wopr",
   CONFIG_FILE: "/tmp/test-wopr/config.json",
@@ -46,21 +39,39 @@ vi.mock("../../src/plugins/installation.js", () => ({
   getInstalledPlugins: vi.fn(),
 }));
 
-import { existsSync, readFileSync } from "node:fs";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { config } from "../../src/core/config.js";
 import { getInstalledPlugins } from "../../src/plugins/installation.js";
 import { runChecks } from "../../src/commands/doctor.js";
 
+let savedAnthropicKey: string | undefined;
+let savedOpenAIKey: string | undefined;
+
 afterEach(() => {
   vi.restoreAllMocks();
+  if (savedAnthropicKey !== undefined) {
+    process.env.ANTHROPIC_API_KEY = savedAnthropicKey;
+  } else {
+    delete process.env.ANTHROPIC_API_KEY;
+  }
+  if (savedOpenAIKey !== undefined) {
+    process.env.OPENAI_API_KEY = savedOpenAIKey;
+  } else {
+    delete process.env.OPENAI_API_KEY;
+  }
 });
 
 describe("doctor command", () => {
   describe("runChecks", () => {
     beforeEach(() => {
-      vi.mocked(existsSync).mockReturnValue(true);
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ name: "test-plugin", version: "1.0.0" }));
+      savedAnthropicKey = process.env.ANTHROPIC_API_KEY;
+      savedOpenAIKey = process.env.OPENAI_API_KEY;
+      process.env.ANTHROPIC_API_KEY = "sk-test-env";
+      delete process.env.OPENAI_API_KEY;
+
+      vi.mocked(readFile).mockResolvedValue(
+        JSON.stringify({ name: "test-plugin", version: "1.0.0" }) as any,
+      );
       vi.mocked(access).mockResolvedValue(undefined);
       vi.mocked(config.load).mockResolvedValue({
         daemon: { port: 7437, host: "127.0.0.1", autoStart: false, cronScriptsEnabled: false },
@@ -101,7 +112,25 @@ describe("doctor command", () => {
       expect(configCheck?.fix).toContain("wopr init");
     });
 
-    it("should warn when ANTHROPIC_API_KEY is not set", async () => {
+    it("should fail environment variables check when no API keys in env", async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      const results = await runChecks();
+      const envCheck = results.find((r) => r.name === "Environment variables");
+      expect(envCheck?.pass).toBe(false);
+    });
+
+    it("should pass provider credentials check when config has key even without env vars", async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      const results = await runChecks();
+      const credCheck = results.find((r) => r.name === "Provider credentials");
+      expect(credCheck?.pass).toBe(true);
+    });
+
+    it("should fail provider credentials check when no env vars and no config key", async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.OPENAI_API_KEY;
       vi.mocked(config.get).mockReturnValue({
         daemon: { port: 7437, host: "127.0.0.1", autoStart: false, cronScriptsEnabled: false },
         anthropic: {},
@@ -109,32 +138,28 @@ describe("doctor command", () => {
         discovery: { topics: [], autoJoin: false },
         plugins: { autoLoad: true, directories: ["/tmp/test-wopr/plugins"] },
       } as any);
-      vi.mocked(config.load).mockResolvedValue({
-        daemon: { port: 7437, host: "127.0.0.1", autoStart: false, cronScriptsEnabled: false },
-        anthropic: {},
-        oauth: {},
-        discovery: { topics: [], autoJoin: false },
-        plugins: { autoLoad: true, directories: ["/tmp/test-wopr/plugins"] },
-      } as any);
-      const origKey = process.env.ANTHROPIC_API_KEY;
-      const origOpenAI = process.env.OPENAI_API_KEY;
-      delete process.env.ANTHROPIC_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      try {
-        const results = await runChecks();
-        const envCheck = results.find((r) => r.name === "Environment variables");
-        expect(envCheck?.pass).toBe(false);
-      } finally {
-        if (origKey !== undefined) process.env.ANTHROPIC_API_KEY = origKey;
-        if (origOpenAI !== undefined) process.env.OPENAI_API_KEY = origOpenAI;
-      }
+      const results = await runChecks();
+      const credCheck = results.find((r) => r.name === "Provider credentials");
+      expect(credCheck?.pass).toBe(false);
     });
 
     it("should fail data directory check when dir is not writable", async () => {
-      vi.mocked(access).mockRejectedValue(new Error("EACCES"));
+      vi.mocked(access).mockRejectedValue(new Error("EACCES: permission denied"));
       const results = await runChecks();
       const dirCheck = results.find((r) => r.name === "Data directory");
       expect(dirCheck?.pass).toBe(false);
+      expect(dirCheck?.detail).toContain("not writable");
+      expect(dirCheck?.fix).toContain("chmod");
+    });
+
+    it("should fail data directory check with mkdir suggestion when dir is missing", async () => {
+      const err = Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" });
+      vi.mocked(access).mockRejectedValue(err);
+      const results = await runChecks();
+      const dirCheck = results.find((r) => r.name === "Data directory");
+      expect(dirCheck?.pass).toBe(false);
+      expect(dirCheck?.detail).toContain("does not exist");
+      expect(dirCheck?.fix).toContain("mkdir");
     });
 
     it("should pass plugin manifests check when no plugins installed", async () => {
@@ -148,13 +173,12 @@ describe("doctor command", () => {
       vi.mocked(getInstalledPlugins).mockResolvedValue([
         { name: "test-plugin", version: "1.0.0", path: "/tmp/plugins/test", enabled: true, source: "local" },
       ] as any);
-      vi.mocked(existsSync).mockImplementation((p: any) => {
-        if (String(p).includes("package.json")) return false;
-        return true;
-      });
+      const err = Object.assign(new Error("ENOENT: no such file or directory, open '/tmp/plugins/test/package.json'"), { code: "ENOENT" });
+      vi.mocked(readFile).mockRejectedValue(err);
       const results = await runChecks();
       const pluginCheck = results.find((r) => r.name === "Plugin manifests");
       expect(pluginCheck?.pass).toBe(false);
+      expect(pluginCheck?.detail).toContain("test-plugin");
     });
   });
 });
