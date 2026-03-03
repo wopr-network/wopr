@@ -331,6 +331,38 @@ export class ConfigManager {
     (this.config.providers[providerId] as Record<string, unknown>)[key] = value;
   }
 
+  /**
+   * Reload config from disk. Validates new config before applying.
+   * Logs a summary of changed top-level keys. Safe to call at any time.
+   */
+  async reload(): Promise<void> {
+    const prev = { ...this.config };
+    try {
+      await this.load();
+    } catch (err: unknown) {
+      const error = err as Error;
+      logger.error("[config] Reload failed — keeping existing config:", error.message);
+      this.config = prev;
+      return;
+    }
+    // Log changed top-level keys
+    const changed: string[] = [];
+    const keys = new Set([...Object.keys(prev), ...Object.keys(this.config)]);
+    for (const key of keys) {
+      if (
+        JSON.stringify((prev as unknown as Record<string, unknown>)[key]) !==
+        JSON.stringify((this.config as unknown as Record<string, unknown>)[key])
+      ) {
+        changed.push(key);
+      }
+    }
+    if (changed.length > 0) {
+      logger.info(`[config] Reloaded — changed sections: ${changed.join(", ")}`);
+    } else {
+      logger.info("[config] Reloaded — no changes detected");
+    }
+  }
+
   private merge(defaults: unknown, overrides: unknown): unknown {
     if (typeof defaults !== "object" || defaults === null || typeof overrides !== "object" || overrides === null) {
       return overrides;
