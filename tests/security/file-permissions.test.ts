@@ -68,6 +68,8 @@ vi.mock("../../src/paths.js", () => ({
   GLOBAL_IDENTITY_DIR: "/data/identity",
   getConfigFilePath: vi.fn(() => "/mock/wopr/config.json"),
   setConfigFileOverride: vi.fn(),
+  getConfigFilePath: vi.fn(() => "/mock/wopr/config.json"),
+  setConfigFileOverride: vi.fn(),
 }));
 
 vi.mock("../../src/logger.js", () => ({
