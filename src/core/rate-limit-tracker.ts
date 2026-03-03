@@ -55,7 +55,7 @@ export class RateLimitTracker {
     const entry = this.limits.get(providerId);
     if (!entry) return false;
     if (Date.now() >= entry.retryAfter) {
-      entry.consecutiveHits = 0; // reset escalation counter after idle period
+      this.limits.delete(providerId);
       return false;
     }
     return true;
