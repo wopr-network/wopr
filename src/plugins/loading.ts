@@ -79,15 +79,22 @@ async function initAndActivatePlugin(
     try {
       await plugin.init(context);
       pluginCircuitBreaker.recordSuccess(installed.name);
+      pluginCircuitBreaker.clear(installed.name);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error(`[plugins] ${installed.name}: init() failed, cleaning up: ${msg}`);
       pluginCircuitBreaker.recordError(installed.name, err instanceof Error ? err : new Error(msg));
 
-      // Attempt plugin-side cleanup via shutdown()
+      // Attempt plugin-side cleanup via shutdown() with a bounded timeout
       if (plugin.shutdown) {
+        const shutdownTimeoutMs = manifest?.lifecycle?.shutdownTimeoutMs ?? 30_000;
         try {
-          await plugin.shutdown();
+          await Promise.race([
+            plugin.shutdown(),
+            new Promise<void>((_, reject) =>
+              setTimeout(() => reject(new Error(`shutdown timeout after ${shutdownTimeoutMs}ms`)), shutdownTimeoutMs),
+            ),
+          ]);
         } catch (shutdownErr: unknown) {
           logger.warn(
             `[plugins] ${installed.name}: shutdown() during init cleanup also failed: ${shutdownErr instanceof Error ? shutdownErr.message : String(shutdownErr)}`,
@@ -107,6 +114,15 @@ async function initAndActivatePlugin(
             );
           }
         }
+      }
+
+      // Roll back capability dependency graph registration (Step 2.5)
+      try {
+        getCapabilityDependencyGraph().unregisterPlugin(installed.name);
+      } catch (depErr: unknown) {
+        logger.warn(
+          `[plugins] ${installed.name}: failed to unregister capability deps during init cleanup: ${depErr instanceof Error ? depErr.message : String(depErr)}`,
+        );
       }
 
       // Remove from all state maps

@@ -107,7 +107,6 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
   const server = createSdkMcpServer({
     name: "wopr-a2a",
     version: "1.0.0",
-    // biome-ignore lint/suspicious/noExplicitAny: createXTools() return unknown[] matching the SDK's SdkMcpToolDefinition<any>[] parameter
     tools: tools as Parameters<typeof createSdkMcpServer>[0]["tools"],
   });
 
