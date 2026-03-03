@@ -237,6 +237,7 @@ export async function loadPlugin(
   if (plugin.init && !options.skipInit) {
     try {
       await plugin.init(context);
+      pluginCircuitBreaker.recordSuccess(installed.name);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error(`[plugins] ${installed.name}: init() threw: ${msg}`);
@@ -251,6 +252,7 @@ export async function loadPlugin(
     if (plugin.onActivate) {
       try {
         await plugin.onActivate(context);
+        pluginCircuitBreaker.recordSuccess(installed.name);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`[plugins] ${installed.name}: onActivate() threw: ${msg}`);
