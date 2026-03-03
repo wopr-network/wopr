@@ -10,6 +10,7 @@ import { logger } from "../logger.js";
 import type { ModelQueryOptions, ModelResponse, ProviderConfig } from "../types/provider.js";
 import { config as configManager } from "./config.js";
 import { providerRegistry } from "./providers.js";
+import { rateLimitTracker } from "./rate-limit-tracker.js";
 
 /**
  * Query options normalized from session context
@@ -48,9 +49,14 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     logger.info(`[Query] Auto-selected provider: ${available[0].id}`);
   }
 
+  // Declare outside try so it is accessible in catch for 429 tracking.
+  // Assign inside the try so resolution failures still flow through the
+  // unified error path ([Query] Failed: ...) with logging and 429 detection.
+  let resolved: Awaited<ReturnType<typeof providerRegistry.resolveProvider>> | undefined;
+
   try {
     // Resolve provider with fallback
-    const resolved = await providerRegistry.resolveProvider(config);
+    resolved = await providerRegistry.resolveProvider(config);
 
     // Get global provider defaults from config
     const globalDefaults = configManager.getProviderDefaults(resolved.provider.id);
@@ -107,6 +113,9 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
 
     logger.info(`[Query] Used provider: ${providerUsed} (${modelUsed})`);
 
+    // Successful query - clear any rate limit state for the provider that served the request
+    rateLimitTracker.clearProvider(resolved.provider.id);
+
     return {
       content: chunks.join(""),
       provider: providerUsed,
@@ -116,6 +125,21 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger.error(`[Query] Failed: ${errorMsg}`);
+
+    // Detect 429 rate limiting using explicit structured signals only.
+    // String heuristics (e.g. errorMsg.includes("429")) are intentionally
+    // excluded — they produce false positives on unrelated errors and would
+    // mark healthy providers as rate-limited unnecessarily.
+    // Note: RateLimitError always has statusCode=429, so it is caught below.
+    const is429 =
+      (error as { status?: number }).status === 429 || (error as { statusCode?: number }).statusCode === 429;
+
+    if (is429 && resolved) {
+      const retryAfter = (error as { retryAfterSeconds?: number }).retryAfterSeconds;
+      rateLimitTracker.markRateLimited(resolved.provider.id, retryAfter);
+      logger.warn(`[Query] Provider ${resolved.provider.id} rate-limited (429). Backoff applied.`);
+    }
+
     throw error;
   }
 }
