@@ -112,7 +112,7 @@ export const daemonStep: OnboardStep = async (ctx: OnboardContext) => {
       `Service: ${installService ? "Yes (auto-start)" : "Manual start"}`,
       "",
       pc.yellow("⚠️  Save this token!"),
-      pc.cyan(`  ${token.substring(0, 20)}...`),
+      pc.cyan(`  [${token.length} characters — saved to config]`),
     ].join("\n"),
     "Gateway Configuration",
   );
