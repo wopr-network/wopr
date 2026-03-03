@@ -59,6 +59,68 @@ export interface AssembledContext {
   sources: string[]; // List of context sources for debugging
 }
 
+// ============================================================================
+// Token Estimation & Model Limits
+// ============================================================================
+
+/** Known model context window sizes in tokens */
+const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  "gpt-4o": 128_000,
+  "gpt-4o-mini": 128_000,
+  "gpt-4-turbo": 128_000,
+  "gpt-4": 8_192,
+  "gpt-3.5-turbo": 16_385,
+  "claude-sonnet-4-20250514": 200_000,
+  "claude-3-5-sonnet-20241022": 200_000,
+  "claude-3-haiku-20240307": 200_000,
+  "claude-3-opus-20240229": 200_000,
+  "gemini-1.5-pro": 1_000_000,
+  "gemini-1.5-flash": 1_000_000,
+  "gemini-2.0-flash": 1_000_000,
+  "deepseek-chat": 64_000,
+  "deepseek-reasoner": 64_000,
+  "mistral-large-latest": 128_000,
+};
+
+const DEFAULT_CONTEXT_LIMIT = 8_192;
+const DEFAULT_SAFETY_MARGIN = 0.9;
+const DEFAULT_MAX_ENTRIES = 50;
+const DEFAULT_ENTRY_TOKEN_RATIO = 0.25;
+
+/** Estimate token count from text (4 chars ≈ 1 token) */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/** Get context window size for a model (tokens) */
+export function getModelContextLimit(model?: string): number {
+  if (!model) return DEFAULT_CONTEXT_LIMIT;
+  return MODEL_CONTEXT_LIMITS[model] ?? DEFAULT_CONTEXT_LIMIT;
+}
+
+/** Token budget configuration for context window management */
+export interface ContextWindowConfig {
+  maxHistoryTokens: number;
+  maxEntryTokens: number;
+  maxEntries: number;
+}
+
+/** Resolve final context window config from model + optional overrides */
+export function resolveContextWindowConfig(
+  model?: string,
+  overrides?: Partial<ContextWindowConfig> & { safetyMargin?: number },
+): ContextWindowConfig {
+  const rawLimit = getModelContextLimit(model);
+  const margin = overrides?.safetyMargin ?? DEFAULT_SAFETY_MARGIN;
+  const effectiveLimit = Math.floor(rawLimit * margin);
+
+  return {
+    maxHistoryTokens: overrides?.maxHistoryTokens ?? effectiveLimit,
+    maxEntryTokens: overrides?.maxEntryTokens ?? Math.floor(effectiveLimit * DEFAULT_ENTRY_TOKEN_RATIO),
+    maxEntries: overrides?.maxEntries ?? DEFAULT_MAX_ENTRIES,
+  };
+}
+
 // Track last trigger timestamp per session for progressive context
 const lastTriggerTimestamps: Map<string, number> = new Map();
 
@@ -183,32 +245,56 @@ const conversationHistoryProvider: ContextProvider = {
   enabled: true,
   async getContext(session: string): Promise<ContextPart | null> {
     try {
-      // Read conversation log for this session
       const { readConversationLog } = await import("./sessions.js");
-      const allEntries = await readConversationLog(session); // Get all entries
+      const allEntries = await readConversationLog(session);
 
       if (allEntries.length === 0) return null;
 
-      // Get entries since last trigger (epoch 0 = first time = get last 20)
       const lastTrigger = getLastTriggerTimestamp(session);
-      const entries = allEntries
+      let entries = allEntries
         .filter((e) => e.ts > lastTrigger)
-        .filter((e) => e.from !== "system") // Exclude system/context messages
-        .filter((e) => !e.content?.startsWith("Conversation since")) // Exclude context markers
-        .slice(-20); // Max 20 entries to keep context under 2MB limit
+        .filter((e) => e.from !== "system")
+        .filter((e) => !e.content?.startsWith("Conversation since"));
 
-      if (entries.length === 0) return null;
+      // Resolve token budget from model set by assembleContext
+      const windowConfig = resolveContextWindowConfig(
+        (this as unknown as { _model?: string })._model,
+        (this as unknown as { _contextWindowOverrides?: Partial<ContextWindowConfig> & { safetyMargin?: number } })
+          ._contextWindowOverrides,
+      );
 
-      // Format as conversation context - truncate very long entries
-      const MAX_ENTRY_CHARS = 800; // Aggressive: 800 chars per entry max
-      const formatted = entries
+      // Hard cap on entry count
+      entries = entries.slice(-windowConfig.maxEntries);
+
+      // Token-aware truncation: walk backwards, accumulate tokens
+      const maxEntryTokens = windowConfig.maxEntryTokens;
+      let totalTokens = 0;
+      const selectedEntries: typeof entries = [];
+
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const entry = entries[i];
+        let content = entry.content;
+
+        // Truncate individual entry if it exceeds per-entry budget
+        if (estimateTokens(content) > maxEntryTokens) {
+          content = `${content.slice(0, maxEntryTokens * 4)}\n[...truncated...]`;
+        }
+
+        const tokenCost = estimateTokens(content);
+        if (totalTokens + tokenCost > windowConfig.maxHistoryTokens) {
+          break;
+        }
+
+        totalTokens += tokenCost;
+        selectedEntries.unshift({ ...entry, content });
+      }
+
+      if (selectedEntries.length === 0) return null;
+
+      const formatted = selectedEntries
         .map((entry) => {
           const prefix = entry.from === "WOPR" ? "Assistant" : entry.from;
-          let content = entry.content;
-          if (content.length > MAX_ENTRY_CHARS) {
-            content = `${content.slice(0, MAX_ENTRY_CHARS)}\n[...truncated...]`;
-          }
-          return `${prefix}: ${content}`;
+          return `${prefix}: ${entry.content}`;
         })
         .join("\n\n");
 
@@ -218,7 +304,9 @@ const conversationHistoryProvider: ContextProvider = {
         metadata: {
           source: "conversation_log",
           priority: 30,
-          entryCount: entries.length,
+          entryCount: selectedEntries.length,
+          totalTokens,
+          maxHistoryTokens: windowConfig.maxHistoryTokens,
           since: lastTrigger === 0 ? "beginning" : lastTrigger,
         },
       };
@@ -280,6 +368,12 @@ export interface ContextAssemblyOptions {
 
   // Custom wrapper for untrusted content
   untrustedWrapper?: (content: string, metadata: unknown) => string;
+
+  /** Model identifier for token-aware context windowing */
+  model?: string;
+
+  /** Override context window configuration */
+  contextWindow?: Partial<ContextWindowConfig> & { safetyMargin?: number };
 }
 
 /**
@@ -291,6 +385,14 @@ export async function assembleContext(
   options: ContextAssemblyOptions = {},
 ): Promise<AssembledContext> {
   const { providers: providerNames, wrapUntrusted = true, untrustedWrapper = defaultUntrustedWrapper } = options;
+
+  // Pass model info to conversation_history provider for token-aware windowing
+  const historyProvider = contextProviders.get("conversation_history");
+  if (historyProvider) {
+    (historyProvider as unknown as { _model?: string })._model = options.model;
+    (historyProvider as unknown as { _contextWindowOverrides?: typeof options.contextWindow })._contextWindowOverrides =
+      options.contextWindow;
+  }
 
   // Get active providers
   let activeProviders = Array.from(contextProviders.values());

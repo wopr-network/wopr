@@ -351,9 +351,13 @@ async function executeInjectInternal(
       timestamp: Date.now(),
     };
 
+    // Fetch provider config early to pass model for token-aware context windowing
+    const earlyProviderConfig = await getSessionProvider(name);
+
     // Plugins can control which providers to use via contextProviders option
     const assembled = await assembleContext(name, messageInfo, {
       providers: options?.contextProviders,
+      model: earlyProviderConfig?.model,
     });
 
     if (!silent) {
