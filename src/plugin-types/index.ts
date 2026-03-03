@@ -103,4 +103,10 @@ export type {
   StorageRequirements,
 } from "./manifest.js";
 // Core plugin types
-export type { InstalledPlugin, PluginCommand, PluginRegistryEntry, WOPRPlugin } from "./plugin.js";
+export type {
+  InstalledPlugin,
+  PluginCommand,
+  PluginHealthCheckResult,
+  PluginRegistryEntry,
+  WOPRPlugin,
+} from "./plugin.js";

@@ -29,9 +29,13 @@ export type {
 // Re-export provider types for plugins
 export type { ModelProvider, ProviderResponse } from "./types/provider.js";
 
+// Import PluginHealthCheckResult from canonical source (plugin-types/plugin.ts)
+import type { PluginHealthCheckResult } from "./plugin-types/plugin.js";
 // Import InjectionSource for use within this file
 import type { InjectionSource as _InjectionSource } from "./security/types.js";
 import type { StorageApi } from "./storage/api/plugin-storage.js";
+// Re-export PluginHealthCheckResult so downstream consumers can import it from src/types.ts
+export type { PluginHealthCheckResult };
 
 // Session types
 export interface Session {
@@ -342,6 +346,8 @@ export interface WOPRPlugin {
   // Runtime hooks (daemon)
   init?(ctx: WOPRPluginContext): Promise<void>;
   shutdown?(): Promise<void>;
+  /** Optional runtime health probe. */
+  healthCheck?(): Promise<PluginHealthCheckResult>;
 
   // Hot-load lifecycle hooks
   /** Called when the plugin is activated at runtime (after init, or on hot-enable). */
