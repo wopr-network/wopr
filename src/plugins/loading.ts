@@ -23,6 +23,7 @@ import {
 } from "../plugins/requirements.js";
 import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContext } from "../types.js";
 import { resolveA2AToolDependencies } from "./a2a-tool-resolver.js";
+import { pluginCircuitBreaker } from "./circuit-breaker.js";
 import { createPluginContext } from "./context-factory.js";
 import { enablePlugin, getInstalledPlugins, installPlugin } from "./installation.js";
 import { configSchemas, loadedPlugins, pluginManifests, pluginStates, resolvedA2ATools } from "./state.js";
@@ -234,14 +235,28 @@ export async function loadPlugin(
 
   // ── Step 4: Initialize (skip for CLI commands) ──
   if (plugin.init && !options.skipInit) {
-    await plugin.init(context);
+    try {
+      await plugin.init(context);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(`[plugins] ${installed.name}: init() threw: ${msg}`);
+      pluginCircuitBreaker.recordError(installed.name, err instanceof Error ? err : new Error(msg));
+      throw err;
+    }
   }
 
   // ── Step 5: Set active state and call onActivate ──
   if (!options.skipInit) {
     pluginStates.set(installed.name, "active");
     if (plugin.onActivate) {
-      await plugin.onActivate(context);
+      try {
+        await plugin.onActivate(context);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(`[plugins] ${installed.name}: onActivate() threw: ${msg}`);
+        pluginCircuitBreaker.recordError(installed.name, err instanceof Error ? err : new Error(msg));
+        // onActivate failure is non-fatal — plugin loaded but activation handler failed
+      }
     }
     await emitPluginActivated(installed.name, plugin.version || installed.version);
   }
@@ -510,6 +525,7 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
   configSchemas.delete(name);
   pluginStates.delete(name);
   resolvedA2ATools.delete(name);
+  pluginCircuitBreaker.clear(name);
 }
 
 export function getLoadedPlugin(name: string): { plugin: WOPRPlugin; context: WOPRPluginContext } | undefined {
