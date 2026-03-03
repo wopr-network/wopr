@@ -1,11 +1,12 @@
 /**
  * `wopr doctor` — Validate environment and diagnose common issues.
  */
-import { access, constants, readFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { access, constants } from "node:fs/promises";
 import { join } from "node:path";
 import { config } from "../core/config.js";
 import { logger } from "../logger.js";
-import { getConfigFilePath, WOPR_HOME } from "../paths.js";
+import { CONFIG_FILE, WOPR_HOME } from "../paths.js";
 import { getInstalledPlugins } from "../plugins/installation.js";
 
 export interface CheckResult {
@@ -37,42 +38,36 @@ export async function runChecks(): Promise<CheckResult[]> {
   try {
     await config.load();
     configLoaded = true;
-    results.push({ name: "Config file", pass: true, detail: getConfigFilePath() });
+    results.push({ name: "Config file", pass: true, detail: CONFIG_FILE });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     results.push({
       name: "Config file",
       pass: false,
       detail: msg,
-      fix: `Run "wopr init" to create a valid config, or check ${getConfigFilePath()}`,
+      fix: `Run "wopr init" to create a valid config, or check ${CONFIG_FILE}`,
     });
   }
 
-  // 3. Environment variables — provider API keys present in the shell environment
-  const hasAnthropicEnv = !!process.env.ANTHROPIC_API_KEY;
-  const hasOpenAIEnv = !!process.env.OPENAI_API_KEY;
-  const hasWoprApiKey = !!process.env.WOPR_API_KEY;
-  const hasWoprOauth = !!process.env.WOPR_CLAUDE_OAUTH_TOKEN;
-  const hasAnyEnv = hasAnthropicEnv || hasOpenAIEnv || hasWoprApiKey || hasWoprOauth;
+  // 3. Required env vars — at least one provider credential available
+  const hasAnthropicKey = !!(configLoaded && config.get().anthropic?.apiKey) || !!process.env.ANTHROPIC_API_KEY;
+  const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
+  const hasAnyKey = hasAnthropicKey || hasOpenAIKey;
   results.push({
     name: "Environment variables",
-    pass: hasAnyEnv,
-    detail: hasAnyEnv
-      ? `${[hasAnthropicEnv && "ANTHROPIC_API_KEY", hasOpenAIEnv && "OPENAI_API_KEY", hasWoprApiKey && "WOPR_API_KEY", hasWoprOauth && "WOPR_CLAUDE_OAUTH_TOKEN"].filter(Boolean).join(", ")} set`
-      : "No provider API key environment variables found",
-    fix: hasAnyEnv
-      ? undefined
-      : 'Set ANTHROPIC_API_KEY, OPENAI_API_KEY, WOPR_API_KEY, or WOPR_CLAUDE_OAUTH_TOKEN, or run "wopr auth login" for OAuth',
+    pass: hasAnyKey,
+    detail: hasAnyKey
+      ? `${[hasAnthropicKey && "ANTHROPIC_API_KEY", hasOpenAIKey && "OPENAI_API_KEY"].filter(Boolean).join(", ")} set`
+      : "No provider API keys found",
+    fix: hasAnyKey ? undefined : 'Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or run "wopr auth login" for OAuth',
   });
 
-  // 4. Provider credentials — API keys configured in the config file
-  const hasAnthropicConfig = !!(configLoaded && config.get().anthropic?.apiKey);
-  const hasAnyConfig = hasAnthropicConfig;
+  // 4. Provider credentials — lightweight check (full ping requires daemon)
   results.push({
     name: "Provider credentials",
-    pass: hasAnyConfig,
-    detail: hasAnyConfig ? "At least one provider key configured" : "No credentials in config",
-    fix: hasAnyConfig ? undefined : 'Run "wopr providers add <id> <key>" or "wopr auth login"',
+    pass: hasAnyKey,
+    detail: hasAnyKey ? "At least one provider key configured" : "No credentials",
+    fix: hasAnyKey ? undefined : 'Run "wopr providers add <id> <key>" or "wopr auth login"',
   });
 
   // 5. Plugin manifests
@@ -84,19 +79,13 @@ export async function runChecks(): Promise<CheckResult[]> {
       const invalid: string[] = [];
       for (const p of plugins) {
         const pkgPath = join(p.path, "package.json");
-        const woprManifestPath = join(p.path, "wopr-plugin.json");
-        let valid = false;
-        for (const manifestPath of [pkgPath, woprManifestPath]) {
-          try {
-            const raw = await readFile(manifestPath, "utf-8");
-            JSON.parse(raw);
-            valid = true;
-            break;
-          } catch {
-            // try next
-          }
+        if (!existsSync(pkgPath)) {
+          invalid.push(p.name);
+          continue;
         }
-        if (!valid) {
+        try {
+          JSON.parse(readFileSync(pkgPath, "utf-8"));
+        } catch {
           invalid.push(p.name);
         }
       }
@@ -128,14 +117,12 @@ export async function runChecks(): Promise<CheckResult[]> {
   try {
     await access(WOPR_HOME, constants.W_OK);
     results.push({ name: "Data directory", pass: true, detail: WOPR_HOME });
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    const isMissing = code === "ENOENT";
+  } catch {
     results.push({
       name: "Data directory",
       pass: false,
-      detail: isMissing ? `${WOPR_HOME} does not exist` : `${WOPR_HOME} is not writable`,
-      fix: isMissing ? `Run "mkdir -p ${WOPR_HOME}"` : `Run "chmod 700 ${WOPR_HOME}"`,
+      detail: `${WOPR_HOME} is not writable`,
+      fix: `Run "mkdir -p ${WOPR_HOME} && chmod 700 ${WOPR_HOME}"`,
     });
   }
 
