@@ -55,7 +55,7 @@ describe("createBroadcaster", () => {
 
     // Simulate encoder that produces compressed output (smaller than input)
     const fakeOpusOutput = Buffer.from([0x01, 0x02, 0x03]); // 3 bytes, much less than 3840
-    const mockFactory = () => ({
+    const mockFactory = async () => ({
       encode: (_pcm: Buffer) => fakeOpusOutput,
       destroy: () => {},
     });
@@ -89,7 +89,7 @@ describe("createBroadcaster", () => {
     };
 
     const fakeOpusOutput = Buffer.from([0x01, 0x02, 0x03]);
-    const mockFactory = () => ({
+    const mockFactory = async () => ({
       encode: (_pcm: Buffer) => fakeOpusOutput,
       destroy: () => {},
     });
@@ -257,7 +257,7 @@ describe("createBroadcaster", () => {
     };
 
     // Inject a factory that simulates @discordjs/opus being unavailable
-    const throwingFactory = () => {
+    const throwingFactory = async () => {
       throw new Error(
         "Failed to load @discordjs/opus. Install it with: npm install @discordjs/opus",
       );

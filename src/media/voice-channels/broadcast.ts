@@ -8,15 +8,10 @@ const DEFAULT_OPUS_CONFIG: Required<OpusConfig> = {
 };
 
 /** @internal For testing only: signature of the encoder factory */
-export type OpusEncoderFactory = (config: Required<OpusConfig>) =>
-  | Promise<{
-      encode: (pcm: Buffer) => Buffer;
-      destroy: () => void;
-    }>
-  | {
-      encode: (pcm: Buffer) => Buffer;
-      destroy: () => void;
-    };
+export type OpusEncoderFactory = (config: Required<OpusConfig>) => Promise<{
+  encode: (pcm: Buffer) => Buffer;
+  destroy: () => void;
+}>;
 
 export interface BroadcasterOptions {
   participants: VoiceParticipant[];
@@ -27,7 +22,7 @@ export interface BroadcasterOptions {
 
 export interface Broadcaster {
   /** Send PCM audio to all participants, encoding to Opus where needed */
-  broadcast(pcmAudio: Buffer): void | Promise<void>;
+  broadcast(pcmAudio: Buffer): Promise<void>;
   /** Add a participant at runtime */
   addParticipant(participant: VoiceParticipant): void;
   /** Remove a participant by ID */
@@ -83,17 +78,19 @@ export function createBroadcaster(options: BroadcasterOptions): Broadcaster {
   const encoderFactory = options._encoderFactory ?? loadOpusEncoder;
   const participants = new Map<string, VoiceParticipant>();
   let destroyed = false;
-  let opusEncoder: { encode: (pcm: Buffer) => Buffer; destroy: () => void } | null = null;
+  let opusEncoderPromise: Promise<{ encode: (pcm: Buffer) => Buffer; destroy: () => void }> | null = null;
 
   for (const p of options.participants) {
     participants.set(p.id, p);
   }
 
-  async function ensureOpusEncoder(): Promise<{ encode: (pcm: Buffer) => Buffer; destroy: () => void }> {
-    if (!opusEncoder) {
-      opusEncoder = await encoderFactory(config);
+  // Cache the Promise itself so concurrent broadcast() calls reuse the same
+  // in-flight load rather than each spawning their own encoderFactory call.
+  function ensureOpusEncoder(): Promise<{ encode: (pcm: Buffer) => Buffer; destroy: () => void }> {
+    if (!opusEncoderPromise) {
+      opusEncoderPromise = encoderFactory(config);
     }
-    return opusEncoder;
+    return opusEncoderPromise;
   }
 
   async function broadcast(pcmAudio: Buffer): Promise<void> {
@@ -145,9 +142,19 @@ export function createBroadcaster(options: BroadcasterOptions): Broadcaster {
   function destroy(): void {
     destroyed = true;
     participants.clear();
-    if (opusEncoder) {
-      opusEncoder.destroy();
-      opusEncoder = null;
+    if (opusEncoderPromise) {
+      opusEncoderPromise
+        .then((enc) => {
+          try {
+            enc.destroy();
+          } catch {
+            // Already deleted or GC'd — ignore
+          }
+        })
+        .catch(() => {
+          // Encoder never loaded — nothing to clean up
+        });
+      opusEncoderPromise = null;
     }
   }
 
