@@ -90,9 +90,9 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
 
   // Add plugin tools — wrapped with security checks
   const makeContext = (): ToolContext => ({ sessionName });
-  for (const [, pluginTool] of pluginTools) {
+  for (const [namespacedKey, pluginTool] of pluginTools) {
     tools.push(
-      tool(pluginTool.namespacedName, pluginTool.description, pluginTool.schema.shape, async (args) => {
+      tool(namespacedKey, pluginTool.description, pluginTool.schema.shape, async (args) => {
         return withSecurityCheck(pluginTool.name, sessionName, async () => {
           const result = await pluginTool.handler(args, makeContext());
           if (typeof result === "string") {

@@ -11,7 +11,6 @@ describe("A2A tool namespacing", () => {
     registerA2ATool({
       name: "search",
       pluginId: "discord",
-      namespacedName: "",
       description: "Search discord",
       schema: {} as never,
       handler: async () => ({}),
@@ -32,7 +31,6 @@ describe("A2A tool namespacing", () => {
     registerA2ATool({
       name: "search",
       pluginId: "plugin-a",
-      namespacedName: "",
       description: "Search A",
       schema: {} as never,
       handler: handler1,
@@ -40,7 +38,6 @@ describe("A2A tool namespacing", () => {
     registerA2ATool({
       name: "search",
       pluginId: "plugin-b",
-      namespacedName: "",
       description: "Search B",
       schema: {} as never,
       handler: handler2,
@@ -55,7 +52,6 @@ describe("A2A tool namespacing", () => {
     registerA2ATool({
       name: "search",
       pluginId: "discord",
-      namespacedName: "",
       description: "v1",
       schema: {} as never,
       handler: async () => ({}),
@@ -64,7 +60,6 @@ describe("A2A tool namespacing", () => {
     registerA2ATool({
       name: "search",
       pluginId: "discord",
-      namespacedName: "",
       description: "v2",
       schema: {} as never,
       handler: async () => ({}),
@@ -78,7 +73,6 @@ describe("A2A tool namespacing", () => {
     registerA2ATool({
       name: "search",
       pluginId: "discord",
-      namespacedName: "",
       description: "Search",
       schema: {} as never,
       handler: async () => ({}),
@@ -92,7 +86,6 @@ describe("A2A tool namespacing", () => {
     registerA2ATool({
       name: "search",
       pluginId: "discord",
-      namespacedName: "",
       description: "Search",
       schema: {} as never,
       handler: async () => ({}),

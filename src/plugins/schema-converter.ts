@@ -89,7 +89,6 @@ export function registerA2AServerImpl(pluginId: string, config: A2AServerConfig)
       registerA2ATool({
         name: tool.name,
         pluginId,
-        namespacedName: "", // filled by registerA2ATool
         description: tool.description,
         schema: zodSchema,
         handler: async (args, _context) => {
