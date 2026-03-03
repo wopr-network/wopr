@@ -49,6 +49,7 @@ Usage:
   wopr daemon logs                           Show daemon logs
 
   wopr status                                Show system status overview
+  wopr doctor                                Validate environment and diagnose issues
 
   wopr auth                                  Show auth status
   wopr auth login                            Login with Claude Max/Pro (OAuth)
