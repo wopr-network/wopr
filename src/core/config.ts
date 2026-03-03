@@ -199,6 +199,7 @@ const DEFAULT_CONFIG: WoprConfig = {
 
 export class ConfigManager {
   private config: WoprConfig = DEFAULT_CONFIG;
+  private reloadInFlight: Promise<void> | null = null;
 
   async load(): Promise<WoprConfig> {
     const configPath = getConfigFilePath();
@@ -336,12 +337,22 @@ export class ConfigManager {
    * Logs a summary of changed top-level keys. Safe to call at any time.
    */
   async reload(): Promise<void> {
-    const prev = { ...this.config };
+    if (this.reloadInFlight) {
+      return this.reloadInFlight;
+    }
+    this.reloadInFlight = this._doReload().finally(() => {
+      this.reloadInFlight = null;
+    });
+    return this.reloadInFlight;
+  }
+
+  private async _doReload(): Promise<void> {
+    const prev = structuredClone(this.config);
     try {
       await this.load();
     } catch (err: unknown) {
-      const error = err as Error;
-      logger.error("[config] Reload failed — keeping existing config:", error.message);
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error("[config] Reload failed — keeping existing config:", message);
       this.config = prev;
       return;
     }
