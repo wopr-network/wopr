@@ -37,11 +37,15 @@ export class RateLimitTracker {
 
     let backoffMs: number;
     if (retryAfterSeconds !== undefined && retryAfterSeconds > 0) {
-      // Respect Retry-After header
-      backoffMs = retryAfterSeconds * 1000;
+      // Respect Retry-After header, but cap to maxDelayMs to prevent a
+      // misbehaving or malicious provider from forcing unbounded backoff.
+      backoffMs = Math.min(retryAfterSeconds * 1000, this.maxDelayMs);
     } else {
-      // Exponential backoff with jitter: base * 2^(hits-1) + random jitter
-      backoffMs = Math.min(this.baseDelayMs * 2 ** (hits - 1) + Math.random() * 500, this.maxDelayMs);
+      // Exponential backoff with jitter: base * 2^(hits-1) + random jitter.
+      // Cap exponent at 30 to prevent 2**n from producing Infinity for large
+      // hit counts (the outer Math.min already caps the final value).
+      const exp = Math.min(hits - 1, 30);
+      backoffMs = Math.min(this.baseDelayMs * 2 ** exp + Math.random() * 500, this.maxDelayMs);
     }
 
     this.limits.set(providerId, {
