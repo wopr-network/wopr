@@ -22,7 +22,7 @@ vi.mock("../../src/plugins/state.js", () => ({
   configSchemas: new Map(),
   pluginStates: new Map(),
   resolvedA2ATools: new Map(),
-  pluginCircuitBreaker: { clear: vi.fn(), isOpen: vi.fn(() => false), recordFailure: vi.fn(), reset: vi.fn() },
+  pluginCircuitBreaker: { clear: vi.fn(), isTripped: vi.fn(() => false), recordError: vi.fn(), recordSuccess: vi.fn() },
   WOPR_HOME: "/tmp/wopr-test",
   PLUGINS_DIR: "/tmp/wopr-test/plugins",
 }));
