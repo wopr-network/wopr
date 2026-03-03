@@ -29,6 +29,18 @@ import { enablePlugin, getInstalledPlugins, installPlugin } from "./installation
 import { configSchemas, loadedPlugins, pluginManifests, pluginStates, resolvedA2ATools } from "./state.js";
 
 /**
+ * Race a promise against a timeout, clearing the timer when either settles.
+ * Prevents timer leaks when the primary promise resolves before the timeout.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
  * Validate plugin config against its declared configSchema.
  * Throws if any required field is missing or empty.
  */
@@ -89,12 +101,7 @@ async function initAndActivatePlugin(
       if (plugin.shutdown) {
         const shutdownTimeoutMs = manifest?.lifecycle?.shutdownTimeoutMs ?? 30_000;
         try {
-          await Promise.race([
-            plugin.shutdown(),
-            new Promise<void>((_, reject) =>
-              setTimeout(() => reject(new Error(`shutdown timeout after ${shutdownTimeoutMs}ms`)), shutdownTimeoutMs),
-            ),
-          ]);
+          await withTimeout(plugin.shutdown(), shutdownTimeoutMs, "shutdown");
         } catch (shutdownErr: unknown) {
           logger.warn(
             `[plugins] ${installed.name}: shutdown() during init cleanup also failed: ${shutdownErr instanceof Error ? shutdownErr.message : String(shutdownErr)}`,
@@ -504,12 +511,7 @@ async function deactivateAndShutdownPlugin(name: string, plugin: WOPRPlugin, dra
 
   if (plugin.onDeactivate) {
     try {
-      await Promise.race([
-        plugin.onDeactivate(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`onDeactivate timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
-        ),
-      ]);
+      await withTimeout(plugin.onDeactivate(), drainTimeoutMs, "onDeactivate");
     } catch (err) {
       logger.error(`[plugins] ${name}: onDeactivate failed: ${err}`);
     }
@@ -517,12 +519,7 @@ async function deactivateAndShutdownPlugin(name: string, plugin: WOPRPlugin, dra
 
   if (plugin.shutdown) {
     try {
-      await Promise.race([
-        plugin.shutdown(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`shutdown timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
-        ),
-      ]);
+      await withTimeout(plugin.shutdown(), drainTimeoutMs, "shutdown");
     } catch (err) {
       logger.error(`[plugins] ${name}: shutdown failed: ${err}`);
     }
