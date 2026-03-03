@@ -63,7 +63,7 @@ async function runProbeWithTimeout(
 ): Promise<{ healthy: boolean; responseTimeMs: number; error?: string }> {
   const start = Date.now();
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-  const probePromise = probe();
+  const probePromise = Promise.resolve().then(probe);
   try {
     const result = await Promise.race([
       probePromise,
