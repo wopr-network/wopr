@@ -338,6 +338,11 @@ export interface A2AServerConfig {
 // Plugin System
 // ============================================================================
 
+export interface PluginHealthCheckResult {
+  healthy: boolean;
+  message?: string;
+}
+
 export interface WOPRPlugin {
   name: string;
   version: string;
