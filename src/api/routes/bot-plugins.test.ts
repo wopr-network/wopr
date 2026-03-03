@@ -80,9 +80,61 @@ const mockNodeConnections = {
   isConnected: vi.fn(),
 };
 
+const PLUGIN_FIXTURE_DATA: Record<string, { category: string; capabilities: string[] }> = {
+  "discord-channel": { category: "channel", capabilities: ["channel"] },
+  "slack-channel": { category: "channel", capabilities: ["channel"] },
+  "semantic-memory": { category: "memory", capabilities: ["memory"] },
+  "elevenlabs-tts": { category: "provider", capabilities: ["voice", "tts"] },
+  "deepgram-stt": { category: "provider", capabilities: ["voice", "stt"] },
+  "my-tts-plugin": { category: "provider", capabilities: ["tts"] },
+};
+
 vi.mock("../../fleet/services.js", () => ({
   getDb: () => mockDb,
   getCommandBus: () => mockNodeConnections,
+  getMarketplacePluginRepo: vi.fn(() => ({
+    findById: vi.fn(async (id: string) => {
+      const fixture = PLUGIN_FIXTURE_DATA[id];
+      if (!fixture) return undefined;
+      return {
+        pluginId: id,
+        npmPackage: `@wopr-network/wopr-plugin-${id}`,
+        version: "1.0.0",
+        enabled: true,
+        featured: false,
+        sortOrder: 0,
+        category: fixture.category,
+        discoveredAt: 0,
+        enabledAt: null,
+        enabledBy: null,
+        notes: null,
+        installedAt: null,
+        installError: null,
+        manifest: {
+          name: id,
+          description: `A ${fixture.category} plugin`,
+          author: "wopr-network",
+          icon: fixture.category,
+          color: "#000",
+          tags: [fixture.category],
+          capabilities: fixture.capabilities,
+          requires: [],
+          install: [],
+          configSchema: [],
+          setup: [],
+          installCount: 0,
+          changelog: [],
+        },
+      };
+    }),
+    findEnabled: vi.fn(async () => []),
+    findAll: vi.fn(async () =>
+      Object.entries(PLUGIN_FIXTURE_DATA).map(([id, fixture]) => ({
+        pluginId: id,
+        manifest: { capabilities: fixture.capabilities },
+      })),
+    ),
+  })),
 }));
 
 // Import AFTER mocks are set up
