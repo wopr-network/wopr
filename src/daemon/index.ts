@@ -566,8 +566,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   process.on("SIGHUP", () => {
     daemonLog("[config] SIGHUP received — reloading config");
     centralConfig.reload().catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      winstonLogger.error(`[daemon] Config reload error: ${msg}`);
+      winstonLogger.error("[daemon] Config reload error:", err);
     });
   });
 

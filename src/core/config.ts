@@ -203,10 +203,11 @@ export class ConfigManager {
 
   async load(): Promise<WoprConfig> {
     const configPath = getConfigFilePath();
+    let candidate: WoprConfig;
     try {
       const data = await readFile(configPath, "utf-8");
       const loaded = JSON.parse(data) as Partial<WoprConfig>;
-      this.config = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
+      candidate = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
       // Fix permissions on existing config files (migration for pre-WOP-621 deployments)
       // Only apply to the default config path — shared/team configs may intentionally have group-read
       if (configPath === CONFIG_FILE) {
@@ -218,17 +219,25 @@ export class ConfigManager {
         logger.error("Failed to load config:", error.message);
       }
       // Use defaults if file doesn't exist
-      this.config = { ...DEFAULT_CONFIG };
+      candidate = { ...DEFAULT_CONFIG };
     }
 
     // Apply environment variable overrides (for Docker/container deployment)
+    // Use temp assign so applyEnvironmentOverrides can mutate via this.config,
+    // but we don't expose the unvalidated candidate to concurrent readers.
+    const prev = this.config;
+    this.config = candidate;
     this.applyEnvironmentOverrides();
+    candidate = this.config;
+    this.config = prev;
 
-    const result = WoprConfigSchema.safeParse(this.config);
+    const result = WoprConfigSchema.safeParse(candidate);
     if (!result.success) {
       throw new Error(`Invalid WOPR config at ${configPath}:\n${result.error.message}`);
     }
 
+    // Atomic: only assign after full validation succeeds
+    this.config = result.data as WoprConfig;
     return this.config;
   }
 
