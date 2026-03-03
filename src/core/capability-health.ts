@@ -63,9 +63,10 @@ async function runProbeWithTimeout(
 ): Promise<{ healthy: boolean; responseTimeMs: number; error?: string }> {
   const start = Date.now();
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  const probePromise = Promise.resolve().then(probe);
   try {
     const result = await Promise.race([
-      probe(),
+      probePromise,
       new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => reject(new Error("Probe timed out")), timeoutMs);
       }),
@@ -85,6 +86,9 @@ async function runProbeWithTimeout(
       responseTimeMs: Date.now() - start,
       error: err instanceof Error ? err.message : String(err),
     };
+  } finally {
+    // Prevent unhandled rejection if probe rejects after timeout won the race
+    probePromise.catch(() => {});
   }
 }
 

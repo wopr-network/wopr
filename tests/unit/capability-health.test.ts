@@ -319,6 +319,40 @@ describe("CapabilityHealthProber", () => {
     expect(instance1).toBe(instance2);
   });
 
+  it("does not cause unhandled rejection when probe rejects after timeout", async () => {
+    const unhandledRejections: unknown[] = [];
+    const handler = (reason: unknown) => unhandledRejections.push(reason);
+    process.on("unhandledRejection", handler);
+
+    const probeTimeoutMs = 50;
+    const lateProber = new CapabilityHealthProber({ probeTimeoutMs });
+
+    const capability = "tts" as Parameters<typeof lateProber.registerProbe>[0];
+    const providerId = "test-late-reject";
+    vi.mocked(registry.listCapabilities).mockReturnValue([{ capability, providerCount: 1 }]);
+    vi.mocked(registry.getProviders).mockReturnValue([{ id: providerId, name: "Test Late Reject" }]);
+
+    const probe = () =>
+      new Promise<boolean>((_, reject) => {
+        setTimeout(() => reject(new Error("late probe failure")), probeTimeoutMs + 100);
+      });
+
+    lateProber.registerProbe(capability, providerId, probe);
+
+    const snapshot = await lateProber.check();
+    const providerHealth = snapshot.capabilities[0]?.providers[0];
+    expect(providerHealth?.healthy).toBe(false);
+    expect(providerHealth?.error).toBe("Probe timed out");
+
+    // Wait for the late rejection to fire
+    await new Promise((resolve) => setTimeout(resolve, probeTimeoutMs + 200));
+
+    expect(unhandledRejections).toEqual([]);
+
+    process.removeListener("unhandledRejection", handler);
+    lateProber.stop();
+  });
+
   it("resetCapabilityHealthProber creates fresh instance", () => {
     const instance1 = getCapabilityHealthProber();
     resetCapabilityHealthProber();
