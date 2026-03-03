@@ -6,7 +6,7 @@ import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { logger } from "../logger.js";
-import { getConfigFilePath, WOPR_HOME } from "../paths.js";
+import { CONFIG_FILE, getConfigFilePath, WOPR_HOME } from "../paths.js";
 import type { SoulEvilConfig } from "./workspace.js";
 /**
  * Per-provider default settings
@@ -200,7 +200,10 @@ export class ConfigManager {
       const loaded = JSON.parse(data) as Partial<WoprConfig>;
       this.config = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
       // Fix permissions on existing config files (migration for pre-WOP-621 deployments)
-      await chmod(configPath, 0o600).catch(() => {});
+      // Only apply to the default config path — shared/team configs may intentionally have group-read
+      if (configPath === CONFIG_FILE) {
+        await chmod(configPath, 0o600).catch(() => {});
+      }
     } catch (err: unknown) {
       const error = err as NodeJS.ErrnoException;
       if (error.code !== "ENOENT") {

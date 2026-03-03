@@ -35,7 +35,8 @@ try {
 }
 
 if (configPath) {
-  if (!existsSync(configPath)) {
+  const initCommands = new Set(["init", "onboard", "configure"]);
+  if (!initCommands.has(remainingArgs[0]) && !existsSync(configPath)) {
     console.error(`Config file not found: ${configPath}`);
     process.exit(1);
   }
