@@ -199,13 +199,15 @@ const DEFAULT_CONFIG: WoprConfig = {
 
 export class ConfigManager {
   private config: WoprConfig = DEFAULT_CONFIG;
+  private reloadInFlight: Promise<void> | null = null;
 
   async load(): Promise<WoprConfig> {
     const configPath = getConfigFilePath();
+    let candidate: WoprConfig;
     try {
       const data = await readFile(configPath, "utf-8");
       const loaded = JSON.parse(data) as Partial<WoprConfig>;
-      this.config = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
+      candidate = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
       // Fix permissions on existing config files (migration for pre-WOP-621 deployments)
       // Only apply to the default config path — shared/team configs may intentionally have group-read
       if (configPath === CONFIG_FILE) {
@@ -217,17 +219,25 @@ export class ConfigManager {
         logger.error("Failed to load config:", error.message);
       }
       // Use defaults if file doesn't exist
-      this.config = { ...DEFAULT_CONFIG };
+      candidate = { ...DEFAULT_CONFIG };
     }
 
     // Apply environment variable overrides (for Docker/container deployment)
+    // Use temp assign so applyEnvironmentOverrides can mutate via this.config,
+    // but we don't expose the unvalidated candidate to concurrent readers.
+    const prev = this.config;
+    this.config = candidate;
     this.applyEnvironmentOverrides();
+    candidate = this.config;
+    this.config = prev;
 
-    const result = WoprConfigSchema.safeParse(this.config);
+    const result = WoprConfigSchema.safeParse(candidate);
     if (!result.success) {
       throw new Error(`Invalid WOPR config at ${configPath}:\n${result.error.message}`);
     }
 
+    // Atomic: only assign after full validation succeeds
+    this.config = result.data as WoprConfig;
     return this.config;
   }
 
@@ -329,6 +339,48 @@ export class ConfigManager {
       this.config.providers[providerId] = {};
     }
     (this.config.providers[providerId] as Record<string, unknown>)[key] = value;
+  }
+
+  /**
+   * Reload config from disk. Validates new config before applying.
+   * Logs a summary of changed top-level keys. Safe to call at any time.
+   */
+  async reload(): Promise<void> {
+    if (this.reloadInFlight) {
+      return this.reloadInFlight;
+    }
+    this.reloadInFlight = this._doReload().finally(() => {
+      this.reloadInFlight = null;
+    });
+    return this.reloadInFlight;
+  }
+
+  private async _doReload(): Promise<void> {
+    const prev = structuredClone(this.config);
+    try {
+      await this.load();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error("[config] Reload failed — keeping existing config:", message);
+      this.config = prev;
+      return;
+    }
+    // Log changed top-level keys
+    const changed: string[] = [];
+    const keys = new Set([...Object.keys(prev), ...Object.keys(this.config)]);
+    for (const key of keys) {
+      if (
+        JSON.stringify((prev as unknown as Record<string, unknown>)[key]) !==
+        JSON.stringify((this.config as unknown as Record<string, unknown>)[key])
+      ) {
+        changed.push(key);
+      }
+    }
+    if (changed.length > 0) {
+      logger.info(`[config] Reloaded — changed sections: ${changed.join(", ")}`);
+    } else {
+      logger.info("[config] Reloaded — no changes detected");
+    }
   }
 
   private merge(defaults: unknown, overrides: unknown): unknown {

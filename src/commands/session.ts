@@ -27,9 +27,8 @@ export async function sessionCommand(subcommand: string | undefined, args: strin
           name: flags.provider as string,
           fallback: flags.fallback ? (flags.fallback as string).split(",").map((s) => s.trim()) : undefined,
         };
-        const { SESSIONS_DIR } = await import("../paths.js");
-        const providerFile = (await import("node:path")).join(SESSIONS_DIR, `${name}.provider.json`);
-        await (await import("node:fs/promises")).writeFile(providerFile, JSON.stringify(providerConfig, null, 2));
+        const { setSessionProviderAsync } = await import("../core/session-repository.js");
+        await setSessionProviderAsync(name, providerConfig);
 
         logger.info(
           `Created session "${name}" with provider: ${flags.provider}${
@@ -71,9 +70,8 @@ export async function sessionCommand(subcommand: string | undefined, args: strin
       }
 
       // Save provider config
-      const { SESSIONS_DIR } = await import("../paths.js");
-      const providerFile = (await import("node:path")).join(SESSIONS_DIR, `${sessionName}.provider.json`);
-      await (await import("node:fs/promises")).writeFile(providerFile, JSON.stringify(providerConfig, null, 2));
+      const { setSessionProviderAsync } = await import("../core/session-repository.js");
+      await setSessionProviderAsync(sessionName, providerConfig);
 
       const extras: string[] = [];
       if (flags.model) extras.push(`model: ${flags.model}`);
