@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   mirror:
-    name: Mirror ${{ matrix.image }}
+    name: Mirror ${{ matrix.source }}
     runs-on: [self-hosted, Linux, X64]
     strategy:
       matrix:
