@@ -81,6 +81,7 @@ vi.mock("../../src/core/providers.js", () => ({
   providerRegistry: {
     register: vi.fn(),
     listProviders: vi.fn(() => []),
+    getProvider: vi.fn(() => undefined),
   },
 }));
 
@@ -515,10 +516,10 @@ describe("createPluginContext", () => {
       expect(ctx.getLLMProvider("my-llm")).toBe(provider);
     });
 
-    it("getLLMProvider() should fall back to providerRegistry.listProviders", () => {
+    it("getLLMProvider() should fall back to providerRegistry.getProvider", () => {
       const ctx = createPluginContext(makePlugin(), makeInjectors());
       const provider = { id: "fallback-llm" };
-      vi.mocked(mockProviderRegistry.listProviders).mockReturnValue([provider] as any);
+      vi.mocked(mockProviderRegistry.getProvider).mockReturnValue({ provider } as any);
       expect(ctx.getLLMProvider("fallback-llm")).toBe(provider);
     });
   });

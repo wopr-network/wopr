@@ -84,7 +84,25 @@ const PluginLifecycleSchema = z.object({
   shutdownTimeoutMs: z.number().optional(),
 });
 
-const ConfigFieldSchema: z.ZodType<unknown> = z.lazy(() =>
+interface ConfigField {
+  name: string;
+  type: "text" | "password" | "select" | "checkbox" | "number" | "array" | "boolean" | "object" | "textarea";
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  default?: unknown;
+  options?: { value: string; label: string }[];
+  description?: string;
+  items?: ConfigField;
+  fields?: ConfigField[];
+  setupFlow?: "paste" | "oauth" | "qr" | "interactive" | "none";
+  oauthProvider?: string;
+  pattern?: string;
+  patternError?: string;
+  secret?: boolean;
+}
+
+const ConfigFieldSchema: z.ZodType<ConfigField> = z.lazy(() =>
   z.object({
     name: z.string(),
     type: z.enum(["text", "password", "select", "checkbox", "number", "array", "boolean", "object", "textarea"]),
@@ -104,17 +122,11 @@ const ConfigFieldSchema: z.ZodType<unknown> = z.lazy(() =>
   }),
 );
 
-const ConfigSchemaZod = z.object({
-  title: z.string(),
-  description: z.string().optional(),
-  fields: z.array(ConfigFieldSchema),
-});
-
 const SetupStepSchema = z.object({
   id: z.string(),
   title: z.string(),
-  description: z.string(),
-  fields: ConfigSchemaZod.optional(),
+  description: z.string().optional(),
+  fields: z.array(ConfigFieldSchema).optional(),
   optional: z.boolean().optional(),
 });
 
