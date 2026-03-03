@@ -33,6 +33,7 @@ vi.mock("../../../../src/commands/onboard/helpers.js", () => ({
 
 describe("09-daemon step — token redaction", () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
     noteMock.mockResolvedValue(undefined);
   });
