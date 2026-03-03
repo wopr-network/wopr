@@ -186,7 +186,12 @@ export interface RegisteredTool {
  * Uses Symbol.asyncIterator presence as the discriminant.
  */
 export function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
-  return value != null && typeof value === "object" && Symbol.asyncIterator in (value as object);
+  return (
+    value != null &&
+    typeof value === "object" &&
+    Symbol.asyncIterator in (value as object) &&
+    typeof (value as Record<symbol, unknown>)[Symbol.asyncIterator] === "function"
+  );
 }
 
 /**

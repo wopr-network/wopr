@@ -96,15 +96,29 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     tools.push(
       tool(namespacedKey, pluginTool.description, pluginTool.schema.shape, async (args) => {
         return withSecurityCheck(pluginTool.name, sessionName, async () => {
-          const handlerResult = pluginTool.handler(args, makeContext());
+          const rawResult = pluginTool.handler(args, makeContext());
+          // Check streaming BEFORE awaiting: if the handler returned an AsyncIterable
+          // directly (not wrapped in a Promise), handle it now.
+          if (isAsyncIterable(rawResult)) {
+            return accumulateChunks(rawResult);
+          }
+          // Handler returned a Promise — await it, then check if the resolved value
+          // is itself an AsyncIterable (e.g. async function returning an async generator).
+          const handlerResult = await rawResult;
           if (isAsyncIterable(handlerResult)) {
-            return accumulateChunks(handlerResult);
+            return accumulateChunks(handlerResult as AsyncIterable<import("../plugin-types/a2a.js").ToolResultChunk>);
           }
-          const result = await handlerResult;
-          if (typeof result === "string") {
-            return { content: [{ type: "text", text: result }] };
+          if (typeof handlerResult === "string") {
+            return { content: [{ type: "text", text: handlerResult }] };
           }
-          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          if (
+            handlerResult != null &&
+            typeof handlerResult === "object" &&
+            ("content" in handlerResult || "isError" in handlerResult)
+          ) {
+            return handlerResult;
+          }
+          return { content: [{ type: "text", text: JSON.stringify(handlerResult, null, 2) }] };
         });
       }),
     );
