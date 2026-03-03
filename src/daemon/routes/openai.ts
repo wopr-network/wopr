@@ -301,6 +301,18 @@ openaiRouter.post(
       return stream(c, async (s) => {
         let aborted = false;
 
+        // Centralized write helper: re-checks aborted immediately before writing
+        // and suppresses any write errors (e.g. if the socket closed between the
+        // check and the actual write), marking the stream as aborted on failure.
+        const safeWrite = (data: string): void => {
+          if (aborted) return;
+          try {
+            s.write(data);
+          } catch {
+            aborted = true;
+          }
+        };
+
         // Clean up the ephemeral session when the client disconnects
         s.onAbort(() => {
           aborted = true;
@@ -318,7 +330,6 @@ openaiRouter.post(
                 ? createInjectionSource("daemon", { trustLevel: "owner" })
                 : createInjectionSource("daemon"),
             onStream: (msg) => {
-              if (aborted) return;
               if (msg.type === "text" && msg.content) {
                 const chunk = {
                   id: requestId,
@@ -333,52 +344,51 @@ openaiRouter.post(
                     },
                   ],
                 };
-                s.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                safeWrite(`data: ${JSON.stringify(chunk)}\n\n`);
               } else if (msg.type === "complete" && msg.usage) {
                 streamUsage = msg.usage;
               }
             },
           });
 
-          if (!aborted) {
-            // Final chunk with finish_reason
-            const finalChunk: Record<string, unknown> = {
-              id: requestId,
-              object: "chat.completion.chunk",
-              created,
-              model: body.model,
-              choices: [
-                {
-                  index: 0,
-                  delta: {},
-                  finish_reason: "stop",
-                },
-              ],
-            };
-            if (body.stream_options?.include_usage) {
-              finalChunk.usage = {
-                prompt_tokens: streamUsage?.inputTokens ?? 0,
-                completion_tokens: streamUsage?.outputTokens ?? 0,
-                total_tokens: (streamUsage?.inputTokens ?? 0) + (streamUsage?.outputTokens ?? 0),
-              };
-            }
-            s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
-            s.write("data: [DONE]\n\n");
-          }
-        } catch (err) {
-          if (!aborted) {
-            const errorChunk = {
-              error: {
-                message: err instanceof Error ? err.message : "Internal server error",
-                type: "server_error",
+          // Final chunk with finish_reason
+          const finalChunk: Record<string, unknown> = {
+            id: requestId,
+            object: "chat.completion.chunk",
+            created,
+            model: body.model,
+            choices: [
+              {
+                index: 0,
+                delta: {},
+                finish_reason: "stop",
               },
+            ],
+          };
+          if (body.stream_options?.include_usage) {
+            finalChunk.usage = {
+              prompt_tokens: streamUsage?.inputTokens ?? 0,
+              completion_tokens: streamUsage?.outputTokens ?? 0,
+              total_tokens: (streamUsage?.inputTokens ?? 0) + (streamUsage?.outputTokens ?? 0),
             };
-            s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
-            s.write("data: [DONE]\n\n");
           }
+          safeWrite(`data: ${JSON.stringify(finalChunk)}\n\n`);
+          safeWrite("data: [DONE]\n\n");
+        } catch (err) {
+          const errorChunk = {
+            error: {
+              message: err instanceof Error ? err.message : "Internal server error",
+              type: "server_error",
+            },
+          };
+          safeWrite(`data: ${JSON.stringify(errorChunk)}\n\n`);
+          safeWrite("data: [DONE]\n\n");
         } finally {
-          // Clean up the ephemeral session after streaming completes
-          await deleteSession(sessionName, "request-complete").catch(() => {});
+          // onAbort already called deleteSession on client disconnect — skip to
+          // avoid a redundant (and potentially confusing) second cleanup call.
+          if (!aborted) {
+            await deleteSession(sessionName, "request-complete").catch(() => {});
+          }
         }
       });
     }
