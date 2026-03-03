@@ -395,10 +395,7 @@ describe("OpenAPI endpoints (WOP-522)", () => {
             id: "model",
             title: "Model Selection",
             description: "Choose a model",
-            fields: {
-              title: "Model Config",
-              fields: [{ name: "model", type: "select", label: "Model", options: [{ value: "gpt-4", label: "GPT-4" }] }],
-            },
+            fields: [{ name: "model", type: "select", label: "Model", options: [{ value: "gpt-4", label: "GPT-4" }] }],
             optional: true,
           },
         ],
