@@ -76,10 +76,7 @@ export function installAndActivatePlugin(source: string): Promise<InstallAndActi
     );
   });
 
-  const promise = Promise.race<InstallAndActivateResult>([
-    doInstallAndActivate(source),
-    timeoutPromise,
-  ]).finally(() => {
+  const promise = Promise.race<InstallAndActivateResult>([doInstallAndActivate(source), timeoutPromise]).finally(() => {
     clearTimeout(timeoutId);
     installLocks.delete(source);
   });
