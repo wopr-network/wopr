@@ -6,7 +6,7 @@
  * of tool proxies per plugin that context-factory uses for getA2ATool().
  */
 
-import { pluginTools } from "../core/a2a-tools/_base.js";
+import { pluginTools, type RegisteredTool } from "../core/a2a-tools/_base.js";
 import { logger } from "../logger.js";
 import type { A2AToolResult } from "../plugin-types/a2a.js";
 import { pluginManifests } from "./state.js";
@@ -18,6 +18,26 @@ export interface ResolveResult {
   missing: string[];
   /** Map of pluginName -> Map of toolName -> handler proxy */
   toolMap: Map<string, Map<string, (args: Record<string, unknown>) => Promise<A2AToolResult>>>;
+}
+
+/**
+ * Find a registered tool by bare name, scanning all namespaced keys.
+ * Returns the first match. If multiple plugins have the same tool name,
+ * logs a warning about ambiguity.
+ */
+function findToolByBareName(toolName: string): RegisteredTool | undefined {
+  const matches: RegisteredTool[] = [];
+  for (const [, tool] of pluginTools) {
+    if (tool.name === toolName) {
+      matches.push(tool);
+    }
+  }
+  if (matches.length > 1) {
+    logger.warn(
+      `[a2a-resolver] Ambiguous tool dependency "${toolName}" — found in plugins: ${matches.map((t) => t.pluginId).join(", ")}. Specify pluginName in toolDependencies to disambiguate.`,
+    );
+  }
+  return matches[0];
 }
 
 /**
@@ -36,7 +56,15 @@ export function resolveA2AToolDependencies(): ResolveResult {
     const pluginToolMap = new Map<string, (args: Record<string, unknown>) => Promise<A2AToolResult>>();
 
     for (const dep of manifest.toolDependencies) {
-      const registeredTool = pluginTools.get(dep.toolName);
+      let registeredTool: RegisteredTool | undefined;
+
+      if (dep.pluginName) {
+        // Preferred: exact namespaced lookup
+        registeredTool = pluginTools.get(`${dep.pluginName}:${dep.toolName}`);
+      } else {
+        // Fallback: scan by bare name (backward compat)
+        registeredTool = findToolByBareName(dep.toolName);
+      }
 
       if (registeredTool) {
         const proxy = async (args: Record<string, unknown>): Promise<A2AToolResult> => {

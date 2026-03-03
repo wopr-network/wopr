@@ -66,6 +66,8 @@ export const GLOBAL_MEMORY_DIR = join(GLOBAL_IDENTITY_DIR, "memory");
 
 export interface RegisteredTool {
   name: string;
+  namespacedName?: string;
+  pluginId: string;
   description: string;
   schema: z.ZodObject<z.ZodRawShape>;
   handler: (args: Record<string, unknown>, context: ToolContext) => Promise<unknown>;
@@ -215,8 +217,19 @@ export function listAllMemoryFiles(sessionDir: string): string[] {
 // ---------------------------------------------------------------------------
 
 export function registerA2ATool(t: RegisteredTool): void {
-  logger.info(`[a2a-mcp] Registering tool: ${t.name}`);
-  pluginTools.set(t.name, t);
+  const namespacedKey = `${t.pluginId}:${t.name}`;
+
+  const tool: RegisteredTool = {
+    ...t,
+    namespacedName: namespacedKey,
+  };
+
+  if (pluginTools.has(namespacedKey)) {
+    logger.warn(`[a2a-mcp] Overwriting existing tool: ${namespacedKey}`);
+  }
+
+  logger.info(`[a2a-mcp] Registering tool: ${namespacedKey}`);
+  pluginTools.set(namespacedKey, tool);
   markDirty();
 }
 

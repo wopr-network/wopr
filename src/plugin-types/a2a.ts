@@ -43,6 +43,8 @@ export interface A2AServerConfig {
 export interface A2AToolDependency {
   /** Tool name to depend on (e.g., "search", "translate") */
   toolName: string;
+  /** Source plugin name to disambiguate when multiple plugins expose same tool name */
+  pluginName?: string;
   /** If true, missing tool logs a warning; if false/absent, missing tool logs an error */
   optional?: boolean;
 }
