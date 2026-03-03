@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 export interface GlobalFlags {
@@ -14,7 +15,7 @@ export function parseGlobalFlags(args: string[]): GlobalFlags {
       if (!next || next.startsWith("-")) {
         throw new Error("--config requires a file path argument");
       }
-      configPath = resolve(next);
+      configPath = resolve(next.replace(/^~/, homedir()));
       i++;
     } else {
       remainingArgs.push(args[i]);

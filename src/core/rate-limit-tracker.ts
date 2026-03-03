@@ -55,7 +55,9 @@ export class RateLimitTracker {
     const entry = this.limits.get(providerId);
     if (!entry) return false;
     if (Date.now() >= entry.retryAfter) {
-      this.limits.delete(providerId);
+      // Mark as available but retain consecutiveHits so exponential backoff
+      // continues to grow correctly if the provider gets rate-limited again.
+      entry.retryAfter = 0;
       return false;
     }
     return true;
