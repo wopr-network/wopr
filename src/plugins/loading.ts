@@ -22,9 +22,10 @@ import {
   formatMissingRequirements,
 } from "../plugins/requirements.js";
 import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContext } from "../types.js";
+import { resolveA2AToolDependencies } from "./a2a-tool-resolver.js";
 import { createPluginContext } from "./context-factory.js";
 import { enablePlugin, getInstalledPlugins, installPlugin } from "./installation.js";
-import { configSchemas, loadedPlugins, pluginManifests, pluginStates } from "./state.js";
+import { configSchemas, loadedPlugins, pluginManifests, pluginStates, resolvedA2ATools } from "./state.js";
 
 /**
  * Validate plugin config against its declared configSchema.
@@ -508,6 +509,7 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
   pluginManifests.delete(name);
   configSchemas.delete(name);
   pluginStates.delete(name);
+  resolvedA2ATools.delete(name);
 }
 
 export function getLoadedPlugin(name: string): { plugin: WOPRPlugin; context: WOPRPluginContext } | undefined {
@@ -619,6 +621,17 @@ export async function loadAllPlugins(
       }
       failed.push({ name: plugin.name, error: error.message });
     }
+  }
+
+  // ── Post-load: resolve A2A tool dependencies ──
+  const a2aResult = resolveA2AToolDependencies();
+  for (const [pluginName, toolMap] of a2aResult.toolMap) {
+    resolvedA2ATools.set(pluginName, toolMap);
+  }
+  if (a2aResult.resolved.length > 0) {
+    logger.info(
+      `[plugins] A2A tool dependencies: ${a2aResult.resolved.length} resolved, ${a2aResult.missing.length} missing`,
+    );
   }
 
   logger.info(`[plugins] loadAllPlugins complete. Loaded ${loadedCount}/${installed.length} plugins`);

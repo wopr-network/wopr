@@ -6,7 +6,7 @@
  */
 
 import type { StorageApi } from "../storage/api/plugin-storage.js";
-import type { A2AServerConfig } from "./a2a.js";
+import type { A2AServerConfig, A2AToolResult } from "./a2a.js";
 import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
 import type { ConfigSchema } from "./config.js";
 import type { ContextProvider } from "./context-provider.js";
@@ -228,6 +228,8 @@ export interface WOPRPluginContext {
   // A2A tools
   registerA2AServer?(config: A2AServerConfig): void;
   unregisterA2AServer?(config: A2AServerConfig): void;
+  /** Get a resolved A2A tool declared in toolDependencies. Returns undefined if optional and not found. */
+  getA2ATool(toolName: string): ((args: Record<string, unknown>) => Promise<A2AToolResult>) | undefined;
 
   // Logging
   log: PluginLogger;

@@ -36,3 +36,13 @@ export interface A2AServerConfig {
   version?: string;
   tools: A2AToolDefinition[];
 }
+
+/**
+ * Declares a tool dependency that this plugin needs from another plugin's A2A server.
+ */
+export interface A2AToolDependency {
+  /** Tool name to depend on (e.g., "search", "translate") */
+  toolName: string;
+  /** If true, missing tool logs a warning instead of throwing */
+  optional?: boolean;
+}
