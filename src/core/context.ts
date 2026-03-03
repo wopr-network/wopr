@@ -114,9 +114,11 @@ export function resolveContextWindowConfig(
   const margin = overrides?.safetyMargin ?? DEFAULT_SAFETY_MARGIN;
   const effectiveLimit = Math.floor(rawLimit * margin);
 
+  const maxHistoryTokens = overrides?.maxHistoryTokens ?? effectiveLimit;
+
   return {
-    maxHistoryTokens: overrides?.maxHistoryTokens ?? effectiveLimit,
-    maxEntryTokens: overrides?.maxEntryTokens ?? Math.floor(effectiveLimit * DEFAULT_ENTRY_TOKEN_RATIO),
+    maxHistoryTokens,
+    maxEntryTokens: overrides?.maxEntryTokens ?? Math.floor(maxHistoryTokens * DEFAULT_ENTRY_TOKEN_RATIO),
     maxEntries: overrides?.maxEntries ?? DEFAULT_MAX_ENTRIES,
   };
 }
@@ -236,6 +238,10 @@ const bootstrapFilesProvider: ContextProvider = {
   },
 };
 
+// Per-invocation config for conversation_history provider (set by assembleContext)
+let _historyProviderModel: string | undefined;
+let _historyProviderWindowOverrides: (Partial<ContextWindowConfig> & { safetyMargin?: number }) | undefined;
+
 /**
  * Conversation history from session log (progressive since last trigger)
  */
@@ -257,11 +263,7 @@ const conversationHistoryProvider: ContextProvider = {
         .filter((e) => !e.content?.startsWith("Conversation since"));
 
       // Resolve token budget from model set by assembleContext
-      const windowConfig = resolveContextWindowConfig(
-        (this as unknown as { _model?: string })._model,
-        (this as unknown as { _contextWindowOverrides?: Partial<ContextWindowConfig> & { safetyMargin?: number } })
-          ._contextWindowOverrides,
-      );
+      const windowConfig = resolveContextWindowConfig(_historyProviderModel, _historyProviderWindowOverrides);
 
       // Hard cap on entry count
       entries = entries.slice(-windowConfig.maxEntries);
@@ -387,12 +389,8 @@ export async function assembleContext(
   const { providers: providerNames, wrapUntrusted = true, untrustedWrapper = defaultUntrustedWrapper } = options;
 
   // Pass model info to conversation_history provider for token-aware windowing
-  const historyProvider = contextProviders.get("conversation_history");
-  if (historyProvider) {
-    (historyProvider as unknown as { _model?: string })._model = options.model;
-    (historyProvider as unknown as { _contextWindowOverrides?: typeof options.contextWindow })._contextWindowOverrides =
-      options.contextWindow;
-  }
+  _historyProviderModel = options.model;
+  _historyProviderWindowOverrides = options.contextWindow;
 
   // Get active providers
   let activeProviders = Array.from(contextProviders.values());

@@ -72,6 +72,14 @@ describe("resolveContextWindowConfig", () => {
     expect(cfg.maxEntries).toBe(10);
   });
 
+  it("maxEntryTokens does not exceed maxHistoryTokens when maxHistoryTokens is overridden", () => {
+    // Without the fix, maxEntryTokens would be ~28800 (25% of gpt-4o's 115200) but maxHistoryTokens is 1000
+    const cfg = resolveContextWindowConfig("gpt-4o", { maxHistoryTokens: 1000 });
+    expect(cfg.maxHistoryTokens).toBe(1000);
+    expect(cfg.maxEntryTokens).toBeLessThanOrEqual(cfg.maxHistoryTokens);
+    expect(cfg.maxEntryTokens).toBe(Math.floor(1000 * 0.25));
+  });
+
   it("respects custom safetyMargin", () => {
     const cfg = resolveContextWindowConfig("gpt-4o", { safetyMargin: 0.5 });
     expect(cfg.maxHistoryTokens).toBe(Math.floor(128_000 * 0.5));
