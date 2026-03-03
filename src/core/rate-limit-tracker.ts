@@ -35,8 +35,8 @@ export class RateLimitTracker {
     const hits = (existing?.consecutiveHits ?? 0) + 1;
     let backoffMs: number;
     if (retryAfterSeconds !== undefined && retryAfterSeconds > 0) {
-      // Respect Retry-After header
-      backoffMs = retryAfterSeconds * 1000;
+      // Respect Retry-After header, capped to maxDelayMs to avoid locking out a provider indefinitely
+      backoffMs = Math.min(retryAfterSeconds * 1000, this.maxDelayMs);
     } else {
       // Exponential backoff with jitter: base * 2^(hits-1) + random jitter
       backoffMs = Math.min(this.baseDelayMs * 2 ** (hits - 1) + Math.random() * 500, this.maxDelayMs);
@@ -55,7 +55,8 @@ export class RateLimitTracker {
     const entry = this.limits.get(providerId);
     if (!entry) return false;
     if (Date.now() >= entry.retryAfter) {
-      return false; // expired — keep entry so consecutiveHits survives until clearProvider()
+      entry.consecutiveHits = 0; // reset escalation counter after idle period
+      return false;
     }
     return true;
   }
