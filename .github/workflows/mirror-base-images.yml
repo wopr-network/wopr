@@ -32,7 +32,5 @@ jobs:
 
       - name: Mirror image
         run: |
-          docker pull ${{ matrix.source }}
-          docker tag ${{ matrix.source }} ${{ matrix.target }}
-          docker push ${{ matrix.target }}
+          docker buildx imagetools create --tag "${{ matrix.target }}" "${{ matrix.source }}"
           echo "Mirrored ${{ matrix.source }} → ${{ matrix.target }}"

@@ -31,6 +31,11 @@ export function resetSessionContextStorageInit(): void {
   initPromise = null;
 }
 
+/** Returns true if err is a Node.js ENOENT (file/directory not found) error */
+function isENOENT(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException).code === "ENOENT";
+}
+
 /** Build composite key from session name and filename */
 function makeId(sessionName: string, filename: string): string {
   return `${sessionName}:${filename}`;
@@ -176,7 +181,11 @@ export async function migrateSessionContextFromFilesystem(
     let entries: string[];
     try {
       entries = readdirSync(sessionsDir);
-    } catch {
+    } catch (err) {
+      if (isENOENT(err)) return; // directory removed between existsSync and readdirSync
+      logger.error(
+        `[session-context-migrate] Failed to read sessions directory ${sessionsDir} — check permissions: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`,
+      );
       return;
     }
 
@@ -184,14 +193,23 @@ export async function migrateSessionContextFromFilesystem(
       const entryPath = join(sessionsDir, entry);
       try {
         if (!statSync(entryPath).isDirectory()) continue;
-      } catch {
+      } catch (err) {
+        if (isENOENT(err)) continue; // entry removed between readdir and stat
+        logger.warn(`[session-context-migrate] Failed to stat session entry ${entryPath} — skipping: ${err}`);
         continue;
       }
 
       const sessionName = entry;
 
       // Root-level .md files: SOUL.md, IDENTITY.md, AGENTS.md, USER.md, etc.
-      const rootFiles = readdirSync(entryPath).filter((f: string) => f.endsWith(".md"));
+      let rootFiles: string[];
+      try {
+        rootFiles = readdirSync(entryPath).filter((f: string) => f.endsWith(".md"));
+      } catch (err) {
+        if (isENOENT(err)) continue; // directory removed during migration
+        logger.warn(`[session-context-migrate] Failed to read session directory ${entryPath} — skipping: ${err}`);
+        continue;
+      }
       for (const file of rootFiles) {
         await migrateFile(sessionName, file, join(entryPath, file), "session");
       }
