@@ -31,6 +31,11 @@ export function resetSessionContextStorageInit(): void {
   initPromise = null;
 }
 
+/** Returns true if err is a Node.js ENOENT (file/directory not found) error */
+function isENOENT(err: unknown): boolean {
+  return (err as NodeJS.ErrnoException).code === "ENOENT";
+}
+
 /** Build composite key from session name and filename */
 function makeId(sessionName: string, filename: string): string {
   return `${sessionName}:${filename}`;
@@ -177,7 +182,7 @@ export async function migrateSessionContextFromFilesystem(
     try {
       entries = readdirSync(sessionsDir);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return; // directory removed between existsSync and readdirSync
+      if (isENOENT(err)) return; // directory removed between existsSync and readdirSync
       logger.error(
         `[session-context-migrate] Failed to read sessions directory ${sessionsDir} — check permissions: ${err}`,
       );
@@ -189,7 +194,7 @@ export async function migrateSessionContextFromFilesystem(
       try {
         if (!statSync(entryPath).isDirectory()) continue;
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue; // entry removed between readdir and stat
+        if (isENOENT(err)) continue; // entry removed between readdir and stat
         logger.warn(`[session-context-migrate] Failed to stat session entry ${entryPath} — skipping: ${err}`);
         continue;
       }
@@ -201,7 +206,7 @@ export async function migrateSessionContextFromFilesystem(
       try {
         rootFiles = readdirSync(entryPath).filter((f: string) => f.endsWith(".md"));
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue; // directory removed during migration
+        if (isENOENT(err)) continue; // directory removed during migration
         logger.warn(`[session-context-migrate] Failed to read session directory ${entryPath} — skipping: ${err}`);
         continue;
       }
