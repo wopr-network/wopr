@@ -299,8 +299,11 @@ openaiRouter.post(
       c.header("Connection", "keep-alive");
 
       return stream(c, async (s) => {
+        let aborted = false;
+
         // Clean up the ephemeral session when the client disconnects
         s.onAbort(() => {
+          aborted = true;
           deleteSession(sessionName, "client-disconnect").catch(() => {});
         });
 
@@ -315,6 +318,7 @@ openaiRouter.post(
                 ? createInjectionSource("daemon", { trustLevel: "owner" })
                 : createInjectionSource("daemon"),
             onStream: (msg) => {
+              if (aborted) return;
               if (msg.type === "text" && msg.content) {
                 const chunk = {
                   id: requestId,
@@ -336,38 +340,42 @@ openaiRouter.post(
             },
           });
 
-          // Final chunk with finish_reason
-          const finalChunk: Record<string, unknown> = {
-            id: requestId,
-            object: "chat.completion.chunk",
-            created,
-            model: body.model,
-            choices: [
-              {
-                index: 0,
-                delta: {},
-                finish_reason: "stop",
-              },
-            ],
-          };
-          if (body.stream_options?.include_usage) {
-            finalChunk.usage = {
-              prompt_tokens: streamUsage?.inputTokens ?? 0,
-              completion_tokens: streamUsage?.outputTokens ?? 0,
-              total_tokens: (streamUsage?.inputTokens ?? 0) + (streamUsage?.outputTokens ?? 0),
+          if (!aborted) {
+            // Final chunk with finish_reason
+            const finalChunk: Record<string, unknown> = {
+              id: requestId,
+              object: "chat.completion.chunk",
+              created,
+              model: body.model,
+              choices: [
+                {
+                  index: 0,
+                  delta: {},
+                  finish_reason: "stop",
+                },
+              ],
             };
+            if (body.stream_options?.include_usage) {
+              finalChunk.usage = {
+                prompt_tokens: streamUsage?.inputTokens ?? 0,
+                completion_tokens: streamUsage?.outputTokens ?? 0,
+                total_tokens: (streamUsage?.inputTokens ?? 0) + (streamUsage?.outputTokens ?? 0),
+              };
+            }
+            s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+            s.write("data: [DONE]\n\n");
           }
-          s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
-          s.write("data: [DONE]\n\n");
         } catch (err) {
-          const errorChunk = {
-            error: {
-              message: err instanceof Error ? err.message : "Internal server error",
-              type: "server_error",
-            },
-          };
-          s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
-          s.write("data: [DONE]\n\n");
+          if (!aborted) {
+            const errorChunk = {
+              error: {
+                message: err instanceof Error ? err.message : "Internal server error",
+                type: "server_error",
+              },
+            };
+            s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+            s.write("data: [DONE]\n\n");
+          }
         } finally {
           // Clean up the ephemeral session after streaming completes
           await deleteSession(sessionName, "request-complete").catch(() => {});
