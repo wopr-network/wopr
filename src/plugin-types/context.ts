@@ -12,6 +12,7 @@ import type { ConfigSchema } from "./config.js";
 import type { ContextProvider } from "./context-provider.js";
 import type { WOPREventBus, WOPRHookManager } from "./events.js";
 import type { AdapterCapability, ProviderOption } from "./manifest.js";
+import type { ModelProvider } from "./provider.js";
 
 /**
  * Input provided to a setup context provider so it can generate
@@ -204,9 +205,9 @@ export interface WOPRPluginContext {
   getMainConfig(key?: string): unknown;
 
   // LLM providers (credential management + dispatch)
-  registerLLMProvider(provider: unknown): void;
+  registerLLMProvider(provider: ModelProvider): void;
   unregisterLLMProvider(id: string): void;
-  getLLMProvider(id: string): unknown;
+  getLLMProvider(id: string): ModelProvider | undefined;
 
   // Config schemas
   registerConfigSchema(pluginId: string, schema: ConfigSchema): void;

@@ -110,3 +110,13 @@ export type {
   PluginRegistryEntry,
   WOPRPlugin,
 } from "./plugin.js";
+// Provider types
+export type {
+  ModelClient,
+  ModelProvider,
+  ModelQueryOptions,
+  ModelResponse,
+  Tool,
+  ToolCall,
+  ToolResult,
+} from "./provider.js";

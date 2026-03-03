@@ -189,10 +189,7 @@ export function createPluginContext(
     },
 
     getLLMProvider(id: string): ModelProvider | undefined {
-      return (
-        providerPlugins.get(id) ||
-        (providerRegistry.listProviders().find((p) => p.id === id) as unknown as ModelProvider)
-      );
+      return providerPlugins.get(id) ?? providerRegistry.getProvider(id)?.provider;
     },
 
     async getAgentIdentity() {
