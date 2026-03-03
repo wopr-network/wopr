@@ -180,5 +180,48 @@ describe("doctor command", () => {
       expect(pluginCheck?.pass).toBe(false);
       expect(pluginCheck?.detail).toContain("test-plugin");
     });
+
+    it("should pass plugin manifests check when plugin has wopr-plugin.json but no package.json", async () => {
+      vi.mocked(getInstalledPlugins).mockResolvedValue([
+        { name: "test-plugin", version: "1.0.0", path: "/tmp/plugins/test", enabled: true, source: "local" },
+      ] as any);
+      vi.mocked(readFile).mockImplementation((p: any) => {
+        if (String(p).includes("wopr-plugin.json")) {
+          return Promise.resolve(JSON.stringify({ name: "test-plugin", version: "1.0.0" }) as any);
+        }
+        return Promise.reject(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+      });
+      const results = await runChecks();
+      const pluginCheck = results.find((r) => r.name === "Plugin manifests");
+      expect(pluginCheck?.pass).toBe(true);
+    });
+
+    it("should pass environment variables check when WOPR_API_KEY is set", async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      process.env.WOPR_API_KEY = "test-key";
+      try {
+        const results = await runChecks();
+        const envCheck = results.find((r) => r.name === "Environment variables");
+        expect(envCheck?.pass).toBe(true);
+        expect(envCheck?.detail).toContain("WOPR_API_KEY");
+      } finally {
+        delete process.env.WOPR_API_KEY;
+      }
+    });
+
+    it("should pass environment variables check when WOPR_CLAUDE_OAUTH_TOKEN is set", async () => {
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      process.env.WOPR_CLAUDE_OAUTH_TOKEN = "oauth-token";
+      try {
+        const results = await runChecks();
+        const envCheck = results.find((r) => r.name === "Environment variables");
+        expect(envCheck?.pass).toBe(true);
+        expect(envCheck?.detail).toContain("WOPR_CLAUDE_OAUTH_TOKEN");
+      } finally {
+        delete process.env.WOPR_CLAUDE_OAUTH_TOKEN;
+      }
+    });
   });
 });

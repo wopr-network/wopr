@@ -51,14 +51,18 @@ export async function runChecks(): Promise<CheckResult[]> {
   // 3. Environment variables — provider API keys present in the shell environment
   const hasAnthropicEnv = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAIEnv = !!process.env.OPENAI_API_KEY;
-  const hasAnyEnv = hasAnthropicEnv || hasOpenAIEnv;
+  const hasWoprApiKey = !!process.env.WOPR_API_KEY;
+  const hasWoprOauth = !!process.env.WOPR_CLAUDE_OAUTH_TOKEN;
+  const hasAnyEnv = hasAnthropicEnv || hasOpenAIEnv || hasWoprApiKey || hasWoprOauth;
   results.push({
     name: "Environment variables",
     pass: hasAnyEnv,
     detail: hasAnyEnv
-      ? `${[hasAnthropicEnv && "ANTHROPIC_API_KEY", hasOpenAIEnv && "OPENAI_API_KEY"].filter(Boolean).join(", ")} set`
+      ? `${[hasAnthropicEnv && "ANTHROPIC_API_KEY", hasOpenAIEnv && "OPENAI_API_KEY", hasWoprApiKey && "WOPR_API_KEY", hasWoprOauth && "WOPR_CLAUDE_OAUTH_TOKEN"].filter(Boolean).join(", ")} set`
       : "No provider API key environment variables found",
-    fix: hasAnyEnv ? undefined : 'Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or run "wopr auth login" for OAuth',
+    fix: hasAnyEnv
+      ? undefined
+      : 'Set ANTHROPIC_API_KEY, OPENAI_API_KEY, WOPR_API_KEY, or WOPR_CLAUDE_OAUTH_TOKEN, or run "wopr auth login" for OAuth',
   });
 
   // 4. Provider credentials — API keys configured in the config file
@@ -80,11 +84,20 @@ export async function runChecks(): Promise<CheckResult[]> {
       const invalid: string[] = [];
       for (const p of plugins) {
         const pkgPath = join(p.path, "package.json");
-        try {
-          const raw = await readFile(pkgPath, "utf-8");
-          JSON.parse(raw);
-        } catch (err) {
-          invalid.push(`${p.name} (${err instanceof Error ? err.message : String(err)})`);
+        const woprManifestPath = join(p.path, "wopr-plugin.json");
+        let valid = false;
+        for (const manifestPath of [pkgPath, woprManifestPath]) {
+          try {
+            const raw = await readFile(manifestPath, "utf-8");
+            JSON.parse(raw);
+            valid = true;
+            break;
+          } catch {
+            // try next
+          }
+        }
+        if (!valid) {
+          invalid.push(p.name);
         }
       }
       if (invalid.length > 0) {
