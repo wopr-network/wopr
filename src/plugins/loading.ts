@@ -73,6 +73,7 @@ async function initAndActivatePlugin(
   installed: InstalledPlugin,
   plugin: WOPRPlugin,
   context: WOPRPluginContext,
+  manifest: PluginManifest | undefined,
 ): Promise<void> {
   if (plugin.init) {
     try {
@@ -80,9 +81,35 @@ async function initAndActivatePlugin(
       pluginCircuitBreaker.recordSuccess(installed.name);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error(`[plugins] ${installed.name}: init() threw: ${msg}`);
+      logger.error(`[plugins] ${installed.name}: init() failed, cleaning up: ${msg}`);
       pluginCircuitBreaker.recordError(installed.name, err instanceof Error ? err : new Error(msg));
-      throw err;
+
+      // Attempt plugin-side cleanup via shutdown()
+      if (plugin.shutdown) {
+        try {
+          await plugin.shutdown();
+        } catch (shutdownErr: unknown) {
+          logger.warn(
+            `[plugins] ${installed.name}: shutdown() during init cleanup also failed: ${shutdownErr instanceof Error ? shutdownErr.message : String(shutdownErr)}`,
+          );
+        }
+      }
+
+      // Unregister capability providers registered from manifest (Step 2.6)
+      if (manifest?.provides?.capabilities?.length) {
+        const registry = getCapabilityRegistry();
+        for (const entry of manifest.provides.capabilities) {
+          registry.unregisterProvider(entry.type, entry.id);
+        }
+      }
+
+      // Remove from all state maps
+      loadedPlugins.delete(installed.name);
+      pluginManifests.delete(installed.name);
+      configSchemas.delete(installed.name);
+      pluginStates.delete(installed.name);
+
+      throw new Error(`Plugin ${installed.name} init() failed: ${msg}`);
     }
   }
 
@@ -267,7 +294,7 @@ export async function loadPlugin(
 
   // ── Steps 4-5: Initialize and activate (skip for CLI commands) ──
   if (!options.skipInit) {
-    await initAndActivatePlugin(installed, plugin, context);
+    await initAndActivatePlugin(installed, plugin, context, manifest);
   }
 
   return plugin;
