@@ -139,8 +139,11 @@ describe("installAndActivatePlugin TOCTOU lock (WOP-1440)", () => {
     // The two promises must be different objects
     expect(pA).not.toBe(pB);
 
-    // Wait a tick for both to start
-    await new Promise((r) => setTimeout(r, 10));
+    // Flush the microtask queue so both async mock calls have started.
+    // Using Promise.resolve() chains is deterministic — no real-timer dependency.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
 
     // Both installs should have begun (no lock contention between different sources)
     expect(callOrder).toContain("install-a-start");

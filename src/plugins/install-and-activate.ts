@@ -47,6 +47,9 @@ export async function createInjectors(): Promise<PluginInjectors> {
  */
 const installLocks = new Map<string, Promise<InstallAndActivateResult>>();
 
+/** Maximum time to wait for a plugin install before giving up. */
+const INSTALL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Install a plugin from `source`, enable it, hot-load it, and run a provider
  * health check. This is the canonical install sequence — both the plugins route
@@ -54,13 +57,17 @@ const installLocks = new Map<string, Promise<InstallAndActivateResult>>();
  * state and provider availability.
  *
  * Concurrent requests for the same source are serialized via an in-memory lock
- * to prevent TOCTOU races on filesystem checks (WOP-1440).
+ * to prevent TOCTOU races on filesystem checks (WOP-1440). A 5-minute timeout
+ * prevents a hung install from holding the lock indefinitely.
  */
 export function installAndActivatePlugin(source: string): Promise<InstallAndActivateResult> {
   const existing = installLocks.get(source);
   if (existing) return existing;
 
-  const promise = doInstallAndActivate(source).finally(() => {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Plugin install timed out after ${INSTALL_TIMEOUT_MS}ms`)), INSTALL_TIMEOUT_MS),
+  );
+  const promise = Promise.race([doInstallAndActivate(source), timeoutPromise]).finally(() => {
     installLocks.delete(source);
   });
   installLocks.set(source, promise);
