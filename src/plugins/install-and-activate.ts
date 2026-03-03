@@ -41,12 +41,33 @@ export async function createInjectors(): Promise<PluginInjectors> {
 }
 
 /**
+ * In-memory lock map to serialize concurrent install requests for the same
+ * plugin source. Prevents TOCTOU races where two requests both pass
+ * existsSync checks and race to install (WOP-1440).
+ */
+const installLocks = new Map<string, Promise<InstallAndActivateResult>>();
+
+/**
  * Install a plugin from `source`, enable it, hot-load it, and run a provider
  * health check. This is the canonical install sequence — both the plugins route
  * and the instance-plugins route must use this function to ensure consistent DB
  * state and provider availability.
+ *
+ * Concurrent requests for the same source are serialized via an in-memory lock
+ * to prevent TOCTOU races on filesystem checks (WOP-1440).
  */
-export async function installAndActivatePlugin(source: string): Promise<InstallAndActivateResult> {
+export function installAndActivatePlugin(source: string): Promise<InstallAndActivateResult> {
+  const existing = installLocks.get(source);
+  if (existing) return existing;
+
+  const promise = doInstallAndActivate(source).finally(() => {
+    installLocks.delete(source);
+  });
+  installLocks.set(source, promise);
+  return promise;
+}
+
+async function doInstallAndActivate(source: string): Promise<InstallAndActivateResult> {
   const plugin = await installPlugin(source);
   await enablePlugin(plugin.name);
 
