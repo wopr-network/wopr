@@ -87,6 +87,8 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const handler = vi.fn().mockResolvedValue("fetched");
     registerA2ATool({
       name: "http_fetch",
+      pluginId: "test-plugin",
+      namespacedName: "test-plugin:http_fetch",
       description: "Test HTTP fetch",
       schema: z.object({ url: z.string() }),
       handler,
@@ -98,7 +100,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     // The mock `tool` function captured the wrapped handler
     const toolCalls = vi.mocked(mockTool).mock.calls;
     const httpFetchCall = toolCalls.find(
-      (call) => call[0] === "http_fetch",
+      (call) => call[0] === "test-plugin:http_fetch",
     );
     expect(httpFetchCall).toBeDefined();
 
@@ -127,6 +129,8 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const handler = vi.fn().mockResolvedValue("fetched OK");
     registerA2ATool({
       name: "http_fetch",
+      pluginId: "test-plugin",
+      namespacedName: "test-plugin:http_fetch",
       description: "Test HTTP fetch",
       schema: z.object({ url: z.string() }),
       handler,
@@ -136,7 +140,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
 
     const toolCalls = vi.mocked(mockTool).mock.calls;
     const httpFetchCall = toolCalls.find(
-      (call) => call[0] === "http_fetch",
+      (call) => call[0] === "test-plugin:http_fetch",
     );
     const wrappedHandler = httpFetchCall![3] as (args: Record<string, unknown>) => Promise<unknown>;
     const result = await wrappedHandler({ url: "https://example.com" });
@@ -159,6 +163,8 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const handler = vi.fn().mockResolvedValue({ status: "ok" });
     registerA2ATool({
       name: "my_custom_plugin_tool",
+      pluginId: "test-plugin",
+      namespacedName: "test-plugin:my_custom_plugin_tool",
       description: "A plugin tool with no TOOL_CAPABILITY_MAP entry",
       schema: z.object({ input: z.string() }),
       handler,
@@ -168,7 +174,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
 
     const toolCalls = vi.mocked(mockTool).mock.calls;
     const customCall = toolCalls.find(
-      (call) => call[0] === "my_custom_plugin_tool",
+      (call) => call[0] === "test-plugin:my_custom_plugin_tool",
     );
     const wrappedHandler = customCall![3] as (args: Record<string, unknown>) => Promise<unknown>;
     const result = await wrappedHandler({ input: "hello" });
@@ -191,6 +197,8 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const handler = vi.fn().mockResolvedValue("executed");
     registerA2ATool({
       name: "exec_command",
+      pluginId: "test-plugin",
+      namespacedName: "test-plugin:exec_command",
       description: "Test exec",
       schema: z.object({ command: z.string() }),
       handler,
@@ -200,7 +208,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
 
     const toolCalls = vi.mocked(mockTool).mock.calls;
     const execCall = toolCalls.find(
-      (call) => call[0] === "exec_command",
+      (call) => call[0] === "test-plugin:exec_command",
     );
     const wrappedHandler = execCall![3] as (args: Record<string, unknown>) => Promise<unknown>;
     const result = await wrappedHandler({ command: "ls" });
@@ -219,6 +227,8 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const handler = vi.fn().mockResolvedValue("result");
     registerA2ATool({
       name: "http_fetch",
+      pluginId: "test-plugin",
+      namespacedName: "test-plugin:http_fetch",
       description: "Test",
       schema: z.object({ url: z.string() }),
       handler,
@@ -228,7 +238,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
 
     const toolCalls = vi.mocked(mockTool).mock.calls;
     const httpFetchCall = toolCalls.find(
-      (call) => call[0] === "http_fetch",
+      (call) => call[0] === "test-plugin:http_fetch",
     );
     const wrappedHandler = httpFetchCall![3] as (args: Record<string, unknown>) => Promise<unknown>;
     const result = await wrappedHandler({ url: "https://example.com" });

@@ -253,7 +253,7 @@ export function createPluginContext(
 
     // A2A tools - plugins register MCP tools for agent-to-agent communication
     registerA2AServer(config: import("../plugin-types/a2a.js").A2AServerConfig) {
-      registerA2AServerImpl(config);
+      registerA2AServerImpl(pluginName, config);
     },
 
     getA2ATool(toolName: string) {
@@ -265,9 +265,9 @@ export function createPluginContext(
     // Cleanup A2A tools on plugin shutdown
     unregisterA2AServer(config: import("../plugin-types/a2a.js").A2AServerConfig) {
       for (const tool of config.tools) {
-        const removed = unregisterA2ATool(tool.name);
+        const removed = unregisterA2ATool(`${pluginName}:${tool.name}`);
         if (!removed) {
-          logger.warn(`unregisterA2ATool: tool not found`, { toolId: tool.name });
+          logger.warn(`unregisterA2ATool: tool not found`, { toolId: `${pluginName}:${tool.name}` });
         }
       }
     },

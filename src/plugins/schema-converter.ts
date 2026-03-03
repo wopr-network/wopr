@@ -77,8 +77,8 @@ export function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodTypeAny {
  * Register an A2A server with multiple tools.
  * Converts A2AToolDefinition to RegisteredTool format.
  */
-export function registerA2AServerImpl(config: A2AServerConfig): void {
-  logger.info(`[plugins] Registering A2A server: ${config.name} (${config.tools.length} tools)`);
+export function registerA2AServerImpl(pluginId: string, config: A2AServerConfig): void {
+  logger.info(`[plugins] Registering A2A server: ${config.name} (${config.tools.length} tools) for plugin ${pluginId}`);
 
   for (const tool of config.tools) {
     try {
@@ -88,6 +88,7 @@ export function registerA2AServerImpl(config: A2AServerConfig): void {
       // Register with a2a-mcp
       registerA2ATool({
         name: tool.name,
+        pluginId,
         description: tool.description,
         schema: zodSchema,
         handler: async (args, _context) => {
@@ -97,9 +98,9 @@ export function registerA2AServerImpl(config: A2AServerConfig): void {
         },
       });
 
-      logger.info(`[plugins]   registered A2A tool: ${tool.name}`);
+      logger.info(`[plugins]   registered A2A tool: ${pluginId}:${tool.name}`);
     } catch (err) {
-      logger.error(`[plugins]   failed to register A2A tool ${tool.name}:`, err);
+      logger.error(`[plugins]   failed to register A2A tool ${pluginId}:${tool.name}:`, err);
     }
   }
 }
