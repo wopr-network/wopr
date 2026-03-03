@@ -69,82 +69,88 @@ export function createPluginHookManager(_pluginName: string): WOPRHookManager {
     const busEvent = eventMapping[event] || event;
     const isMutable = mutableEvents.has(event);
 
+    async function dispatchMutable(entries: HookEntry[], payload: unknown, event: string): Promise<void> {
+      let dispatchHadError = false;
+      const payloadObj = payload as { session?: string; _prevented?: boolean };
+      let prevented = false;
+      const mutableEvent: MutableHookEvent<unknown> = {
+        data: payload,
+        session: payloadObj.session || "default",
+        preventDefault() {
+          prevented = true;
+          if (payload && typeof payload === "object") {
+            payloadObj._prevented = true;
+          }
+        },
+        isPrevented() {
+          return prevented;
+        },
+      };
+
+      for (const entry of [...entries]) {
+        if (pluginCircuitBreaker.isTripped(_pluginName)) break;
+        let handlerError = false;
+        try {
+          await entry.handler(mutableEvent);
+        } catch (err) {
+          handlerError = true;
+          dispatchHadError = true;
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error(`[plugins] Hook handler error in ${_pluginName} (event: ${event}): ${msg}`);
+          pluginCircuitBreaker.recordError(_pluginName, err instanceof Error ? err : new Error(msg));
+        } finally {
+          // once cleanup always runs regardless of success or failure
+          if (entry.once) {
+            const idx = entries.indexOf(entry);
+            if (idx !== -1) entries.splice(idx, 1);
+          }
+        }
+
+        // Check preventDefault even after handler errors
+        if (!handlerError && mutableEvent.isPrevented()) break;
+        if (pluginCircuitBreaker.isTripped(_pluginName)) break;
+      }
+
+      if (!dispatchHadError && !pluginCircuitBreaker.isTripped(_pluginName)) {
+        pluginCircuitBreaker.recordSuccess(_pluginName);
+      }
+    }
+
+    async function dispatchImmutable(entries: HookEntry[], payload: unknown, event: string): Promise<void> {
+      let dispatchHadError = false;
+
+      for (const entry of [...entries]) {
+        if (pluginCircuitBreaker.isTripped(_pluginName)) break;
+        try {
+          await entry.handler(payload);
+        } catch (err) {
+          dispatchHadError = true;
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error(`[plugins] Hook handler error in ${_pluginName} (event: ${event}): ${msg}`);
+          pluginCircuitBreaker.recordError(_pluginName, err instanceof Error ? err : new Error(msg));
+        } finally {
+          // once cleanup always runs regardless of success or failure
+          if (entry.once) {
+            const idx = entries.indexOf(entry);
+            if (idx !== -1) entries.splice(idx, 1);
+          }
+        }
+
+        if (pluginCircuitBreaker.isTripped(_pluginName)) break;
+      }
+
+      if (!dispatchHadError && !pluginCircuitBreaker.isTripped(_pluginName)) {
+        pluginCircuitBreaker.recordSuccess(_pluginName);
+      }
+    }
+
     const unsubscribe = eventBus.on(busEvent as keyof import("../types.js").WOPREventMap, async (payload, _evt) => {
       const entries = getEntries(event);
 
       if (isMutable) {
-        let prevented = false;
-        let dispatchHadError = false;
-        const payloadObj = payload as { session?: string; _prevented?: boolean };
-        const mutableEvent: MutableHookEvent<unknown> = {
-          data: payload,
-          session: payloadObj.session || "default",
-          preventDefault() {
-            prevented = true;
-            if (payload && typeof payload === "object") {
-              payloadObj._prevented = true;
-            }
-          },
-          isPrevented() {
-            return prevented;
-          },
-        };
-
-        for (const entry of [...entries]) {
-          if (pluginCircuitBreaker.isTripped(_pluginName)) break;
-          let handlerError = false;
-          try {
-            await entry.handler(mutableEvent);
-          } catch (err) {
-            handlerError = true;
-            dispatchHadError = true;
-            const msg = err instanceof Error ? err.message : String(err);
-            logger.error(`[plugins] Hook handler error in ${_pluginName} (event: ${event}): ${msg}`);
-            pluginCircuitBreaker.recordError(_pluginName, err instanceof Error ? err : new Error(msg));
-          } finally {
-            // once cleanup always runs regardless of success or failure
-            if (entry.once) {
-              const idx = entries.indexOf(entry);
-              if (idx !== -1) entries.splice(idx, 1);
-            }
-          }
-
-          // Check preventDefault even after handler errors
-          if (!handlerError && mutableEvent.isPrevented()) break;
-          if (pluginCircuitBreaker.isTripped(_pluginName)) break;
-        }
-
-        // Record success only if the entire dispatch completed without errors
-        if (!dispatchHadError && !pluginCircuitBreaker.isTripped(_pluginName)) {
-          pluginCircuitBreaker.recordSuccess(_pluginName);
-        }
+        await dispatchMutable(entries, payload, event);
       } else {
-        let dispatchHadError = false;
-
-        for (const entry of [...entries]) {
-          if (pluginCircuitBreaker.isTripped(_pluginName)) break;
-          try {
-            await entry.handler(payload);
-          } catch (err) {
-            dispatchHadError = true;
-            const msg = err instanceof Error ? err.message : String(err);
-            logger.error(`[plugins] Hook handler error in ${_pluginName} (event: ${event}): ${msg}`);
-            pluginCircuitBreaker.recordError(_pluginName, err instanceof Error ? err : new Error(msg));
-          } finally {
-            // once cleanup always runs regardless of success or failure
-            if (entry.once) {
-              const idx = entries.indexOf(entry);
-              if (idx !== -1) entries.splice(idx, 1);
-            }
-          }
-
-          if (pluginCircuitBreaker.isTripped(_pluginName)) break;
-        }
-
-        // Record success only if the entire dispatch completed without errors
-        if (!dispatchHadError && !pluginCircuitBreaker.isTripped(_pluginName)) {
-          pluginCircuitBreaker.recordSuccess(_pluginName);
-        }
+        await dispatchImmutable(entries, payload, event);
       }
 
       // If all entries removed, clean up bus subscription
