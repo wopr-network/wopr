@@ -58,8 +58,7 @@ export class RateLimitTracker {
     const entry = this.limits.get(providerId);
     if (!entry) return false;
     if (Date.now() >= entry.retryAfter) {
-      this.limits.delete(providerId);
-      return false;
+      return false; // expired — keep entry so consecutiveHits survives until clearProvider()
     }
     return true;
   }

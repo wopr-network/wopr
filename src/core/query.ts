@@ -10,6 +10,7 @@ import { logger } from "../logger.js";
 import type { ModelQueryOptions, ModelResponse, ProviderConfig } from "../types/provider.js";
 import { config as configManager } from "./config.js";
 import { providerRegistry } from "./providers.js";
+import { rateLimitTracker } from "./rate-limit-tracker.js";
 
 /**
  * Query options normalized from session context
@@ -48,9 +49,10 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     logger.info(`[Query] Auto-selected provider: ${available[0].id}`);
   }
 
+  let resolved: Awaited<ReturnType<typeof providerRegistry.resolveProvider>> | undefined;
   try {
     // Resolve provider with fallback
-    const resolved = await providerRegistry.resolveProvider(config);
+    resolved = await providerRegistry.resolveProvider(config);
 
     // Get global provider defaults from config
     const globalDefaults = configManager.getProviderDefaults(resolved.provider.id);
@@ -107,6 +109,8 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
 
     logger.info(`[Query] Used provider: ${providerUsed} (${modelUsed})`);
 
+    rateLimitTracker.clearProvider(resolved.provider.id);
+
     return {
       content: chunks.join(""),
       provider: providerUsed,
@@ -116,6 +120,15 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     logger.error(`[Query] Failed: ${errorMsg}`);
+
+    const is429 =
+      (error as { status?: number }).status === 429 || (error as { statusCode?: number }).statusCode === 429;
+
+    if (is429 && resolved) {
+      const retryAfter = (error as { retryAfterSeconds?: number }).retryAfterSeconds;
+      rateLimitTracker.markRateLimited(resolved.provider.id, retryAfter);
+    }
+
     throw error;
   }
 }
