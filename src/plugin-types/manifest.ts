@@ -6,6 +6,7 @@
  * plugins in a marketplace and auto-configure them.
  */
 
+import type { A2AToolDependency } from "./a2a.js";
 import type { ConfigSchema } from "./config.js";
 
 /**
@@ -207,6 +208,9 @@ export interface PluginManifest {
 
   /** Other plugins this plugin depends on */
   dependencies?: string[];
+
+  /** A2A tools this plugin needs from other plugins. Auto-resolved after all plugins load. */
+  toolDependencies?: A2AToolDependency[];
 
   /** Other plugins this plugin conflicts with */
   conflicts?: string[];

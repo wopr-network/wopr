@@ -58,6 +58,7 @@ import {
   configSchemas,
   PLUGINS_DIR,
   providerPlugins,
+  resolvedA2ATools,
   setupContextProviders,
   uiComponents,
   webUiExtensions,
@@ -253,6 +254,12 @@ export function createPluginContext(
     // A2A tools - plugins register MCP tools for agent-to-agent communication
     registerA2AServer(config: import("../plugin-types/a2a.js").A2AServerConfig) {
       registerA2AServerImpl(config);
+    },
+
+    getA2ATool(toolName: string) {
+      const pluginToolMap = resolvedA2ATools.get(pluginName);
+      if (!pluginToolMap) return undefined;
+      return pluginToolMap.get(toolName);
     },
 
     // Cleanup A2A tools on plugin shutdown

@@ -7,6 +7,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { A2AToolResult } from "../plugin-types/a2a.js";
 import type { PluginManifest } from "../plugin-types/manifest.js";
 import type { ModelProvider } from "../types/provider.js";
 import type {
@@ -59,6 +60,12 @@ export const pluginExtensions: Map<string, unknown> = new Map();
 
 /** Setup context providers (pluginName -> provider function) */
 export const setupContextProviders: Map<string, SetupContextProvider> = new Map();
+
+/** Resolved A2A tool dependencies per plugin (pluginName -> toolName -> handler) */
+export const resolvedA2ATools: Map<
+  string,
+  Map<string, (args: Record<string, unknown>) => Promise<A2AToolResult>>
+> = new Map();
 
 export function channelKey(channel: { type: string; id: string }): string {
   return `${channel.type}:${channel.id}`;
