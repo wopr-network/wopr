@@ -176,22 +176,36 @@ export async function migrateSessionContextFromFilesystem(
     let entries: string[];
     try {
       entries = readdirSync(sessionsDir);
-    } catch {
-      return;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return; // directory removed between existsSync and readdirSync
+      logger.error(
+        { err, sessionsDir },
+        "[session-context-migrate] Failed to read sessions directory — check permissions",
+      );
+      throw err;
     }
 
     for (const entry of entries) {
       const entryPath = join(sessionsDir, entry);
       try {
         if (!statSync(entryPath).isDirectory()) continue;
-      } catch {
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue; // entry removed between readdir and stat
+        logger.warn({ err, entryPath }, "[session-context-migrate] Failed to stat session entry — skipping");
         continue;
       }
 
       const sessionName = entry;
 
       // Root-level .md files: SOUL.md, IDENTITY.md, AGENTS.md, USER.md, etc.
-      const rootFiles = readdirSync(entryPath).filter((f: string) => f.endsWith(".md"));
+      let rootFiles: string[];
+      try {
+        rootFiles = readdirSync(entryPath).filter((f: string) => f.endsWith(".md"));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue; // directory removed during migration
+        logger.warn({ err, entryPath }, "[session-context-migrate] Failed to read session directory — skipping");
+        continue;
+      }
       for (const file of rootFiles) {
         await migrateFile(sessionName, file, join(entryPath, file), "session");
       }
