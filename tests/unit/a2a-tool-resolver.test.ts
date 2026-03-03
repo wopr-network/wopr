@@ -81,7 +81,7 @@ describe("resolveA2AToolDependencies", () => {
     const proxy = result.toolMap.get("plugin-a")?.get("mytool");
     expect(proxy).toBeDefined();
     const output = await proxy!({ foo: "bar" });
-    expect(handler).toHaveBeenCalledWith({ foo: "bar" }, { sessionName: "" });
+    expect(handler).toHaveBeenCalledWith({ foo: "bar" }, { sessionName: "a2a-dependency" });
     expect(output).toEqual({ content: [{ type: "text", text: "result" }] });
   });
 
