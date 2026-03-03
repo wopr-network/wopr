@@ -5,6 +5,7 @@
  * this object during init() and use it to interact with the WOPR daemon.
  */
 
+import type { InjectionSource } from "../security/types.js";
 import type { StorageApi } from "../storage/api/plugin-storage.js";
 import type { A2AServerConfig, A2AToolResult } from "./a2a.js";
 import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
@@ -62,9 +63,9 @@ export interface PluginInjectOptions {
   images?: string[];
   /**
    * Security source for this injection.
-   * Uses InjectionSource from security types when provided.
+   * Describes who is initiating the injection and their trust level.
    */
-  source?: unknown;
+  source?: InjectionSource;
   /** Control which context providers to use. */
   contextProviders?: string[];
   /** Priority level (higher = processed first within queue) */
