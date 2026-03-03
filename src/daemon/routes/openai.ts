@@ -10,10 +10,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { describeRoute } from "hono-openapi";
+import { config as centralConfig } from "../../core/config.js";
 import { providerRegistry } from "../../core/providers.js";
 import { deleteSession, inject, setSessionContext, setSessionProvider } from "../../core/sessions.js";
 import { createInjectionSource } from "../../security/index.js";
 import type { ProviderConfig } from "../../types/provider.js";
+import { type RoutableProvider, type RoutingStrategy, selectProvider } from "./openai-routing.js";
 
 type AuthEnv = {
   Variables: {
@@ -136,28 +138,48 @@ function makeSessionName(): string {
   return `openai-${randomUUID().slice(0, 12)}`;
 }
 
+const VALID_STRATEGIES = new Set<RoutingStrategy>(["first", "cheapest", "capable", "preferred"]);
+
 /**
  * Resolve which WOPR provider to use for a given OpenAI model string.
  *
- * Strategy:
- * 1. If the model string matches a registered provider ID, use that provider.
- * 2. If a provider's supportedModels includes the model, use that provider.
- * 3. Otherwise fall back to the first available provider.
+ * Routing strategy precedence: per-request header > config default > "first"
  */
-function resolveProviderConfig(model: string): ProviderConfig | null {
+function resolveProviderConfig(model: string, strategyOverride?: string): ProviderConfig | null {
   const providers = providerRegistry.listProviders();
   const available = providers.filter((p) => p.available);
 
   if (available.length === 0) return null;
 
-  // Direct match on provider ID (e.g. model="anthropic")
-  const directMatch = available.find((p) => p.id === model);
-  if (directMatch) {
-    return { name: directMatch.id };
-  }
+  // Build RoutableProvider list with supportedModels from registry
+  const routable: RoutableProvider[] = available.map((p) => {
+    const reg = providerRegistry.getProvider(p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      available: p.available,
+      supportedModels: reg?.provider.supportedModels ?? [],
+    };
+  });
 
-  // Use first available provider, pass the model string through
-  return { name: available[0].id, model };
+  // Determine strategy: header override > config > default "first"
+  const configStrategy = centralConfig.get().routingStrategy;
+  const rawStrategy = strategyOverride ?? configStrategy ?? "first";
+  const strategy: RoutingStrategy = VALID_STRATEGIES.has(rawStrategy as RoutingStrategy)
+    ? (rawStrategy as RoutingStrategy)
+    : "first";
+
+  // Get per-provider configs for cost/preferred data
+  const providerConfigs = centralConfig.get().providers ?? {};
+
+  const selected = selectProvider(routable, model, strategy, providerConfigs);
+  if (!selected) return null;
+
+  // If the selected provider's ID matches the model, no model override needed
+  if (selected.id === model) {
+    return { name: selected.id };
+  }
+  return { name: selected.id, model };
 }
 
 /**
@@ -251,7 +273,8 @@ openaiRouter.post(
     }
 
     // Resolve provider
-    const providerConfig = resolveProviderConfig(body.model);
+    const routingStrategy = c.req.header("X-Routing-Strategy");
+    const providerConfig = resolveProviderConfig(body.model, routingStrategy);
     if (!providerConfig) {
       return c.json(
         {
@@ -299,8 +322,11 @@ openaiRouter.post(
       c.header("Connection", "keep-alive");
 
       return stream(c, async (s) => {
+        let aborted = false;
+
         // Clean up the ephemeral session when the client disconnects
         s.onAbort(() => {
+          aborted = true;
           deleteSession(sessionName, "client-disconnect").catch(() => {});
         });
 
@@ -315,6 +341,7 @@ openaiRouter.post(
                 ? createInjectionSource("daemon", { trustLevel: "owner" })
                 : createInjectionSource("daemon"),
             onStream: (msg) => {
+              if (aborted) return;
               if (msg.type === "text" && msg.content) {
                 const chunk = {
                   id: requestId,
@@ -336,38 +363,42 @@ openaiRouter.post(
             },
           });
 
-          // Final chunk with finish_reason
-          const finalChunk: Record<string, unknown> = {
-            id: requestId,
-            object: "chat.completion.chunk",
-            created,
-            model: body.model,
-            choices: [
-              {
-                index: 0,
-                delta: {},
-                finish_reason: "stop",
-              },
-            ],
-          };
-          if (body.stream_options?.include_usage) {
-            finalChunk.usage = {
-              prompt_tokens: streamUsage?.inputTokens ?? 0,
-              completion_tokens: streamUsage?.outputTokens ?? 0,
-              total_tokens: (streamUsage?.inputTokens ?? 0) + (streamUsage?.outputTokens ?? 0),
+          if (!aborted) {
+            // Final chunk with finish_reason
+            const finalChunk: Record<string, unknown> = {
+              id: requestId,
+              object: "chat.completion.chunk",
+              created,
+              model: body.model,
+              choices: [
+                {
+                  index: 0,
+                  delta: {},
+                  finish_reason: "stop",
+                },
+              ],
             };
+            if (body.stream_options?.include_usage) {
+              finalChunk.usage = {
+                prompt_tokens: streamUsage?.inputTokens ?? 0,
+                completion_tokens: streamUsage?.outputTokens ?? 0,
+                total_tokens: (streamUsage?.inputTokens ?? 0) + (streamUsage?.outputTokens ?? 0),
+              };
+            }
+            s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+            s.write("data: [DONE]\n\n");
           }
-          s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
-          s.write("data: [DONE]\n\n");
         } catch (err) {
-          const errorChunk = {
-            error: {
-              message: err instanceof Error ? err.message : "Internal server error",
-              type: "server_error",
-            },
-          };
-          s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
-          s.write("data: [DONE]\n\n");
+          if (!aborted) {
+            const errorChunk = {
+              error: {
+                message: err instanceof Error ? err.message : "Internal server error",
+                type: "server_error",
+              },
+            };
+            s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+            s.write("data: [DONE]\n\n");
+          }
         } finally {
           // Clean up the ephemeral session after streaming completes
           await deleteSession(sessionName, "request-complete").catch(() => {});

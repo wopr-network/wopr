@@ -66,6 +66,8 @@ vi.mock("../../src/paths.js", () => ({
   CRONS_FILE: "/mock/wopr/crons.json",
   CRON_HISTORY_FILE: "/mock/wopr/cron-history.json",
   GLOBAL_IDENTITY_DIR: "/data/identity",
+  getConfigFilePath: vi.fn(() => "/mock/wopr/config.json"),
+  setConfigFileOverride: vi.fn(),
 }));
 
 vi.mock("../../src/logger.js", () => ({

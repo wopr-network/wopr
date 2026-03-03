@@ -14,6 +14,21 @@ vi.mock("../../src/core/providers.js", () => {
       { id: "anthropic", name: "Anthropic", available: true, lastChecked: Date.now() },
       { id: "openai", name: "OpenAI", available: false, lastChecked: Date.now() },
     ]),
+    getProvider: vi.fn((id: string) => {
+      if (id === "anthropic") {
+        return {
+          provider: {
+            id: "anthropic",
+            name: "Anthropic",
+            defaultModel: "claude-sonnet-4-5-20250929",
+            supportedModels: ["claude-sonnet-4-5-20250929"],
+          },
+          available: true,
+          lastChecked: Date.now(),
+        };
+      }
+      return undefined;
+    }),
     getCredential: vi.fn(() => ({ providerId: "anthropic", credential: "sk-test" })),
     resolveProvider: vi.fn(async () => ({
       name: "anthropic",
@@ -31,6 +46,16 @@ vi.mock("../../src/core/providers.js", () => {
     ProviderRegistry: { getInstance: () => registry },
   };
 });
+
+// Mock config
+vi.mock("../../src/core/config.js", () => ({
+  config: {
+    get: vi.fn(() => ({
+      routingStrategy: undefined,
+      providers: {},
+    })),
+  },
+}));
 
 // Mock sessions
 vi.mock("../../src/core/sessions.js", () => ({
@@ -68,6 +93,7 @@ import { Hono } from "hono";
 import { openaiRouter } from "../../src/daemon/routes/openai.js";
 import { deleteSession, inject, setSessionContext, setSessionProvider } from "../../src/core/sessions.js";
 import { providerRegistry } from "../../src/core/providers.js";
+import { config as centralConfig } from "../../src/core/config.js";
 
 function createTestApp() {
   const app = new Hono();
@@ -84,6 +110,25 @@ describe("OpenAI Compatibility Layer", () => {
       { id: "anthropic", name: "Anthropic", available: true, lastChecked: Date.now() },
       { id: "openai", name: "OpenAI", available: false, lastChecked: Date.now() },
     ]);
+    vi.mocked(providerRegistry.getProvider).mockImplementation((id: string) => {
+      if (id === "anthropic") {
+        return {
+          provider: {
+            id: "anthropic",
+            name: "Anthropic",
+            defaultModel: "claude-sonnet-4-5-20250929",
+            supportedModels: ["claude-sonnet-4-5-20250929"],
+          } as any,
+          available: true,
+          lastChecked: Date.now(),
+        };
+      }
+      return undefined;
+    });
+    vi.mocked(centralConfig.get).mockReturnValue({
+      routingStrategy: undefined,
+      providers: {},
+    } as any);
     vi.mocked(providerRegistry.resolveProvider).mockResolvedValue({
       name: "anthropic",
       provider: { id: "anthropic", name: "Anthropic", defaultModel: "claude-sonnet-4-5-20250929" } as any,
@@ -794,6 +839,87 @@ describe("OpenAI Compatibility Layer", () => {
       expect(res.status).toBe(400);
       const data = await res.json();
       expect(data.error.message).toContain("messages[1]");
+    });
+  });
+
+  // ==========================================================================
+  // Routing strategy
+  // ==========================================================================
+
+  describe("routing strategy", () => {
+    it("respects X-Routing-Strategy header for capable routing", async () => {
+      // Set up two available providers
+      vi.mocked(providerRegistry.listProviders).mockReturnValue([
+        { id: "anthropic", name: "Anthropic", available: true, lastChecked: Date.now() },
+        { id: "openai", name: "OpenAI", available: true, lastChecked: Date.now() },
+      ]);
+      vi.mocked(providerRegistry.getProvider).mockImplementation((id: string) => {
+        if (id === "anthropic") {
+          return {
+            provider: {
+              id: "anthropic",
+              name: "Anthropic",
+              defaultModel: "claude-sonnet-4-5-20250929",
+              supportedModels: ["claude-sonnet-4-5-20250929"],
+            } as any,
+            available: true,
+            lastChecked: Date.now(),
+          };
+        }
+        if (id === "openai") {
+          return {
+            provider: {
+              id: "openai",
+              name: "OpenAI",
+              defaultModel: "gpt-4o",
+              supportedModels: ["gpt-4o", "gpt-4o-mini"],
+            } as any,
+            available: true,
+            lastChecked: Date.now(),
+          };
+        }
+        return undefined;
+      });
+
+      const app = createTestApp();
+      const res = await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Routing-Strategy": "capable",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(setSessionProvider).toHaveBeenCalledWith(
+        expect.stringMatching(/^openai-/),
+        expect.objectContaining({ name: "openai" }),
+      );
+    });
+
+    it("ignores invalid X-Routing-Strategy and falls back to first", async () => {
+      const app = createTestApp();
+      await app.request("/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Routing-Strategy": "invalid-strategy",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
+      });
+
+      // Falls back to first available: anthropic
+      expect(setSessionProvider).toHaveBeenCalledWith(
+        expect.stringMatching(/^openai-/),
+        expect.objectContaining({ name: "anthropic" }),
+      );
     });
   });
 

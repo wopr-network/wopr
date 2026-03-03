@@ -19,13 +19,28 @@ export interface A2AToolResult {
 }
 
 /**
+ * A single chunk yielded by a streaming A2A tool handler.
+ * Chunks are accumulated by the caller into a final A2AToolResult.
+ */
+export interface ToolResultChunk {
+  /** Partial text content for this chunk */
+  text: string;
+  /** If true, this chunk signals an error condition */
+  isError?: boolean;
+}
+
+/**
  * Definition of an A2A tool that plugins can register.
+ *
+ * Handlers may return either a plain Promise<A2AToolResult> (non-streaming)
+ * or an AsyncIterable<ToolResultChunk> for streaming responses. Callers
+ * accumulate streaming chunks into a single result.
  */
 export interface A2AToolDefinition {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>; // JSON Schema format
-  handler: (args: Record<string, unknown>) => Promise<A2AToolResult>;
+  handler: (args: Record<string, unknown>) => Promise<A2AToolResult> | AsyncIterable<ToolResultChunk>;
 }
 
 /**

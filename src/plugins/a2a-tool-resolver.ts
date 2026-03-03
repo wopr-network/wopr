@@ -6,9 +6,9 @@
  * of tool proxies per plugin that context-factory uses for getA2ATool().
  */
 
-import { pluginTools, type RegisteredTool } from "../core/a2a-tools/_base.js";
+import { accumulateChunks, isAsyncIterable, pluginTools, type RegisteredTool } from "../core/a2a-tools/_base.js";
 import { logger } from "../logger.js";
-import type { A2AToolResult } from "../plugin-types/a2a.js";
+import type { A2AToolResult, ToolResultChunk } from "../plugin-types/a2a.js";
 import { pluginManifests } from "./state.js";
 
 export interface ResolveResult {
@@ -69,7 +69,17 @@ export function resolveA2AToolDependencies(): ResolveResult {
       if (registeredTool) {
         const proxy = async (args: Record<string, unknown>): Promise<A2AToolResult> => {
           // Use a sentinel session name to make the absence of a real user session explicit
-          return registeredTool.handler(args, { sessionName: "a2a-dependency" }) as Promise<A2AToolResult>;
+          const rawResult = registeredTool.handler(args, { sessionName: "a2a-dependency" });
+          // Check for direct AsyncIterable (sync handler returning generator)
+          if (isAsyncIterable(rawResult)) {
+            return accumulateChunks(rawResult) as Promise<A2AToolResult>;
+          }
+          // Await in case the handler is async and resolves to an AsyncIterable
+          const handlerResult = await rawResult;
+          if (isAsyncIterable(handlerResult)) {
+            return accumulateChunks(handlerResult as AsyncIterable<ToolResultChunk>) as Promise<A2AToolResult>;
+          }
+          return handlerResult as A2AToolResult;
         };
 
         pluginToolMap.set(dep.toolName, proxy);

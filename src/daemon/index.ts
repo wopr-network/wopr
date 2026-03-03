@@ -563,6 +563,12 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   process.on("SIGTERM", () => shutdown(0));
   process.on("SIGINT", () => shutdown(0));
+  process.on("SIGHUP", () => {
+    daemonLog("[config] SIGHUP received — reloading config");
+    centralConfig.reload().catch((err: unknown) => {
+      winstonLogger.error("[daemon] Config reload error:", err);
+    });
+  });
 
   // Start server
   daemonLog(`Listening on http://${host}:${port}`);

@@ -9,7 +9,7 @@
 # For self-hosted power-user image, see Dockerfile
 
 # --- Build stage ---
-FROM node:24-bookworm-slim AS build
+FROM ghcr.io/wopr-network/base/node:24-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ COPY src/ ./src/
 RUN pnpm run build
 
 # --- Production deps stage ---
-FROM node:24-bookworm-slim AS deps
+FROM ghcr.io/wopr-network/base/node:24-bookworm-slim AS deps
 
 WORKDIR /app
 
@@ -48,7 +48,7 @@ RUN pnpm install --frozen-lockfile --prod
 RUN rm -rf /root/.cache
 
 # --- Runtime stage ---
-FROM node:24-bookworm-slim
+FROM ghcr.io/wopr-network/base/node:24-bookworm-slim
 
 WORKDIR /app
 

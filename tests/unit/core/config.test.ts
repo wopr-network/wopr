@@ -12,6 +12,8 @@ vi.mock("../../../src/logger.js", () => ({
 vi.mock("../../../src/paths.js", () => ({
   WOPR_HOME: "/fake/wopr",
   CONFIG_FILE: "/fake/wopr/config.json",
+  getConfigFilePath: vi.fn(() => "/fake/wopr/config.json"),
+  setConfigFileOverride: vi.fn(),
 }));
 
 import { readFile, writeFile, mkdir, chmod } from "node:fs/promises";
@@ -345,6 +347,56 @@ describe("ConfigManager", () => {
 
       expect(result.daemon.port).toBe(7777);
       expect((result as Record<string, unknown>)["polluted"]).toBeUndefined();
+    });
+  });
+
+  describe("reload()", () => {
+    it("should reload config from disk and log changed sections", async () => {
+      const { logger } = await import("../../../src/logger.js");
+      // Initial load
+      (readFile as Mock).mockResolvedValue(JSON.stringify({ daemon: { port: 7437 } }));
+      (chmod as Mock).mockResolvedValue(undefined);
+      await mgr.load();
+      expect(mgr.get().daemon.port).toBe(7437);
+
+      // Reload with changed port
+      (readFile as Mock).mockResolvedValue(JSON.stringify({ daemon: { port: 9001 } }));
+      await mgr.reload();
+
+      expect(mgr.get().daemon.port).toBe(9001);
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("daemon"));
+    });
+
+    it("should keep existing config and log error if reload fails validation", async () => {
+      const { logger } = await import("../../../src/logger.js");
+      (readFile as Mock).mockResolvedValue(JSON.stringify({ daemon: { port: 7437 } }));
+      (chmod as Mock).mockResolvedValue(undefined);
+      await mgr.load();
+
+      // Provide invalid config (port as string fails Zod schema)
+      (readFile as Mock).mockResolvedValue(JSON.stringify({ daemon: { port: "bad" } }));
+      await mgr.reload();
+
+      // Port should remain unchanged
+      expect(mgr.get().daemon.port).toBe(7437);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("Reload failed"),
+        expect.any(String),
+      );
+    });
+
+    it("should log no-change message when config is identical", async () => {
+      const { logger } = await import("../../../src/logger.js");
+      (readFile as Mock).mockResolvedValue(JSON.stringify({ daemon: { port: 7437 } }));
+      (chmod as Mock).mockResolvedValue(undefined);
+      await mgr.load();
+      vi.clearAllMocks();
+      (readFile as Mock).mockResolvedValue(JSON.stringify({ daemon: { port: 7437 } }));
+      (chmod as Mock).mockResolvedValue(undefined);
+
+      await mgr.reload();
+
+      expect(logger.info).toHaveBeenCalledWith("[config] Reloaded — no changes detected");
     });
   });
 

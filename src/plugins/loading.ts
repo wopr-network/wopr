@@ -12,6 +12,7 @@ import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
 import { config as centralConfig } from "../core/config.js";
 import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
+import { PluginManifestSchema } from "../daemon/openapi/manifest-schema.js";
 import { logger, shouldLogStack } from "../logger.js";
 import type { InstallMethod, PluginManifest, PluginRequirements } from "../plugin-types/manifest.js";
 import {
@@ -27,6 +28,18 @@ import { pluginCircuitBreaker } from "./circuit-breaker.js";
 import { createPluginContext } from "./context-factory.js";
 import { enablePlugin, getInstalledPlugins, installPlugin } from "./installation.js";
 import { configSchemas, loadedPlugins, pluginManifests, pluginStates, resolvedA2ATools } from "./state.js";
+
+/**
+ * Race a promise against a timeout, clearing the timer when either settles.
+ * Prevents timer leaks when the primary promise resolves before the timeout.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 /**
  * Validate plugin config against its declared configSchema.
@@ -89,12 +102,7 @@ async function initAndActivatePlugin(
       if (plugin.shutdown) {
         const shutdownTimeoutMs = manifest?.lifecycle?.shutdownTimeoutMs ?? 30_000;
         try {
-          await Promise.race([
-            plugin.shutdown(),
-            new Promise<void>((_, reject) =>
-              setTimeout(() => reject(new Error(`shutdown timeout after ${shutdownTimeoutMs}ms`)), shutdownTimeoutMs),
-            ),
-          ]);
+          await withTimeout(plugin.shutdown(), shutdownTimeoutMs, "shutdown");
         } catch (shutdownErr: unknown) {
           logger.warn(
             `[plugins] ${installed.name}: shutdown() during init cleanup also failed: ${shutdownErr instanceof Error ? shutdownErr.message : String(shutdownErr)}`,
@@ -323,6 +331,21 @@ export async function loadPlugin(
 }
 
 /**
+ * Validate a raw manifest object against the Zod schema.
+ * Returns true if valid, false if not (and logs a warning with field details).
+ * Does NOT modify the raw object — validation is check-only.
+ */
+function validateManifestSchema(raw: Record<string, unknown>, source: string): boolean {
+  const result = PluginManifestSchema.safeParse(raw);
+  if (!result.success) {
+    const fields = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    logger.warn(`[plugins] Invalid manifest for ${(raw.name as string) ?? source}: ${fields}`);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Read a plugin manifest from package.json "wopr" field or wopr-plugin.json.
  * Returns undefined if no manifest is found (backward compat).
  */
@@ -330,6 +353,9 @@ export function readPluginManifest(pluginPath: string, pkg?: Record<string, unkn
   // 1. Check package.json "wopr" field (top-level manifest)
   const wopr = pkg?.wopr as Record<string, unknown> | undefined;
   if (wopr?.name && wopr.capabilities) {
+    if (!validateManifestSchema(wopr as Record<string, unknown>, pluginPath)) {
+      return undefined;
+    }
     return wopr as unknown as PluginManifest;
   }
 
@@ -339,6 +365,9 @@ export function readPluginManifest(pluginPath: string, pkg?: Record<string, unkn
     try {
       const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
       if (raw.name && raw.capabilities) {
+        if (!validateManifestSchema(raw as Record<string, unknown>, manifestPath)) {
+          return undefined;
+        }
         return raw as PluginManifest;
       }
     } catch (err: unknown) {
@@ -504,12 +533,7 @@ async function deactivateAndShutdownPlugin(name: string, plugin: WOPRPlugin, dra
 
   if (plugin.onDeactivate) {
     try {
-      await Promise.race([
-        plugin.onDeactivate(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`onDeactivate timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
-        ),
-      ]);
+      await withTimeout(plugin.onDeactivate(), drainTimeoutMs, "onDeactivate");
     } catch (err) {
       logger.error(`[plugins] ${name}: onDeactivate failed: ${err}`);
     }
@@ -517,12 +541,7 @@ async function deactivateAndShutdownPlugin(name: string, plugin: WOPRPlugin, dra
 
   if (plugin.shutdown) {
     try {
-      await Promise.race([
-        plugin.shutdown(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`shutdown timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
-        ),
-      ]);
+      await withTimeout(plugin.shutdown(), drainTimeoutMs, "shutdown");
     } catch (err) {
       logger.error(`[plugins] ${name}: shutdown failed: ${err}`);
     }

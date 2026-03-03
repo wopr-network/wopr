@@ -24,6 +24,7 @@ import {
   emitSessionResponseChunk,
 } from "./events.js";
 import { providerRegistry } from "./providers.js";
+import { rateLimitTracker } from "./rate-limit-tracker.js";
 import {
   appendMessageAsync,
   deleteSessionIdAsync,
@@ -716,9 +717,17 @@ async function executeInjectInternal(
         if (error.stack) {
           logger.error(`[wopr] SDK error stack: ${error.stack}`);
         }
+        const is429 =
+          (sdkError as { status?: number }).status === 429 || (sdkError as { statusCode?: number }).statusCode === 429;
+        if (is429) {
+          const retryAfter = (sdkError as { retryAfterSeconds?: number }).retryAfterSeconds;
+          rateLimitTracker.markRateLimited(providerUsed, retryAfter);
+        }
         throw error;
       }
     }
+
+    rateLimitTracker.clearProvider(providerUsed);
 
     let response = collected.join("");
 

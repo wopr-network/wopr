@@ -109,6 +109,7 @@ describe("readPluginManifest", () => {
       wopr: {
         name: "test-plugin",
         version: "1.0.0",
+        description: "A test plugin",
         capabilities: ["chat"],
       },
     };
@@ -178,6 +179,63 @@ describe("readPluginManifest", () => {
     const result = readPluginManifest("/fake/path", mockPkg);
     expect(result).toMatchObject({ name: "test-utility" });
     expect(result!.marketplace).toBeUndefined();
+  });
+
+  it("should return undefined and warn when manifest fails Zod validation (missing required fields)", async () => {
+    const { logger } = await import("../../src/logger.js");
+    vi.mocked(logger.warn).mockClear();
+
+    const pkg = {
+      wopr: {
+        name: "bad-plugin",
+        capabilities: ["chat"],
+        // missing required "version" and "description"
+      },
+    };
+
+    const manifest = readPluginManifest("/some/path", pkg);
+    expect(manifest).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("[plugins] Invalid manifest for bad-plugin"),
+    );
+  });
+
+  it("should return undefined and warn when manifest has wrong field types", async () => {
+    const { logger } = await import("../../src/logger.js");
+    vi.mocked(logger.warn).mockClear();
+
+    const pkg = {
+      wopr: {
+        name: "bad-types",
+        version: 123, // should be string
+        description: "test",
+        capabilities: "not-an-array", // should be array
+      },
+    };
+
+    const manifest = readPluginManifest("/some/path", pkg);
+    expect(manifest).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("[plugins] Invalid manifest for bad-types"),
+    );
+  });
+
+  it("should return valid manifest unchanged when it passes Zod validation", () => {
+    const pkg = {
+      wopr: {
+        name: "good-plugin",
+        version: "1.0.0",
+        description: "A good plugin",
+        capabilities: ["chat"],
+        toolDependencies: [{ name: "foo" }], // extra field not in Zod schema — must be preserved
+      },
+    };
+
+    const manifest = readPluginManifest("/some/path", pkg);
+    expect(manifest).toBeDefined();
+    expect(manifest!.name).toBe("good-plugin");
+    // Extra fields preserved (not stripped by Zod)
+    expect((manifest as any).toolDependencies).toEqual([{ name: "foo" }]);
   });
 });
 
