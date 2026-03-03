@@ -6,7 +6,12 @@ import { client, getDaemonPid } from "./shared.js";
 
 export async function statusCommand(): Promise<void> {
   const pid = getDaemonPid();
-  const running = await client.isRunning();
+  let running: boolean;
+  try {
+    running = await client.isRunning();
+  } catch {
+    running = false;
+  }
 
   if (!pid && !running) {
     logger.info("Daemon:    stopped");
@@ -31,8 +36,10 @@ export async function statusCommand(): Promise<void> {
   }
 
   try {
-    const providers = (await client.getProviders()) as { id: string; available: boolean }[];
-    const active = providers.filter((p) => p.available).length;
+    const providers = await client.getProviders();
+    const active = providers.filter(
+      (p) => typeof p === "object" && p !== null && "available" in p && (p as { available: unknown }).available,
+    ).length;
     logger.info(`Providers: ${active}/${providers.length} active`);
   } catch {
     logger.info("Providers: unknown (API error)");
