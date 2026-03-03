@@ -10,6 +10,7 @@
 
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { logger } from "../logger.js";
+import type { A2AToolResult } from "../plugin-types/a2a.js";
 import {
   accumulateChunks,
   cachedMcpServer,
@@ -31,6 +32,15 @@ import {
   unregisterA2ATool,
   withSecurityCheck,
 } from "./a2a-tools/index.js";
+
+function isA2AToolResult(value: unknown): value is A2AToolResult {
+  if (value == null || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  const hasValidContent = Object.hasOwn(candidate, "content") && Array.isArray(candidate.content);
+  const hasValidIsError = !Object.hasOwn(candidate, "isError") || typeof candidate.isError === "boolean";
+  return hasValidContent && hasValidIsError;
+}
+
 import { config as centralConfig } from "./config.js";
 
 // Re-export public API for consumers (sessions.ts, plugins.ts)
@@ -96,15 +106,25 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     tools.push(
       tool(namespacedKey, pluginTool.description, pluginTool.schema.shape, async (args) => {
         return withSecurityCheck(pluginTool.name, sessionName, async () => {
-          const handlerResult = pluginTool.handler(args, makeContext());
+          const rawResult = pluginTool.handler(args, makeContext());
+          // Check streaming BEFORE awaiting: if the handler returned an AsyncIterable
+          // directly (not wrapped in a Promise), handle it now.
+          if (isAsyncIterable(rawResult)) {
+            return accumulateChunks(rawResult);
+          }
+          // Handler returned a Promise — await it, then check if the resolved value
+          // is itself an AsyncIterable (e.g. async function returning an async generator).
+          const handlerResult = await rawResult;
           if (isAsyncIterable(handlerResult)) {
-            return accumulateChunks(handlerResult);
+            return accumulateChunks(handlerResult as AsyncIterable<import("../plugin-types/a2a.js").ToolResultChunk>);
           }
-          const result = await handlerResult;
-          if (typeof result === "string") {
-            return { content: [{ type: "text", text: result }] };
+          if (typeof handlerResult === "string") {
+            return { content: [{ type: "text", text: handlerResult }] };
           }
-          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          if (isA2AToolResult(handlerResult)) {
+            return handlerResult;
+          }
+          return { content: [{ type: "text", text: JSON.stringify(handlerResult, null, 2) }] };
         });
       }),
     );
