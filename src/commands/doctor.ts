@@ -1,8 +1,7 @@
 /**
  * `wopr doctor` — Validate environment and diagnose common issues.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { access, constants } from "node:fs/promises";
+import { access, constants, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { config } from "../core/config.js";
 import { logger } from "../logger.js";
@@ -49,7 +48,7 @@ export async function runChecks(): Promise<CheckResult[]> {
     });
   }
 
-  // 3. Environment variables — check env vars only (not config file)
+  // 3. Environment variables — provider API keys present in the shell environment
   const hasAnthropicEnv = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAIEnv = !!process.env.OPENAI_API_KEY;
   const hasAnyEnv = hasAnthropicEnv || hasOpenAIEnv;
@@ -62,7 +61,7 @@ export async function runChecks(): Promise<CheckResult[]> {
     fix: hasAnyEnv ? undefined : 'Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or run "wopr auth login" for OAuth',
   });
 
-  // 4. Provider credentials — check config-loaded credentials only (not env vars)
+  // 4. Provider credentials — API keys configured in the config file
   const hasAnthropicConfig = !!(configLoaded && config.get().anthropic?.apiKey);
   const hasAnyConfig = hasAnthropicConfig;
   results.push({
@@ -81,14 +80,11 @@ export async function runChecks(): Promise<CheckResult[]> {
       const invalid: string[] = [];
       for (const p of plugins) {
         const pkgPath = join(p.path, "package.json");
-        if (!existsSync(pkgPath)) {
-          invalid.push(p.name);
-          continue;
-        }
         try {
-          JSON.parse(readFileSync(pkgPath, "utf-8"));
-        } catch {
-          invalid.push(p.name);
+          const raw = await readFile(pkgPath, "utf-8");
+          JSON.parse(raw);
+        } catch (err) {
+          invalid.push(`${p.name} (${err instanceof Error ? err.message : String(err)})`);
         }
       }
       if (invalid.length > 0) {
@@ -121,12 +117,12 @@ export async function runChecks(): Promise<CheckResult[]> {
     results.push({ name: "Data directory", pass: true, detail: WOPR_HOME });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    const isEnoent = code === "ENOENT";
+    const isMissing = code === "ENOENT";
     results.push({
       name: "Data directory",
       pass: false,
-      detail: isEnoent ? `${WOPR_HOME} does not exist` : `${WOPR_HOME} is not writable`,
-      fix: isEnoent ? `Run "mkdir -p ${WOPR_HOME} && chmod 700 ${WOPR_HOME}"` : `Run "chmod 700 ${WOPR_HOME}"`,
+      detail: isMissing ? `${WOPR_HOME} does not exist` : `${WOPR_HOME} is not writable`,
+      fix: isMissing ? `Run "mkdir -p ${WOPR_HOME}"` : `Run "chmod 700 ${WOPR_HOME}"`,
     });
   }
 
