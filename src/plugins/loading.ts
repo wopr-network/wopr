@@ -99,7 +99,13 @@ async function initAndActivatePlugin(
       if (manifest?.provides?.capabilities?.length) {
         const registry = getCapabilityRegistry();
         for (const entry of manifest.provides.capabilities) {
-          registry.unregisterProvider(entry.type, entry.id);
+          try {
+            registry.unregisterProvider(entry.type, entry.id);
+          } catch (unregErr: unknown) {
+            logger.warn(
+              `[plugins] ${installed.name}: failed to unregister capability ${entry.type}:${entry.id} during cleanup: ${unregErr instanceof Error ? unregErr.message : String(unregErr)}`,
+            );
+          }
         }
       }
 
