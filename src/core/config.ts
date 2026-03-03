@@ -3,10 +3,10 @@
  */
 
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { logger } from "../logger.js";
-import { CONFIG_FILE, WOPR_HOME } from "../paths.js";
+import { CONFIG_FILE, getConfigFilePath, WOPR_HOME } from "../paths.js";
 import type { SoulEvilConfig } from "./workspace.js";
 /**
  * Per-provider default settings
@@ -194,12 +194,16 @@ export class ConfigManager {
   private config: WoprConfig = DEFAULT_CONFIG;
 
   async load(): Promise<WoprConfig> {
+    const configPath = getConfigFilePath();
     try {
-      const data = await readFile(CONFIG_FILE, "utf-8");
+      const data = await readFile(configPath, "utf-8");
       const loaded = JSON.parse(data) as Partial<WoprConfig>;
       this.config = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
       // Fix permissions on existing config files (migration for pre-WOP-621 deployments)
-      await chmod(CONFIG_FILE, 0o600).catch(() => {});
+      // Only apply to the default config path — shared/team configs may intentionally have group-read
+      if (configPath === CONFIG_FILE) {
+        await chmod(configPath, 0o600).catch(() => {});
+      }
     } catch (err: unknown) {
       const error = err as NodeJS.ErrnoException;
       if (error.code !== "ENOENT") {
@@ -214,7 +218,7 @@ export class ConfigManager {
 
     const result = WoprConfigSchema.safeParse(this.config);
     if (!result.success) {
-      throw new Error(`Invalid WOPR config at ${CONFIG_FILE}:\n${result.error.message}`);
+      throw new Error(`Invalid WOPR config at ${configPath}:\n${result.error.message}`);
     }
 
     return this.config;
@@ -252,8 +256,9 @@ export class ConfigManager {
 
   async save(): Promise<void> {
     try {
-      await mkdir(WOPR_HOME, { recursive: true, mode: 0o700 });
-      await writeFile(CONFIG_FILE, JSON.stringify(this.config, null, 2), { mode: 0o600 });
+      const configPath = getConfigFilePath();
+      await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
+      await writeFile(configPath, JSON.stringify(this.config, null, 2), { mode: 0o600 });
     } catch (err: unknown) {
       const error = err as Error;
       throw new Error(`Failed to save config: ${error.message}`);

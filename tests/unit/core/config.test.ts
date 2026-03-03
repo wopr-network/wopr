@@ -12,6 +12,8 @@ vi.mock("../../../src/logger.js", () => ({
 vi.mock("../../../src/paths.js", () => ({
   WOPR_HOME: "/fake/wopr",
   CONFIG_FILE: "/fake/wopr/config.json",
+  getConfigFilePath: vi.fn(() => "/fake/wopr/config.json"),
+  setConfigFileOverride: vi.fn(),
 }));
 
 import { readFile, writeFile, mkdir, chmod } from "node:fs/promises";
