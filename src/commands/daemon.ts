@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { logger } from "../logger.js";
-import { LOG_FILE } from "../paths.js";
+import { CONFIG_FILE, getConfigFilePath, LOG_FILE } from "../paths.js";
 import { help } from "./help.js";
 import { getDaemonPid } from "./shared.js";
 
@@ -17,7 +17,12 @@ export async function daemonCommand(subcommand: string | undefined): Promise<voi
         return;
       }
       const script = process.argv[1];
-      const child = spawn("npx", ["tsx", script, "daemon", "run"], {
+      const configFilePath = getConfigFilePath();
+      const spawnArgs = ["tsx", script, "daemon", "run"];
+      if (configFilePath !== CONFIG_FILE) {
+        spawnArgs.push("--config", configFilePath);
+      }
+      const child = spawn("npx", spawnArgs, {
         detached: true,
         stdio: "ignore",
         shell: false,

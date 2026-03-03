@@ -7,6 +7,7 @@
  * src/commands/ -- this file only parses the top-level command and dispatches.
  */
 
+import { parseGlobalFlags } from "./cli-flags.js";
 import { authCommand } from "./commands/auth.js";
 import { configCommand } from "./commands/config.js";
 import { contextCommand } from "./commands/context.js";
@@ -20,8 +21,22 @@ import { tryPluginCommand } from "./commands/plugin-commands.js";
 import { providersCommand } from "./commands/providers.js";
 import { sessionCommand } from "./commands/session.js";
 import { statusCommand } from "./commands/status.js";
+import { setConfigFileOverride } from "./paths.js";
 
-const [, , command, subcommand, ...args] = process.argv;
+let configPath: string | undefined;
+let remainingArgs: string[] = process.argv.slice(2);
+
+try {
+  ({ configPath, remainingArgs } = parseGlobalFlags(process.argv.slice(2)));
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
+
+if (configPath) {
+  setConfigFileOverride(configPath);
+}
+const [command, subcommand, ...args] = remainingArgs;
 
 (async () => {
   if (command === "providers") {
