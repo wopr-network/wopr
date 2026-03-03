@@ -328,11 +328,18 @@ export async function loadPlugin(
  * Returns true if valid, false if not (and logs a warning with field details).
  * Does NOT modify the raw object — validation is check-only.
  */
-function validateManifestSchema(raw: Record<string, unknown>, source: string): boolean {
+function validateManifestSchema(raw: unknown, source: string): boolean {
   const result = PluginManifestSchema.safeParse(raw);
   if (!result.success) {
     const fields = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-    logger.warn(`[plugins] Invalid manifest for ${(raw.name as string) ?? source}: ${fields}`);
+    const displayName =
+      raw != null &&
+      typeof raw === "object" &&
+      "name" in raw &&
+      typeof (raw as Record<string, unknown>).name === "string"
+        ? ((raw as Record<string, unknown>).name as string)
+        : source;
+    logger.warn(`[plugins] Invalid manifest for ${displayName}: ${fields}`);
     return false;
   }
   return true;
@@ -346,7 +353,7 @@ export function readPluginManifest(pluginPath: string, pkg?: Record<string, unkn
   // 1. Check package.json "wopr" field (top-level manifest)
   const wopr = pkg?.wopr as Record<string, unknown> | undefined;
   if (wopr?.name && wopr.capabilities) {
-    if (!validateManifestSchema(wopr as Record<string, unknown>, pluginPath)) {
+    if (!validateManifestSchema(wopr, pluginPath)) {
       return undefined;
     }
     return wopr as unknown as PluginManifest;
@@ -358,7 +365,7 @@ export function readPluginManifest(pluginPath: string, pkg?: Record<string, unkn
     try {
       const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
       if (raw.name && raw.capabilities) {
-        if (!validateManifestSchema(raw as Record<string, unknown>, manifestPath)) {
+        if (!validateManifestSchema(raw, manifestPath)) {
           return undefined;
         }
         return raw as PluginManifest;

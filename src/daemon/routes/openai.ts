@@ -301,6 +301,15 @@ openaiRouter.post(
       return stream(c, async (s) => {
         let aborted = false;
 
+        // Guard against race conditions where the client disconnects between
+        // the aborted check and the actual write completing.
+        const safeWrite = (data: string): void => {
+          if (aborted) return;
+          s.write(data).catch(() => {
+            aborted = true;
+          });
+        };
+
         // Clean up the ephemeral session when the client disconnects
         s.onAbort(() => {
           aborted = true;
@@ -333,7 +342,7 @@ openaiRouter.post(
                     },
                   ],
                 };
-                s.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                safeWrite(`data: ${JSON.stringify(chunk)}\n\n`);
               } else if (msg.type === "complete" && msg.usage) {
                 streamUsage = msg.usage;
               }
@@ -362,8 +371,8 @@ openaiRouter.post(
                 total_tokens: (streamUsage?.inputTokens ?? 0) + (streamUsage?.outputTokens ?? 0),
               };
             }
-            s.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
-            s.write("data: [DONE]\n\n");
+            safeWrite(`data: ${JSON.stringify(finalChunk)}\n\n`);
+            safeWrite("data: [DONE]\n\n");
           }
         } catch (err) {
           if (!aborted) {
@@ -373,8 +382,8 @@ openaiRouter.post(
                 type: "server_error",
               },
             };
-            s.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
-            s.write("data: [DONE]\n\n");
+            safeWrite(`data: ${JSON.stringify(errorChunk)}\n\n`);
+            safeWrite("data: [DONE]\n\n");
           }
         } finally {
           // Clean up the ephemeral session after streaming completes
