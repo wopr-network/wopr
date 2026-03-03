@@ -284,6 +284,20 @@ describe("HealthMonitor", () => {
     expect(snapshot.plugins[0].error).toBe("probe exploded");
   });
 
+  it("coerces non-Error rejection to string in error field", async () => {
+    const throwingPlugin = {
+      name: "string-throw-plugin",
+      version: "1.0.0",
+      healthCheck: vi.fn().mockRejectedValue("plain string rejection"),
+    };
+    loadedPlugins.set("string-throw-plugin", { plugin: throwingPlugin as any, context: {} as any });
+
+    const snapshot = await monitor.check();
+    expect(snapshot.plugins).toHaveLength(1);
+    expect(snapshot.plugins[0].status).toBe("unhealthy");
+    expect(snapshot.plugins[0].error).toBe("plain string rejection");
+  });
+
   it("reports plugin as unhealthy when healthCheck() times out", async () => {
     const hangingPlugin = {
       name: "hang-plugin",
@@ -293,13 +307,17 @@ describe("HealthMonitor", () => {
     loadedPlugins.set("hang-plugin", { plugin: hangingPlugin as any, context: {} as any });
 
     vi.useFakeTimers();
-    const checkPromise = monitor.check();
-    await vi.advanceTimersByTimeAsync(5_000);
-    const snapshot = await checkPromise;
-    vi.useRealTimers();
+    try {
+      const checkPromise = monitor.check();
+      await vi.advanceTimersByTimeAsync(5_000);
+      const snapshot = await checkPromise;
 
-    expect(snapshot.plugins).toHaveLength(1);
-    expect(snapshot.plugins[0].status).toBe("unhealthy");
-    expect(snapshot.plugins[0].error).toContain("timed out");
+      expect(hangingPlugin.healthCheck).toHaveBeenCalledOnce();
+      expect(snapshot.plugins).toHaveLength(1);
+      expect(snapshot.plugins[0].status).toBe("unhealthy");
+      expect(snapshot.plugins[0].error).toContain("timed out");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
