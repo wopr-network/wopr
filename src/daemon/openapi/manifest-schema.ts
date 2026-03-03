@@ -84,6 +84,52 @@ const PluginLifecycleSchema = z.object({
   shutdownTimeoutMs: z.number().optional(),
 });
 
+interface ConfigField {
+  name: string;
+  type: "text" | "password" | "select" | "checkbox" | "number" | "array" | "boolean" | "object" | "textarea";
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  default?: unknown;
+  options?: { value: string; label: string }[];
+  description?: string;
+  items?: ConfigField;
+  fields?: ConfigField[];
+  setupFlow?: "paste" | "oauth" | "qr" | "interactive" | "none";
+  oauthProvider?: string;
+  pattern?: string;
+  patternError?: string;
+  secret?: boolean;
+}
+
+const ConfigFieldSchema: z.ZodType<ConfigField> = z.lazy(() =>
+  z.object({
+    name: z.string(),
+    type: z.enum(["text", "password", "select", "checkbox", "number", "array", "boolean", "object", "textarea"]),
+    label: z.string(),
+    placeholder: z.string().optional(),
+    required: z.boolean().optional(),
+    default: z.unknown().optional(),
+    options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+    description: z.string().optional(),
+    items: ConfigFieldSchema.optional(),
+    fields: z.array(ConfigFieldSchema).optional(),
+    setupFlow: z.enum(["paste", "oauth", "qr", "interactive", "none"]).optional(),
+    oauthProvider: z.string().optional(),
+    pattern: z.string().optional(),
+    patternError: z.string().optional(),
+    secret: z.boolean().optional(),
+  }),
+);
+
+const SetupStepSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  fields: z.array(ConfigFieldSchema).optional(),
+  optional: z.boolean().optional(),
+});
+
 export const PluginManifestSchema = z.object({
   name: z.string(),
   version: z.string(),
@@ -113,6 +159,7 @@ export const PluginManifestSchema = z.object({
     })
     .optional(),
   install: z.array(InstallMethodSchema).optional(),
+  setup: z.array(SetupStepSchema).optional(),
   configSchema: z.unknown().optional(),
   category: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -120,6 +167,7 @@ export const PluginManifestSchema = z.object({
   minCoreVersion: z.string().optional(),
   dependencies: z.array(z.string()).optional(),
   conflicts: z.array(z.string()).optional(),
+  permissions: z.array(z.string()).optional(),
   lifecycle: PluginLifecycleSchema.optional(),
   marketplace: z
     .object({
