@@ -72,7 +72,13 @@ export async function migrateAuthSqlite(authStore: AuthStore): Promise<void> {
 
   logger.info("[auth-migrate] Migrating auth.sqlite to Storage API");
 
-  const { DatabaseSync } = await import("node:sqlite");
+  let DatabaseSync: typeof import("node:sqlite").DatabaseSync;
+  try {
+    ({ DatabaseSync } = await import("node:sqlite"));
+  } catch (importErr) {
+    logger.error(`[auth-migrate] Failed to import node:sqlite: ${importErr}`);
+    throw importErr;
+  }
   let db: InstanceType<typeof DatabaseSync> | undefined;
 
   try {
