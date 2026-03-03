@@ -24,7 +24,16 @@ import { sessionCommand } from "./commands/session.js";
 import { statusCommand } from "./commands/status.js";
 import { setConfigFileOverride } from "./paths.js";
 
-const { configPath, remainingArgs } = parseGlobalFlags(process.argv.slice(2));
+let configPath: string | undefined;
+let remainingArgs: string[] = process.argv.slice(2);
+
+try {
+  ({ configPath, remainingArgs } = parseGlobalFlags(process.argv.slice(2)));
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
+
 if (configPath) {
   if (!existsSync(configPath)) {
     console.error(`Config file not found: ${configPath}`);

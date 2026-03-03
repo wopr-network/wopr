@@ -194,12 +194,13 @@ export class ConfigManager {
   private config: WoprConfig = DEFAULT_CONFIG;
 
   async load(): Promise<WoprConfig> {
+    const configPath = getConfigFilePath();
     try {
-      const data = await readFile(getConfigFilePath(), "utf-8");
+      const data = await readFile(configPath, "utf-8");
       const loaded = JSON.parse(data) as Partial<WoprConfig>;
       this.config = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
       // Fix permissions on existing config files (migration for pre-WOP-621 deployments)
-      await chmod(getConfigFilePath(), 0o600).catch(() => {});
+      await chmod(configPath, 0o600).catch(() => {});
     } catch (err: unknown) {
       const error = err as NodeJS.ErrnoException;
       if (error.code !== "ENOENT") {
@@ -214,7 +215,7 @@ export class ConfigManager {
 
     const result = WoprConfigSchema.safeParse(this.config);
     if (!result.success) {
-      throw new Error(`Invalid WOPR config at ${getConfigFilePath()}:\n${result.error.message}`);
+      throw new Error(`Invalid WOPR config at ${configPath}:\n${result.error.message}`);
     }
 
     return this.config;
