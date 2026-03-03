@@ -111,8 +111,8 @@ export const daemonStep: OnboardStep = async (ctx: OnboardContext) => {
       `Auth: Token-based`,
       `Service: ${installService ? "Yes (auto-start)" : "Manual start"}`,
       "",
-      pc.yellow("⚠️  Save this token!"),
-      pc.cyan(`  ${token.substring(0, 20)}...`),
+      pc.dim("Token stored in config automatically."),
+      pc.cyan(`  [${token.length} characters — run \`wopr config\` to view or rotate]`),
     ].join("\n"),
     "Gateway Configuration",
   );
