@@ -61,7 +61,8 @@ export interface WoprConfig {
    */
   providers?: Record<string, ProviderDefaults>;
   /** Memory system configuration (chunking, sync, etc.) */
-  memory?: Partial<import("../memory/types.js").MemoryConfig>;
+  /** Memory system configuration — passed through to wopr-plugin-memory-semantic */
+  memory?: Record<string, unknown>;
   /** SOUL_EVIL personality override configuration */
   soulEvil?: SoulEvilConfig;
   /**
