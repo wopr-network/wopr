@@ -239,4 +239,67 @@ describe("HealthMonitor", () => {
     const snapshot = await monitor.check();
     expect(snapshot.security.enforcement).toBe("warn");
   });
+
+  it("reports plugin as unhealthy when healthCheck() returns unhealthy", async () => {
+    const failingPlugin = {
+      name: "bad-plugin",
+      version: "1.0.0",
+      healthCheck: vi.fn().mockResolvedValue({ healthy: false, message: "connection lost" }),
+    };
+    loadedPlugins.set("bad-plugin", { plugin: failingPlugin as any, context: {} as any });
+
+    const snapshot = await monitor.check();
+    expect(snapshot.plugins).toHaveLength(1);
+    expect(snapshot.plugins[0].name).toBe("bad-plugin");
+    expect(snapshot.plugins[0].status).toBe("unhealthy");
+    expect(snapshot.plugins[0].error).toBe("connection lost");
+    expect(snapshot.status).toBe("degraded");
+  });
+
+  it("reports plugin as healthy when it has no healthCheck method", async () => {
+    const simplePlugin = {
+      name: "simple-plugin",
+      version: "1.0.0",
+    };
+    loadedPlugins.set("simple-plugin", { plugin: simplePlugin as any, context: {} as any });
+
+    const snapshot = await monitor.check();
+    expect(snapshot.plugins).toHaveLength(1);
+    expect(snapshot.plugins[0].name).toBe("simple-plugin");
+    expect(snapshot.plugins[0].status).toBe("healthy");
+    expect(snapshot.plugins[0].error).toBeUndefined();
+  });
+
+  it("reports plugin as unhealthy when healthCheck() throws", async () => {
+    const throwingPlugin = {
+      name: "crash-plugin",
+      version: "1.0.0",
+      healthCheck: vi.fn().mockRejectedValue(new Error("probe exploded")),
+    };
+    loadedPlugins.set("crash-plugin", { plugin: throwingPlugin as any, context: {} as any });
+
+    const snapshot = await monitor.check();
+    expect(snapshot.plugins).toHaveLength(1);
+    expect(snapshot.plugins[0].status).toBe("unhealthy");
+    expect(snapshot.plugins[0].error).toBe("probe exploded");
+  });
+
+  it("reports plugin as unhealthy when healthCheck() times out", async () => {
+    const hangingPlugin = {
+      name: "hang-plugin",
+      version: "1.0.0",
+      healthCheck: vi.fn().mockImplementation(() => new Promise(() => {})),
+    };
+    loadedPlugins.set("hang-plugin", { plugin: hangingPlugin as any, context: {} as any });
+
+    vi.useFakeTimers();
+    const checkPromise = monitor.check();
+    await vi.advanceTimersByTimeAsync(5_000);
+    const snapshot = await checkPromise;
+    vi.useRealTimers();
+
+    expect(snapshot.plugins).toHaveLength(1);
+    expect(snapshot.plugins[0].status).toBe("unhealthy");
+    expect(snapshot.plugins[0].error).toContain("timed out");
+  });
 });

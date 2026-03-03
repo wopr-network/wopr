@@ -334,6 +334,11 @@ export interface A2AServerConfig {
 // Plugin System
 // ============================================================================
 
+export interface PluginHealthCheckResult {
+  healthy: boolean;
+  message?: string;
+}
+
 export interface WOPRPlugin {
   name: string;
   version: string;
@@ -342,6 +347,8 @@ export interface WOPRPlugin {
   // Runtime hooks (daemon)
   init?(ctx: WOPRPluginContext): Promise<void>;
   shutdown?(): Promise<void>;
+  /** Optional runtime health probe. */
+  healthCheck?(): Promise<PluginHealthCheckResult>;
 
   // Hot-load lifecycle hooks
   /** Called when the plugin is activated at runtime (after init, or on hot-enable). */

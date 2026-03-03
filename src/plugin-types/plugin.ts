@@ -19,6 +19,14 @@ export interface PluginCommand {
 }
 
 /**
+ * Result of a plugin health check probe.
+ */
+export interface PluginHealthCheckResult {
+  healthy: boolean;
+  message?: string;
+}
+
+/**
  * The core plugin interface.
  *
  * Every WOPR plugin must satisfy this interface. The `manifest` field
@@ -35,6 +43,8 @@ export interface WOPRPlugin {
   /** Runtime hooks (daemon) */
   init?(ctx: WOPRPluginContext): Promise<void>;
   shutdown?(): Promise<void>;
+  /** Optional runtime health probe. If implemented, called during periodic health checks. */
+  healthCheck?(): Promise<PluginHealthCheckResult>;
 
   /** Hot-load lifecycle hooks */
   /** Called when the plugin is activated at runtime (after init, or on hot-enable). */

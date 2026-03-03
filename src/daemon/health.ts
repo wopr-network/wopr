@@ -101,7 +101,7 @@ export class HealthMonitor extends EventEmitter {
 
   /** Run a health check and return the snapshot. */
   async check(): Promise<HealthSnapshot> {
-    const plugins = this.checkPlugins();
+    const plugins = await this.checkPlugins();
     const providers = this.checkProviders();
     const sessions = await this.checkSessions();
     const mem = process.memoryUsage();
@@ -155,19 +155,44 @@ export class HealthMonitor extends EventEmitter {
     return this.currentStatus;
   }
 
-  private checkPlugins(): PluginHealth[] {
+  private async checkPlugins(): Promise<PluginHealth[]> {
     const results: PluginHealth[] = [];
     const now = new Date().toISOString();
+    const HEALTH_CHECK_TIMEOUT_MS = 5_000;
 
-    for (const [name] of loadedPlugins) {
-      // Plugin is loaded and running -- mark healthy.
-      // If it exposes a lifecycle healthEndpoint (via pluginManifests),
-      // a future iteration could call it, but for now loaded == healthy.
-      results.push({
-        name,
-        status: "healthy",
-        lastCheck: now,
-      });
+    for (const [name, { plugin }] of loadedPlugins) {
+      if (typeof plugin.healthCheck === "function") {
+        try {
+          const result = await Promise.race([
+            plugin.healthCheck(),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`healthCheck timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`)),
+                HEALTH_CHECK_TIMEOUT_MS,
+              ),
+            ),
+          ]);
+          results.push({
+            name,
+            status: result.healthy ? "healthy" : "unhealthy",
+            lastCheck: now,
+            ...(result.message && !result.healthy ? { error: result.message } : {}),
+          });
+        } catch (err) {
+          results.push({
+            name,
+            status: "unhealthy",
+            lastCheck: now,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      } else {
+        results.push({
+          name,
+          status: "healthy",
+          lastCheck: now,
+        });
+      }
     }
 
     return results;
