@@ -4,6 +4,7 @@
 import { config } from "../core/config.js";
 import { logger } from "../logger.js";
 import { help } from "./help.js";
+import { client } from "./shared.js";
 
 export async function configCommand(subcommand: string | undefined, args: string[]): Promise<void> {
   // Config doesn't require daemon - it's local file management
@@ -43,12 +44,28 @@ export async function configCommand(subcommand: string | undefined, args: string
 
       config.setValue(key, value);
       await config.save();
+
+      // Notify running daemon (if any) so it picks up the change immediately
+      try {
+        await client.setConfigValue(key, value);
+      } catch {
+        // Daemon not running or unreachable — proceed silently
+      }
+
       logger.info(`Set ${key} = ${JSON.stringify(value)}`);
       break;
     }
     case "reset": {
       config.reset();
       await config.save();
+
+      // Notify running daemon (if any) to reset its in-memory config
+      try {
+        await client.resetConfig();
+      } catch {
+        // Daemon not running or unreachable — proceed silently
+      }
+
       logger.info("Config reset to defaults");
       break;
     }
