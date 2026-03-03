@@ -90,6 +90,15 @@ describe("resolveContextWindowConfig", () => {
     const expectedHistory = Math.floor(128_000 * 0.9);
     expect(cfg.maxEntryTokens).toBe(Math.floor(expectedHistory * 0.25));
   });
+
+  it("maxEntryTokens does not exceed maxHistoryTokens when maxHistoryTokens is overridden to a small value", () => {
+    // Regression: maxEntryTokens was derived from effectiveLimit (e.g. 115200 for gpt-4o)
+    // even when maxHistoryTokens was overridden to 500, so a single entry could exceed the budget.
+    const cfg = resolveContextWindowConfig("gpt-4o", { maxHistoryTokens: 500 });
+    expect(cfg.maxHistoryTokens).toBe(500);
+    expect(cfg.maxEntryTokens).toBeLessThanOrEqual(cfg.maxHistoryTokens);
+    expect(cfg.maxEntryTokens).toBe(Math.floor(500 * 0.25));
+  });
 });
 
 describe("assembleContext model option types", () => {

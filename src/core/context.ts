@@ -238,9 +238,81 @@ const bootstrapFilesProvider: ContextProvider = {
   },
 };
 
-// Per-invocation config for conversation_history provider (set by assembleContext)
-let _historyProviderModel: string | undefined;
-let _historyProviderWindowOverrides: (Partial<ContextWindowConfig> & { safetyMargin?: number }) | undefined;
+/**
+ * Build conversation history context part with explicit token-window parameters.
+ * Extracted to avoid singleton mutation for concurrent-session safety.
+ */
+async function buildConversationHistoryContext(
+  session: string,
+  model?: string,
+  contextWindowOverrides?: Partial<ContextWindowConfig> & { safetyMargin?: number },
+): Promise<ContextPart | null> {
+  try {
+    const { readConversationLog } = await import("./sessions.js");
+    const allEntries = await readConversationLog(session);
+
+    if (allEntries.length === 0) return null;
+
+    const lastTrigger = getLastTriggerTimestamp(session);
+    let entries = allEntries
+      .filter((e) => e.ts > lastTrigger)
+      .filter((e) => e.from !== "system")
+      .filter((e) => !e.content?.startsWith("Conversation since"));
+
+    const windowConfig = resolveContextWindowConfig(model, contextWindowOverrides);
+
+    // Hard cap on entry count
+    entries = entries.slice(-windowConfig.maxEntries);
+
+    // Token-aware truncation: walk backwards, accumulate tokens
+    const maxEntryTokens = windowConfig.maxEntryTokens;
+    let totalTokens = 0;
+    const selectedEntries: typeof entries = [];
+
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i];
+      let content = entry.content;
+
+      // Truncate individual entry if it exceeds per-entry budget
+      if (estimateTokens(content) > maxEntryTokens) {
+        content = `${content.slice(0, maxEntryTokens * 4)}\n[...truncated...]`;
+      }
+
+      const tokenCost = estimateTokens(content);
+      if (totalTokens + tokenCost > windowConfig.maxHistoryTokens) {
+        break;
+      }
+
+      totalTokens += tokenCost;
+      selectedEntries.unshift({ ...entry, content });
+    }
+
+    if (selectedEntries.length === 0) return null;
+
+    const formatted = selectedEntries
+      .map((entry) => {
+        const prefix = entry.from === "WOPR" ? "Assistant" : entry.from;
+        return `${prefix}: ${entry.content}`;
+      })
+      .join("\n\n");
+
+    return {
+      content: `Conversation since last interaction:\n${formatted}`,
+      role: "context",
+      metadata: {
+        source: "conversation_log",
+        priority: 30,
+        entryCount: selectedEntries.length,
+        totalTokens,
+        maxHistoryTokens: windowConfig.maxHistoryTokens,
+        since: lastTrigger === 0 ? "beginning" : lastTrigger,
+      },
+    };
+  } catch (err) {
+    logger.error(`[context] Failed to get conversation history:`, err);
+    return null;
+  }
+}
 
 /**
  * Conversation history from session log (progressive since last trigger)
@@ -250,72 +322,7 @@ const conversationHistoryProvider: ContextProvider = {
   priority: 30,
   enabled: true,
   async getContext(session: string): Promise<ContextPart | null> {
-    try {
-      const { readConversationLog } = await import("./sessions.js");
-      const allEntries = await readConversationLog(session);
-
-      if (allEntries.length === 0) return null;
-
-      const lastTrigger = getLastTriggerTimestamp(session);
-      let entries = allEntries
-        .filter((e) => e.ts > lastTrigger)
-        .filter((e) => e.from !== "system")
-        .filter((e) => !e.content?.startsWith("Conversation since"));
-
-      // Resolve token budget from model set by assembleContext
-      const windowConfig = resolveContextWindowConfig(_historyProviderModel, _historyProviderWindowOverrides);
-
-      // Hard cap on entry count
-      entries = entries.slice(-windowConfig.maxEntries);
-
-      // Token-aware truncation: walk backwards, accumulate tokens
-      const maxEntryTokens = windowConfig.maxEntryTokens;
-      let totalTokens = 0;
-      const selectedEntries: typeof entries = [];
-
-      for (let i = entries.length - 1; i >= 0; i--) {
-        const entry = entries[i];
-        let content = entry.content;
-
-        // Truncate individual entry if it exceeds per-entry budget
-        if (estimateTokens(content) > maxEntryTokens) {
-          content = `${content.slice(0, maxEntryTokens * 4)}\n[...truncated...]`;
-        }
-
-        const tokenCost = estimateTokens(content);
-        if (totalTokens + tokenCost > windowConfig.maxHistoryTokens) {
-          break;
-        }
-
-        totalTokens += tokenCost;
-        selectedEntries.unshift({ ...entry, content });
-      }
-
-      if (selectedEntries.length === 0) return null;
-
-      const formatted = selectedEntries
-        .map((entry) => {
-          const prefix = entry.from === "WOPR" ? "Assistant" : entry.from;
-          return `${prefix}: ${entry.content}`;
-        })
-        .join("\n\n");
-
-      return {
-        content: `Conversation since last interaction:\n${formatted}`,
-        role: "context",
-        metadata: {
-          source: "conversation_log",
-          priority: 30,
-          entryCount: selectedEntries.length,
-          totalTokens,
-          maxHistoryTokens: windowConfig.maxHistoryTokens,
-          since: lastTrigger === 0 ? "beginning" : lastTrigger,
-        },
-      };
-    } catch (err) {
-      logger.error(`[context] Failed to get conversation history:`, err);
-      return null;
-    }
+    return buildConversationHistoryContext(session);
   },
 };
 
@@ -388,10 +395,6 @@ export async function assembleContext(
 ): Promise<AssembledContext> {
   const { providers: providerNames, wrapUntrusted = true, untrustedWrapper = defaultUntrustedWrapper } = options;
 
-  // Pass model info to conversation_history provider for token-aware windowing
-  _historyProviderModel = options.model;
-  _historyProviderWindowOverrides = options.contextWindow;
-
   // Get active providers
   let activeProviders = Array.from(contextProviders.values());
 
@@ -416,7 +419,12 @@ export async function assembleContext(
 
   for (const provider of activeProviders) {
     try {
-      const part = await provider.getContext(session, message);
+      // conversation_history provider receives model/overrides as explicit params
+      // to avoid mutating shared singleton state (race condition in concurrent sessions)
+      const part =
+        provider.name === "conversation_history"
+          ? await buildConversationHistoryContext(session, options.model, options.contextWindow)
+          : await provider.getContext(session, message);
       if (part) {
         parts.push({
           ...part,
