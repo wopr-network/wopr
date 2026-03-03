@@ -11,6 +11,7 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { logger } from "../logger.js";
 import {
+  accumulateChunks,
   cachedMcpServer,
   createCapabilityDiscoveryTools,
   createConfigTools,
@@ -19,6 +20,7 @@ import {
   createMemoryTools,
   createSecurityTools,
   createSessionTools,
+  isAsyncIterable,
   mcpServerDirty,
   pluginTools,
   type RegisteredTool,
@@ -94,7 +96,11 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
     tools.push(
       tool(namespacedKey, pluginTool.description, pluginTool.schema.shape, async (args) => {
         return withSecurityCheck(pluginTool.name, sessionName, async () => {
-          const result = await pluginTool.handler(args, makeContext());
+          const handlerResult = pluginTool.handler(args, makeContext());
+          if (isAsyncIterable(handlerResult)) {
+            return accumulateChunks(handlerResult);
+          }
+          const result = await handlerResult;
           if (typeof result === "string") {
             return { content: [{ type: "text", text: result }] };
           }

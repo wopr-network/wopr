@@ -13,6 +13,7 @@ import { tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { logger } from "../../logger.js";
 import { GLOBAL_IDENTITY_DIR, SESSIONS_DIR, WOPR_HOME } from "../../paths.js";
+import type { ToolResultChunk } from "../../plugin-types/a2a.js";
 import {
   canIndexSession,
   getContext,
@@ -177,7 +178,35 @@ export interface RegisteredTool {
   pluginId: string;
   description: string;
   schema: z.ZodObject<z.ZodRawShape>;
-  handler: (args: Record<string, unknown>, context: ToolContext) => Promise<unknown>;
+  handler: (args: Record<string, unknown>, context: ToolContext) => Promise<unknown> | AsyncIterable<ToolResultChunk>;
+}
+
+/**
+ * Check if a handler result is an AsyncIterable (streaming).
+ * Uses Symbol.asyncIterator presence as the discriminant.
+ */
+export function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
+  return value != null && typeof value === "object" && Symbol.asyncIterator in (value as object);
+}
+
+/**
+ * Accumulate all chunks from a streaming handler result into a single A2AToolResult.
+ * Text chunks are concatenated; isError is set if any chunk has isError=true.
+ */
+export async function accumulateChunks(
+  iterable: AsyncIterable<ToolResultChunk>,
+): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
+  const parts: string[] = [];
+  let hasError = false;
+  for await (const chunk of iterable) {
+    parts.push(chunk.text);
+    if (chunk.isError) hasError = true;
+  }
+  const result: { content: Array<{ type: "text"; text: string }>; isError?: boolean } = {
+    content: [{ type: "text", text: parts.join("") }],
+  };
+  if (hasError) result.isError = true;
+  return result;
 }
 
 export interface ToolContext {
