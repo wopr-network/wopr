@@ -946,6 +946,13 @@ export interface WOPRPluginContext {
   // Setup context providers - plugins provide AI instructions for their own setup flow
   registerSetupContextProvider(fn: SetupContextProvider): void;
   unregisterSetupContextProvider(): void;
+
+  // Session context and conversation log APIs
+  session: {
+    getContext(sessionName: string, filename: string): Promise<string | null>;
+    setContext(sessionName: string, filename: string, content: string, source: "global" | "session"): Promise<void>;
+    readConversationLog(sessionName: string, limit?: number): Promise<ConversationEntry[]>;
+  };
 }
 
 /**
