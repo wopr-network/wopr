@@ -366,5 +366,73 @@ describe("OpenAPI endpoints (WOP-522)", () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it("accepts manifest with permissions field", async () => {
+      const { PluginManifestSchema } = await import("../../src/daemon/openapi/manifest-schema.js");
+      const result = PluginManifestSchema.safeParse({
+        name: "test-plugin",
+        version: "1.0.0",
+        description: "A test plugin",
+        capabilities: ["tts"],
+        permissions: ["memory.write", "session.spawn", "a2a.call"],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.permissions).toEqual(["memory.write", "session.spawn", "a2a.call"]);
+      }
+    });
+
+    it("accepts manifest with setup field", async () => {
+      const { PluginManifestSchema } = await import("../../src/daemon/openapi/manifest-schema.js");
+      const result = PluginManifestSchema.safeParse({
+        name: "test-plugin",
+        version: "1.0.0",
+        description: "A test plugin",
+        capabilities: ["tts"],
+        setup: [
+          { id: "api-key", title: "API Key", description: "Enter your API key", optional: false },
+          {
+            id: "model",
+            title: "Model Selection",
+            description: "Choose a model",
+            fields: {
+              title: "Model Config",
+              fields: [{ name: "model", type: "select", label: "Model", options: [{ value: "gpt-4", label: "GPT-4" }] }],
+            },
+            optional: true,
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.setup).toHaveLength(2);
+        expect(result.data.setup![0].id).toBe("api-key");
+        expect(result.data.setup![1].fields).toBeDefined();
+      }
+    });
+
+    it("rejects setup with invalid step (missing required id)", async () => {
+      const { PluginManifestSchema } = await import("../../src/daemon/openapi/manifest-schema.js");
+      const result = PluginManifestSchema.safeParse({
+        name: "test-plugin",
+        version: "1.0.0",
+        description: "A test plugin",
+        capabilities: ["tts"],
+        setup: [{ title: "Step", description: "Missing id field" }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects permissions with non-string entries", async () => {
+      const { PluginManifestSchema } = await import("../../src/daemon/openapi/manifest-schema.js");
+      const result = PluginManifestSchema.safeParse({
+        name: "test-plugin",
+        version: "1.0.0",
+        description: "A test plugin",
+        capabilities: ["tts"],
+        permissions: [123, true],
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });
