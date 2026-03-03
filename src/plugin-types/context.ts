@@ -5,7 +5,9 @@
  * this object during init() and use it to interact with the WOPR daemon.
  */
 
+import type { InjectionSource } from "../security/types.js";
 import type { StorageApi } from "../storage/api/plugin-storage.js";
+import type { ConversationEntry } from "../types.js";
 import type { A2AServerConfig, A2AToolResult } from "./a2a.js";
 import type { ChannelAdapter, ChannelProvider, ChannelRef } from "./channel.js";
 import type { ConfigSchema } from "./config.js";
@@ -62,9 +64,9 @@ export interface PluginInjectOptions {
   images?: string[];
   /**
    * Security source for this injection.
-   * Uses InjectionSource from security types when provided.
+   * Describes who is initiating the injection and their trust level.
    */
-  source?: unknown;
+  source?: InjectionSource;
   /** Control which context providers to use. */
   contextProviders?: string[];
   /** Priority level (higher = processed first within queue) */
@@ -271,4 +273,19 @@ export interface WOPRPluginContext {
 
   // Storage API - plugin-extensible database storage
   storage: StorageApi;
+
+  // Session context and conversation log APIs
+  session: SessionApi;
+}
+
+/**
+ * SQL-backed session APIs exposed to plugins via ctx.session.*
+ */
+export interface SessionApi {
+  /** Get a session context file by name and filename. Returns null if not found. */
+  getContext(sessionName: string, filename: string): Promise<string | null>;
+  /** Upsert a session context file. */
+  setContext(sessionName: string, filename: string, content: string, source: "global" | "session"): Promise<void>;
+  /** Read conversation log entries for a session, optionally limited to the last N entries. */
+  readConversationLog(sessionName: string, limit?: number): Promise<ConversationEntry[]>;
 }

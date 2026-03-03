@@ -20,3 +20,13 @@ export const CONFIG_FILE = join(WOPR_HOME, "config.json");
 // Global identity directory - shared across all sessions
 // Identity files here take precedence over per-session files
 export const GLOBAL_IDENTITY_DIR = process.env.WOPR_GLOBAL_IDENTITY || join(WOPR_HOME, "identity");
+
+let configFileOverride: string | undefined;
+
+export function setConfigFileOverride(path: string | undefined): void {
+  configFileOverride = path;
+}
+
+export function getConfigFilePath(): string {
+  return configFileOverride ?? CONFIG_FILE;
+}

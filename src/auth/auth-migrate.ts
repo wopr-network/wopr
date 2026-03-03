@@ -3,16 +3,12 @@
  */
 
 import { existsSync, readFileSync, renameSync } from "node:fs";
-import { createRequire } from "node:module";
 import { join } from "node:path";
 import type { AuthState } from "../auth.js";
 import { isEncryptedData } from "../auth.js";
 import { logger } from "../logger.js";
 import { AUTH_FILE, WOPR_HOME } from "../paths.js";
 import type { AuthStore } from "./auth-store.js";
-
-const _require = createRequire(import.meta.url);
-const { DatabaseSync } = _require("node:sqlite");
 
 const AUTH_SQLITE_PATH = join(WOPR_HOME, "auth.sqlite");
 
@@ -76,6 +72,13 @@ export async function migrateAuthSqlite(authStore: AuthStore): Promise<void> {
 
   logger.info("[auth-migrate] Migrating auth.sqlite to Storage API");
 
+  let DatabaseSync: typeof import("node:sqlite").DatabaseSync;
+  try {
+    ({ DatabaseSync } = await import("node:sqlite"));
+  } catch (importErr) {
+    logger.error(`[auth-migrate] Failed to import node:sqlite: ${importErr}`);
+    throw importErr;
+  }
   let db: InstanceType<typeof DatabaseSync> | undefined;
 
   try {

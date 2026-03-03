@@ -3,10 +3,10 @@
  */
 
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { logger } from "../logger.js";
-import { CONFIG_FILE, WOPR_HOME } from "../paths.js";
+import { CONFIG_FILE, getConfigFilePath, WOPR_HOME } from "../paths.js";
 import type { SoulEvilConfig } from "./workspace.js";
 /**
  * Per-provider default settings
@@ -18,6 +18,8 @@ export interface ProviderDefaults {
   topP?: number;
   reasoningEffort?: string; // For Codex: minimal/low/medium/high/xhigh
   options?: Record<string, unknown>;
+  costPerToken?: number;
+  preferred?: boolean;
 }
 
 export interface WoprConfig {
@@ -60,8 +62,11 @@ export interface WoprConfig {
    *       providers.anthropic.model = "claude-opus-4-5-20251101"
    */
   providers?: Record<string, ProviderDefaults>;
+  /** Default inference routing strategy */
+  routingStrategy?: "first" | "cheapest" | "capable" | "preferred";
   /** Memory system configuration (chunking, sync, etc.) */
-  memory?: Partial<import("../memory/types.js").MemoryConfig>;
+  /** Memory system configuration — passed through to wopr-plugin-memory-semantic */
+  memory?: Record<string, unknown>;
   /** SOUL_EVIL personality override configuration */
   soulEvil?: SoulEvilConfig;
   /**
@@ -98,6 +103,8 @@ const ProviderDefaultsSchema = z.object({
   topP: z.number().optional(),
   reasoningEffort: z.string().optional(),
   options: z.record(z.string(), z.unknown()).optional(),
+  costPerToken: z.number().optional(),
+  preferred: z.boolean().optional(),
 });
 
 const WoprConfigSchema = z.object({
@@ -136,6 +143,7 @@ const WoprConfigSchema = z.object({
     })
     .optional(),
   providers: z.record(z.string(), ProviderDefaultsSchema).optional(),
+  routingStrategy: z.enum(["first", "cheapest", "capable", "preferred"]).optional(),
   memory: z.record(z.string(), z.unknown()).optional(),
   soulEvil: z
     .object({
@@ -191,14 +199,19 @@ const DEFAULT_CONFIG: WoprConfig = {
 
 export class ConfigManager {
   private config: WoprConfig = DEFAULT_CONFIG;
+  private reloadInFlight: Promise<void> | null = null;
 
   async load(): Promise<WoprConfig> {
+    const configPath = getConfigFilePath();
     try {
-      const data = await readFile(CONFIG_FILE, "utf-8");
+      const data = await readFile(configPath, "utf-8");
       const loaded = JSON.parse(data) as Partial<WoprConfig>;
       this.config = this.merge(DEFAULT_CONFIG, loaded) as WoprConfig;
       // Fix permissions on existing config files (migration for pre-WOP-621 deployments)
-      await chmod(CONFIG_FILE, 0o600).catch(() => {});
+      // Only apply to the default config path — shared/team configs may intentionally have group-read
+      if (configPath === CONFIG_FILE) {
+        await chmod(configPath, 0o600).catch(() => {});
+      }
     } catch (err: unknown) {
       const error = err as NodeJS.ErrnoException;
       if (error.code !== "ENOENT") {
@@ -213,7 +226,7 @@ export class ConfigManager {
 
     const result = WoprConfigSchema.safeParse(this.config);
     if (!result.success) {
-      throw new Error(`Invalid WOPR config at ${CONFIG_FILE}:\n${result.error.message}`);
+      throw new Error(`Invalid WOPR config at ${configPath}:\n${result.error.message}`);
     }
 
     return this.config;
@@ -251,8 +264,9 @@ export class ConfigManager {
 
   async save(): Promise<void> {
     try {
-      await mkdir(WOPR_HOME, { recursive: true, mode: 0o700 });
-      await writeFile(CONFIG_FILE, JSON.stringify(this.config, null, 2), { mode: 0o600 });
+      const configPath = getConfigFilePath();
+      await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
+      await writeFile(configPath, JSON.stringify(this.config, null, 2), { mode: 0o600 });
     } catch (err: unknown) {
       const error = err as Error;
       throw new Error(`Failed to save config: ${error.message}`);
@@ -316,6 +330,48 @@ export class ConfigManager {
       this.config.providers[providerId] = {};
     }
     (this.config.providers[providerId] as Record<string, unknown>)[key] = value;
+  }
+
+  /**
+   * Reload config from disk. Validates new config before applying.
+   * Logs a summary of changed top-level keys. Safe to call at any time.
+   */
+  async reload(): Promise<void> {
+    if (this.reloadInFlight) {
+      return this.reloadInFlight;
+    }
+    this.reloadInFlight = this._doReload().finally(() => {
+      this.reloadInFlight = null;
+    });
+    return this.reloadInFlight;
+  }
+
+  private async _doReload(): Promise<void> {
+    const prev = structuredClone(this.config);
+    try {
+      await this.load();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error("[config] Reload failed — keeping existing config:", message);
+      this.config = prev;
+      return;
+    }
+    // Log changed top-level keys
+    const changed: string[] = [];
+    const keys = new Set([...Object.keys(prev), ...Object.keys(this.config)]);
+    for (const key of keys) {
+      if (
+        JSON.stringify((prev as unknown as Record<string, unknown>)[key]) !==
+        JSON.stringify((this.config as unknown as Record<string, unknown>)[key])
+      ) {
+        changed.push(key);
+      }
+    }
+    if (changed.length > 0) {
+      logger.info(`[config] Reloaded — changed sections: ${changed.join(", ")}`);
+    } else {
+      logger.info("[config] Reloaded — no changes detected");
+    }
   }
 
   private merge(defaults: unknown, overrides: unknown): unknown {

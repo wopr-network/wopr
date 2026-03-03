@@ -12,8 +12,8 @@ import { promisify } from "node:util";
 import { tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { logger } from "../../logger.js";
-import { parseTemporalFilter } from "../../memory/index.js";
 import { GLOBAL_IDENTITY_DIR, SESSIONS_DIR, WOPR_HOME } from "../../paths.js";
+import type { ToolResultChunk } from "../../plugin-types/a2a.js";
 import {
   canIndexSession,
   getContext,
@@ -42,7 +42,6 @@ export {
   sep,
   z,
   logger,
-  parseTemporalFilter,
   GLOBAL_IDENTITY_DIR,
   SESSIONS_DIR,
   WOPR_HOME,
@@ -61,6 +60,115 @@ export const execAsync = promisify(exec);
 export const GLOBAL_MEMORY_DIR = join(GLOBAL_IDENTITY_DIR, "memory");
 
 // ---------------------------------------------------------------------------
+// Temporal filter (moved from src/memory/ — memory is a plugin concern)
+// ---------------------------------------------------------------------------
+
+export type TemporalFilter = {
+  /** Start timestamp (inclusive) - ms since epoch */
+  after?: number;
+  /** End timestamp (inclusive) - ms since epoch */
+  before?: number;
+};
+
+export function parseTemporalFilter(expr: string): TemporalFilter | null {
+  if (!expr || typeof expr !== "string") {
+    return null;
+  }
+
+  const trimmed = expr.trim();
+  const trimmedLower = trimmed.toLowerCase();
+
+  const relativeMatch = trimmedLower.match(/^(\d+)(h|d|w|m)$/);
+  if (relativeMatch) {
+    const amount = parseInt(relativeMatch[1], 10);
+    const unit = relativeMatch[2];
+    const now = Date.now();
+
+    let msAgo: number;
+    switch (unit) {
+      case "h":
+        msAgo = amount * 60 * 60 * 1000;
+        break;
+      case "d":
+        msAgo = amount * 24 * 60 * 60 * 1000;
+        break;
+      case "w":
+        msAgo = amount * 7 * 24 * 60 * 60 * 1000;
+        break;
+      case "m":
+        msAgo = amount * 30 * 24 * 60 * 60 * 1000;
+        break;
+      default:
+        return null;
+    }
+
+    return { after: now - msAgo };
+  }
+
+  const lastMatch = trimmedLower.match(/^last\s+(\d+)\s+(hours?|days?|weeks?|months?)$/);
+  if (lastMatch) {
+    const amount = parseInt(lastMatch[1], 10);
+    const unit = lastMatch[2];
+    const now = Date.now();
+
+    let msAgo: number;
+    if (unit.startsWith("hour")) {
+      msAgo = amount * 60 * 60 * 1000;
+    } else if (unit.startsWith("day")) {
+      msAgo = amount * 24 * 60 * 60 * 1000;
+    } else if (unit.startsWith("week")) {
+      msAgo = amount * 7 * 24 * 60 * 60 * 1000;
+    } else if (unit.startsWith("month")) {
+      msAgo = amount * 30 * 24 * 60 * 60 * 1000;
+    } else {
+      return null;
+    }
+
+    return { after: now - msAgo };
+  }
+
+  const rangeMatch = trimmed.match(
+    /^(\d{4}-\d{2}-\d{2})(?:[tT][\d:]+)?(?:\s*(?:-|to)\s*)(\d{4}-\d{2}-\d{2})(?:[tT][\d:]+)?$/i,
+  );
+  if (rangeMatch) {
+    const startDate = new Date(rangeMatch[1]);
+    const endDate = new Date(rangeMatch[2]);
+    endDate.setHours(23, 59, 59, 999);
+
+    if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+      return {
+        after: startDate.getTime(),
+        before: endDate.getTime(),
+      };
+    }
+  }
+
+  const singleDateMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})$/);
+  if (singleDateMatch) {
+    const startDate = new Date(singleDateMatch[1]);
+    const endDate = new Date(singleDateMatch[1]);
+    endDate.setHours(23, 59, 59, 999);
+
+    if (!Number.isNaN(startDate.getTime())) {
+      return {
+        after: startDate.getTime(),
+        before: endDate.getTime(),
+      };
+    }
+  }
+
+  const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})[tT]([\d:]+)$/);
+  if (isoMatch) {
+    const date = new Date(`${isoMatch[1]}T${isoMatch[2]}`);
+    if (!Number.isNaN(date.getTime())) {
+      return { after: date.getTime() };
+    }
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -70,7 +178,40 @@ export interface RegisteredTool {
   pluginId: string;
   description: string;
   schema: z.ZodObject<z.ZodRawShape>;
-  handler: (args: Record<string, unknown>, context: ToolContext) => Promise<unknown>;
+  handler: (args: Record<string, unknown>, context: ToolContext) => Promise<unknown> | AsyncIterable<ToolResultChunk>;
+}
+
+/**
+ * Check if a handler result is an AsyncIterable (streaming).
+ * Uses Symbol.asyncIterator presence as the discriminant.
+ */
+export function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
+  return (
+    value != null &&
+    typeof value === "object" &&
+    Symbol.asyncIterator in (value as object) &&
+    typeof (value as Record<symbol, unknown>)[Symbol.asyncIterator] === "function"
+  );
+}
+
+/**
+ * Accumulate all chunks from a streaming handler result into a single A2AToolResult.
+ * Text chunks are concatenated; isError is set if any chunk has isError=true.
+ */
+export async function accumulateChunks(
+  iterable: AsyncIterable<ToolResultChunk>,
+): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
+  const parts: string[] = [];
+  let hasError = false;
+  for await (const chunk of iterable) {
+    parts.push(chunk.text);
+    if (chunk.isError) hasError = true;
+  }
+  const result: { content: Array<{ type: "text"; text: string }>; isError?: boolean } = {
+    content: [{ type: "text", text: parts.join("") }],
+  };
+  if (hasError) result.isError = true;
+  return result;
 }
 
 export interface ToolContext {

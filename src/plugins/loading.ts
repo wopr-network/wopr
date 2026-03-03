@@ -12,6 +12,7 @@ import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
 import { config as centralConfig } from "../core/config.js";
 import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
+import { PluginManifestSchema } from "../daemon/openapi/manifest-schema.js";
 import { logger, shouldLogStack } from "../logger.js";
 import type { InstallMethod, PluginManifest, PluginRequirements } from "../plugin-types/manifest.js";
 import {
@@ -161,7 +162,7 @@ export async function loadPlugin(
   installed: InstalledPlugin,
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
   options: LoadPluginOptions = {},
 ): Promise<WOPRPlugin> {
@@ -330,6 +331,21 @@ export async function loadPlugin(
 }
 
 /**
+ * Validate a raw manifest object against the Zod schema.
+ * Returns true if valid, false if not (and logs a warning with field details).
+ * Does NOT modify the raw object — validation is check-only.
+ */
+function validateManifestSchema(raw: Record<string, unknown>, source: string): boolean {
+  const result = PluginManifestSchema.safeParse(raw);
+  if (!result.success) {
+    const fields = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+    logger.warn(`[plugins] Invalid manifest for ${(raw.name as string) ?? source}: ${fields}`);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Read a plugin manifest from package.json "wopr" field or wopr-plugin.json.
  * Returns undefined if no manifest is found (backward compat).
  */
@@ -337,6 +353,9 @@ export function readPluginManifest(pluginPath: string, pkg?: Record<string, unkn
   // 1. Check package.json "wopr" field (top-level manifest)
   const wopr = pkg?.wopr as Record<string, unknown> | undefined;
   if (wopr?.name && wopr.capabilities) {
+    if (!validateManifestSchema(wopr as Record<string, unknown>, pluginPath)) {
+      return undefined;
+    }
     return wopr as unknown as PluginManifest;
   }
 
@@ -346,6 +365,9 @@ export function readPluginManifest(pluginPath: string, pkg?: Record<string, unkn
     try {
       const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
       if (raw.name && raw.capabilities) {
+        if (!validateManifestSchema(raw as Record<string, unknown>, manifestPath)) {
+          return undefined;
+        }
         return raw as PluginManifest;
       }
     } catch (err: unknown) {
@@ -382,7 +404,7 @@ export async function resolveDependencies(
   dependencies: string[] | undefined,
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
   options: LoadPluginOptions,
 ): Promise<void> {
@@ -616,7 +638,7 @@ export async function switchProvider(
   options: ProviderSwitchOptions,
   injectors: {
     inject: (session: string, message: string, opts?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
 ): Promise<void> {
   const { fromPlugin, toPlugin, drainTimeoutMs } = options;
@@ -657,7 +679,7 @@ export async function switchProvider(
 export async function loadAllPlugins(
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
   options: LoadPluginOptions = {},
 ): Promise<void> {

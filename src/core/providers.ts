@@ -1,5 +1,6 @@
 import { logger } from "../logger.js";
 import { emitProviderAdded, emitProviderRemoved, emitProviderStatus } from "./events.js";
+import { rateLimitTracker } from "./rate-limit-tracker.js";
 
 /**
  * Provider Registry & Management System
@@ -264,6 +265,13 @@ export class ProviderRegistry {
       const reg = this.providers.get(providerName);
       if (!reg) {
         errors.push(`Provider not found: ${providerName}`);
+        continue;
+      }
+
+      // Check if provider is currently rate-limited
+      if (rateLimitTracker.isRateLimited(providerName)) {
+        const retryMs = rateLimitTracker.getRetryAfterMs(providerName);
+        errors.push(`Provider rate-limited: ${providerName} (retry in ${Math.ceil(retryMs / 1000)}s)`);
         continue;
       }
 

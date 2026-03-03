@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:24-bookworm-slim AS builder
+FROM ghcr.io/wopr-network/base/node:24-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ RUN pnpm run build
 RUN pnpm prune --prod
 
 # Stage 2: Runtime
-FROM node:24-bookworm-slim
+FROM ghcr.io/wopr-network/base/node:24-bookworm-slim
 
 # Patch npm's bundled transitive deps and install pnpm via npm (not corepack)
 # Installing via npm avoids the corepack cache with its bundled vulnerable node-tar

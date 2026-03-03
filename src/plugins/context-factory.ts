@@ -23,6 +23,8 @@ import {
   unregisterContextProvider as unregisterCtxProvider,
 } from "../core/context.js";
 import { providerRegistry } from "../core/providers.js";
+import { getSessionContext, setSessionContext } from "../core/session-context-repository.js";
+import { readConversationLogAsync } from "../core/session-repository.js";
 import { cancelInject as cancelSessionInject, logMessage as logMessageToSession } from "../core/sessions.js";
 import { resolveIdentity, resolveUserProfile } from "../core/workspace.js";
 import { logger } from "../logger.js";
@@ -68,7 +70,7 @@ export function createPluginContext(
   plugin: InstalledPlugin,
   injectors: {
     inject: (session: string, message: string, options?: PluginInjectOptions) => Promise<string>;
-    getSessions: () => string[];
+    getSessions: () => string[] | Promise<string[]>;
   },
 ): WOPRPluginContext {
   const pluginName = plugin.name;
@@ -314,5 +316,13 @@ export function createPluginContext(
 
     // Storage API - plugin-extensible database storage
     storage: getStorage(),
+
+    // Session context and conversation log APIs
+    session: {
+      getContext: (sessionName: string, filename: string) => getSessionContext(sessionName, filename),
+      setContext: (sessionName: string, filename: string, content: string, source: "global" | "session") =>
+        setSessionContext(sessionName, filename, content, source),
+      readConversationLog: (sessionName: string, limit?: number) => readConversationLogAsync(sessionName, limit),
+    },
   };
 }

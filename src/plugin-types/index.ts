@@ -25,7 +25,7 @@ export type {
   TableSchema,
 } from "../storage/api/plugin-storage.js";
 // A2A types
-export type { A2AServerConfig, A2AToolDefinition, A2AToolResult } from "./a2a.js";
+export type { A2AServerConfig, A2AToolDefinition, A2AToolResult, ToolResultChunk } from "./a2a.js";
 // Channel types
 export type {
   ChannelAdapter,

@@ -1,7 +1,4 @@
-import { createRequire } from "node:module";
 import type { OpusConfig, VoiceParticipant } from "./types.js";
-
-const require = createRequire(import.meta.url);
 
 /** Default Opus config: 48kHz stereo, 20ms frames */
 const DEFAULT_OPUS_CONFIG: Required<OpusConfig> = {
@@ -11,10 +8,15 @@ const DEFAULT_OPUS_CONFIG: Required<OpusConfig> = {
 };
 
 /** @internal For testing only: signature of the encoder factory */
-export type OpusEncoderFactory = (config: Required<OpusConfig>) => {
-  encode: (pcm: Buffer) => Buffer;
-  destroy: () => void;
-};
+export type OpusEncoderFactory = (config: Required<OpusConfig>) =>
+  | Promise<{
+      encode: (pcm: Buffer) => Buffer;
+      destroy: () => void;
+    }>
+  | {
+      encode: (pcm: Buffer) => Buffer;
+      destroy: () => void;
+    };
 
 export interface BroadcasterOptions {
   participants: VoiceParticipant[];
@@ -25,7 +27,7 @@ export interface BroadcasterOptions {
 
 export interface Broadcaster {
   /** Send PCM audio to all participants, encoding to Opus where needed */
-  broadcast(pcmAudio: Buffer): void;
+  broadcast(pcmAudio: Buffer): void | Promise<void>;
   /** Add a participant at runtime */
   addParticipant(participant: VoiceParticipant): void;
   /** Remove a participant by ID */
@@ -39,14 +41,15 @@ interface OpusEncoderInstance {
   delete: () => void;
 }
 
-function loadOpusEncoder(config: Required<OpusConfig>): {
+async function loadOpusEncoder(config: Required<OpusConfig>): Promise<{
   encode: (pcm: Buffer) => Buffer;
   destroy: () => void;
-} {
+}> {
   let OpusEncoderClass: new (sampleRate: number, channels: number) => OpusEncoderInstance;
 
   try {
-    const mod = require("@discordjs/opus") as {
+    // @ts-expect-error — @discordjs/opus is an optional native dep with no bundled types
+    const mod = (await import("@discordjs/opus")) as {
       OpusEncoder: new (sampleRate: number, channels: number) => OpusEncoderInstance;
     };
     OpusEncoderClass = mod.OpusEncoder;
@@ -80,20 +83,22 @@ export function createBroadcaster(options: BroadcasterOptions): Broadcaster {
   const encoderFactory = options._encoderFactory ?? loadOpusEncoder;
   const participants = new Map<string, VoiceParticipant>();
   let destroyed = false;
-  let opusEncoder: ReturnType<OpusEncoderFactory> | null = null;
+  let opusEncoder: { encode: (pcm: Buffer) => Buffer; destroy: () => void } | null = null;
+  let opusEncoderPromise: Promise<{ encode: (pcm: Buffer) => Buffer; destroy: () => void }> | undefined;
 
   for (const p of options.participants) {
     participants.set(p.id, p);
   }
 
-  function ensureOpusEncoder(): ReturnType<OpusEncoderFactory> {
-    if (!opusEncoder) {
-      opusEncoder = encoderFactory(config);
+  async function ensureOpusEncoder(): Promise<{ encode: (pcm: Buffer) => Buffer; destroy: () => void }> {
+    if (!opusEncoderPromise) {
+      opusEncoderPromise = Promise.resolve(encoderFactory(config));
     }
+    opusEncoder = await opusEncoderPromise;
     return opusEncoder;
   }
 
-  function broadcast(pcmAudio: Buffer): void {
+  async function broadcast(pcmAudio: Buffer): Promise<void> {
     if (destroyed || participants.size === 0) return;
 
     // Snapshot before iteration so send() callbacks that call addParticipant/removeParticipant
@@ -105,7 +110,7 @@ export function createBroadcaster(options: BroadcasterOptions): Broadcaster {
 
     if (needsOpus) {
       try {
-        const enc = ensureOpusEncoder();
+        const enc = await ensureOpusEncoder();
         opusAudio = enc.encode(pcmAudio);
       } catch {
         // Opus encoder unavailable or encoding failed — PCM participants still receive audio,
@@ -142,6 +147,7 @@ export function createBroadcaster(options: BroadcasterOptions): Broadcaster {
   function destroy(): void {
     destroyed = true;
     participants.clear();
+    opusEncoderPromise = undefined;
     if (opusEncoder) {
       opusEncoder.destroy();
       opusEncoder = null;

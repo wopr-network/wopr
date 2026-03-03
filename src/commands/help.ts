@@ -49,6 +49,7 @@ Usage:
   wopr daemon logs                           Show daemon logs
 
   wopr status                                Show system status overview
+  wopr doctor                                Validate environment and diagnose issues
 
   wopr auth                                  Show auth status
   wopr auth login                            Login with Claude Max/Pro (OAuth)
@@ -88,6 +89,9 @@ Usage:
   wopr context enable <name>                 Enable context provider
   wopr context disable <name>                Disable context provider
   wopr context priority <name> <n>           Set context provider priority
+
+Global Options:
+  --config <path>                        Path to config file (default: ~/wopr/config.json)
 
 Environment:
   WOPR_HOME                              Base directory (default: ~/wopr)
