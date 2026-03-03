@@ -7,7 +7,6 @@
  * src/commands/ -- this file only parses the top-level command and dispatches.
  */
 
-import { existsSync } from "node:fs";
 import { parseGlobalFlags } from "./cli-flags.js";
 import { authCommand } from "./commands/auth.js";
 import { configCommand } from "./commands/config.js";
@@ -35,11 +34,6 @@ try {
 }
 
 if (configPath) {
-  const initCommands = new Set(["init", "onboard", "configure"]);
-  if (!initCommands.has(remainingArgs[0]) && !existsSync(configPath)) {
-    console.error(`Config file not found: ${configPath}`);
-    process.exit(1);
-  }
   setConfigFileOverride(configPath);
 }
 const [command, subcommand, ...args] = remainingArgs;
