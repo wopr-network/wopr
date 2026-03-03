@@ -21,6 +21,8 @@ vi.mock("../../src/plugins/state.js", () => ({
   pluginManifests: new Map(),
   configSchemas: new Map(),
   pluginStates: new Map(),
+  resolvedA2ATools: new Map(),
+  pluginCircuitBreaker: { clear: vi.fn(), isTripped: vi.fn(() => false), recordError: vi.fn(), recordSuccess: vi.fn() },
   WOPR_HOME: "/tmp/wopr-test",
   PLUGINS_DIR: "/tmp/wopr-test/plugins",
 }));
@@ -46,6 +48,7 @@ vi.mock("../../src/core/events.js", () => ({
   emitPluginDeactivated: vi.fn(async () => {}),
   emitPluginDraining: vi.fn(async () => {}),
   emitPluginDrained: vi.fn(async () => {}),
+  eventBus: { on: vi.fn(), off: vi.fn(), emit: vi.fn(async () => {}) },
 }));
 
 vi.mock("../../src/core/capability-registry.js", () => ({

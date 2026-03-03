@@ -27,11 +27,14 @@ const mockPluginManifests = new Map<string, any>();
 const mockConfigSchemas = new Map<string, any>();
 const mockPluginStates = new Map<string, any>();
 
+const mockResolvedA2ATools = new Map<string, any>();
+
 vi.mock("../../src/plugins/state.js", () => ({
   loadedPlugins: mockLoadedPlugins,
   pluginManifests: mockPluginManifests,
   configSchemas: mockConfigSchemas,
   pluginStates: mockPluginStates,
+  resolvedA2ATools: mockResolvedA2ATools,
   WOPR_HOME: "/tmp/wopr-test",
   PLUGINS_DIR: "/tmp/wopr-test/plugins",
   PLUGINS_FILE: "/tmp/wopr-test/plugins.json",
@@ -82,6 +85,7 @@ beforeEach(async () => {
   mockPluginManifests.clear();
   mockConfigSchemas.clear();
   mockPluginStates.clear();
+  mockResolvedA2ATools.clear();
 
   const mod = await import("../../src/plugins/loading.js");
   readPluginManifest = mod.readPluginManifest;

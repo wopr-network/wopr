@@ -23,6 +23,7 @@ import {
 } from "../plugins/requirements.js";
 import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContext } from "../types.js";
 import { resolveA2AToolDependencies } from "./a2a-tool-resolver.js";
+import { pluginCircuitBreaker } from "./circuit-breaker.js";
 import { createPluginContext } from "./context-factory.js";
 import { enablePlugin, getInstalledPlugins, installPlugin } from "./installation.js";
 import { configSchemas, loadedPlugins, pluginManifests, pluginStates, resolvedA2ATools } from "./state.js";
@@ -66,6 +67,38 @@ export interface LoadPluginOptions {
   skipInit?: boolean;
   /** @internal Tracks plugins currently being resolved to detect circular dependencies */
   _resolving?: Set<string>;
+}
+
+async function initAndActivatePlugin(
+  installed: InstalledPlugin,
+  plugin: WOPRPlugin,
+  context: WOPRPluginContext,
+): Promise<void> {
+  if (plugin.init) {
+    try {
+      await plugin.init(context);
+      pluginCircuitBreaker.recordSuccess(installed.name);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(`[plugins] ${installed.name}: init() threw: ${msg}`);
+      pluginCircuitBreaker.recordError(installed.name, err instanceof Error ? err : new Error(msg));
+      throw err;
+    }
+  }
+
+  pluginStates.set(installed.name, "active");
+  if (plugin.onActivate) {
+    try {
+      await plugin.onActivate(context);
+      pluginCircuitBreaker.recordSuccess(installed.name);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(`[plugins] ${installed.name}: onActivate() threw: ${msg}`);
+      pluginCircuitBreaker.recordError(installed.name, err instanceof Error ? err : new Error(msg));
+      // onActivate failure is non-fatal — plugin loaded but activation handler failed
+    }
+  }
+  await emitPluginActivated(installed.name, plugin.version || installed.version);
 }
 
 export async function loadPlugin(
@@ -232,18 +265,9 @@ export async function loadPlugin(
     }
   }
 
-  // ── Step 4: Initialize (skip for CLI commands) ──
-  if (plugin.init && !options.skipInit) {
-    await plugin.init(context);
-  }
-
-  // ── Step 5: Set active state and call onActivate ──
+  // ── Steps 4-5: Initialize and activate (skip for CLI commands) ──
   if (!options.skipInit) {
-    pluginStates.set(installed.name, "active");
-    if (plugin.onActivate) {
-      await plugin.onActivate(context);
-    }
-    await emitPluginActivated(installed.name, plugin.version || installed.version);
+    await initAndActivatePlugin(installed, plugin, context);
   }
 
   return plugin;
@@ -393,6 +417,69 @@ export interface UnloadPluginOptions {
   force?: boolean;
 }
 
+async function drainPlugin(name: string, plugin: WOPRPlugin, drainTimeoutMs: number): Promise<void> {
+  pluginStates.set(name, "draining");
+  await emitPluginDraining(name, drainTimeoutMs);
+
+  const drainStart = Date.now();
+  let timedOut = false;
+
+  if (plugin.onDrain) {
+    let timeoutId: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        plugin.onDrain().then(() => {
+          // Success: clear timeout to prevent mutation
+          if (timeoutId) clearTimeout(timeoutId);
+        }),
+        new Promise<void>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            timedOut = true;
+            reject(new Error(`Drain timeout after ${drainTimeoutMs}ms`));
+          }, drainTimeoutMs);
+        }),
+      ]);
+    } catch (err) {
+      logger.warn(`[plugins] ${name}: drain ${timedOut ? "timed out" : "failed"}: ${err}`);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
+  const durationMs = Date.now() - drainStart;
+  await emitPluginDrained(name, durationMs, timedOut);
+}
+
+async function deactivateAndShutdownPlugin(name: string, plugin: WOPRPlugin, drainTimeoutMs: number): Promise<void> {
+  pluginStates.set(name, "deactivating");
+
+  if (plugin.onDeactivate) {
+    try {
+      await Promise.race([
+        plugin.onDeactivate(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`onDeactivate timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
+        ),
+      ]);
+    } catch (err) {
+      logger.error(`[plugins] ${name}: onDeactivate failed: ${err}`);
+    }
+  }
+
+  if (plugin.shutdown) {
+    try {
+      await Promise.race([
+        plugin.shutdown(),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`shutdown timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
+        ),
+      ]);
+    } catch (err) {
+      logger.error(`[plugins] ${name}: shutdown failed: ${err}`);
+    }
+  }
+}
+
 export async function unloadPlugin(name: string, options: UnloadPluginOptions = {}): Promise<void> {
   const loaded = loadedPlugins.get(name);
   if (!loaded) return;
@@ -405,69 +492,11 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
 
   // ── Step 1: Drain (if plugin supports it and not force) ──
   if (!force && (drainBehavior === "drain" || loaded.plugin.onDrain)) {
-    pluginStates.set(name, "draining");
-    await emitPluginDraining(name, drainTimeoutMs);
-
-    const drainStart = Date.now();
-    const abortController = new AbortController();
-    let timedOut = false;
-
-    if (loaded.plugin.onDrain) {
-      let timeoutId: NodeJS.Timeout | undefined;
-      try {
-        await Promise.race([
-          loaded.plugin.onDrain().then(() => {
-            // Success: clear timeout to prevent mutation
-            if (timeoutId) clearTimeout(timeoutId);
-          }),
-          new Promise<void>((_, reject) => {
-            timeoutId = setTimeout(() => {
-              timedOut = true;
-              abortController.abort();
-              reject(new Error(`Drain timeout after ${drainTimeoutMs}ms`));
-            }, drainTimeoutMs);
-          }),
-        ]);
-      } catch (err) {
-        logger.warn(`[plugins] ${name}: drain ${timedOut ? "timed out" : "failed"}: ${err}`);
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-      }
-    }
-
-    const durationMs = Date.now() - drainStart;
-    await emitPluginDrained(name, durationMs, timedOut);
+    await drainPlugin(name, loaded.plugin, drainTimeoutMs);
   }
 
-  // ── Step 2: Deactivate ──
-  pluginStates.set(name, "deactivating");
-
-  if (loaded.plugin.onDeactivate) {
-    try {
-      await Promise.race([
-        loaded.plugin.onDeactivate(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`onDeactivate timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
-        ),
-      ]);
-    } catch (err) {
-      logger.error(`[plugins] ${name}: onDeactivate failed: ${err}`);
-    }
-  }
-
-  // ── Step 3: Shutdown (existing behavior) ──
-  if (loaded.plugin.shutdown) {
-    try {
-      await Promise.race([
-        loaded.plugin.shutdown(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`shutdown timeout after ${drainTimeoutMs}ms`)), drainTimeoutMs),
-        ),
-      ]);
-    } catch (err) {
-      logger.error(`[plugins] ${name}: shutdown failed: ${err}`);
-    }
-  }
+  // ── Steps 2-3: Deactivate and shutdown ──
+  await deactivateAndShutdownPlugin(name, loaded.plugin, drainTimeoutMs);
 
   // ── Step 4: Cleanup registrations (existing behavior) ──
   if (manifest?.provides?.capabilities?.length) {
@@ -510,6 +539,7 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
   configSchemas.delete(name);
   pluginStates.delete(name);
   resolvedA2ATools.delete(name);
+  pluginCircuitBreaker.clear(name);
 }
 
 export function getLoadedPlugin(name: string): { plugin: WOPRPlugin; context: WOPRPluginContext } | undefined {

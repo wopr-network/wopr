@@ -61,6 +61,7 @@ vi.mock("../../src/core/events.js", () => ({
   emitPluginDeactivated: vi.fn(),
   emitPluginDrained: vi.fn(),
   emitPluginDraining: vi.fn(),
+  eventBus: { on: vi.fn(), off: vi.fn(), emit: vi.fn(async () => {}) },
 }));
 vi.mock("../../src/plugins/context-factory.js", () => ({
   createPluginContext: vi.fn(() => ({})),

@@ -318,6 +318,27 @@ describe("createPluginHookManager", () => {
 
       expect(hooks.list()).toHaveLength(1);
     });
+
+    it("should remove once handler even when it throws", async () => {
+      const hooks = createPluginHookManager("test-plugin");
+      hooks.on("session:create", () => { throw new Error("once throws"); }, { once: true });
+
+      const busListener = busListeners.get("session:create");
+      await busListener!({ session: "test" }, "session:create");
+
+      // once handler must be removed regardless of throw
+      expect(hooks.list()).toEqual([]);
+    });
+
+    it("should remove once handler even when it throws on mutable events", async () => {
+      const hooks = createPluginHookManager("test-plugin");
+      hooks.on("message:incoming", () => { throw new Error("mutable once throws"); }, { once: true });
+
+      const busListener = busListeners.get("session:beforeInject");
+      await busListener!({ session: "s1" }, "session:beforeInject");
+
+      expect(hooks.list()).toEqual([]);
+    });
   });
 
   // ========================================================================
@@ -435,7 +456,7 @@ describe("createPluginHookManager", () => {
       expect((receivedPayload as Record<string, unknown>)["preventDefault"]).toBeUndefined();
     });
 
-    it("should propagate error from handler (no error isolation in current impl)", async () => {
+    it("should isolate errors per handler and continue dispatching to remaining handlers", async () => {
       const hooks = createPluginHookManager("test-plugin");
 
       hooks.on("session:create", () => {
@@ -447,8 +468,10 @@ describe("createPluginHookManager", () => {
 
       const busListener = busListeners.get("session:create");
 
-      await expect(busListener!({ session: "test" }, "session:create")).rejects.toThrow("handler error");
-      expect(handler2).not.toHaveBeenCalled();
+      // Errors are caught and recorded to circuit breaker — not re-thrown
+      await expect(busListener!({ session: "test" }, "session:create")).resolves.toBeUndefined();
+      // Remaining handlers still run after a prior handler throws
+      expect(handler2).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -487,6 +510,55 @@ describe("createPluginHookManager", () => {
 
       hooks.on("session:create", vi.fn());
       expect(busListeners.has("session:create")).toBe(true);
+    });
+  });
+
+  // ========================================================================
+  // Circuit breaker — per-handler tracking and recovery
+  // ========================================================================
+  describe("circuit breaker", () => {
+    it("should not reset consecutive error count when a different handler succeeds", async () => {
+      // Register a consistently failing handler followed by a succeeding handler.
+      // The failing handler's error count must not be erased by the succeeding handler's
+      // recordSuccess call so the breaker can eventually trip.
+      const hooks = createPluginHookManager("breaker-plugin");
+      const failingHandler = () => { throw new Error("always fails"); };
+      const succeedingHandler = vi.fn();
+
+      hooks.on("session:create", failingHandler, { priority: 10 });
+      hooks.on("session:create", succeedingHandler, { priority: 20 });
+
+      const busListener = busListeners.get("session:create");
+
+      // After 5 dispatches the breaker should trip and the succeeding handler stops running
+      for (let i = 0; i < 5; i++) {
+        await busListener!({ session: "test" }, "session:create");
+      }
+
+      // 6th dispatch: breaker is tripped, succeeding handler does NOT run
+      const callsBefore = succeedingHandler.mock.calls.length;
+      await busListener!({ session: "test" }, "session:create");
+      expect(succeedingHandler.mock.calls.length).toBe(callsBefore);
+    });
+
+    it("should allow breaker to recover after successful init resets errors", async () => {
+      // This validates the loading.ts fix: recordSuccess after init/activate lets
+      // a transient startup error clear, preventing permanent trip.
+      // We test the circuit breaker directly here since loading.ts is harder to unit test.
+      const { CircuitBreaker } = await import("../../src/plugins/circuit-breaker.js");
+      const breaker = new CircuitBreaker(3);
+
+      breaker.recordError("my-plugin", new Error("transient"));
+      breaker.recordError("my-plugin", new Error("transient"));
+      expect(breaker.isTripped("my-plugin")).toBe(false);
+
+      // Successful init resets consecutive error count
+      breaker.recordSuccess("my-plugin");
+
+      // Two more errors should NOT trip (counter was reset to 0, only at 2 now)
+      breaker.recordError("my-plugin", new Error("another"));
+      breaker.recordError("my-plugin", new Error("another"));
+      expect(breaker.isTripped("my-plugin")).toBe(false);
     });
   });
 });
