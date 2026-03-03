@@ -44,11 +44,15 @@ export async function createInjectors(): Promise<PluginInjectors> {
  * In-memory lock map to serialize concurrent install requests for the same
  * plugin source. Prevents TOCTOU races where two requests both pass
  * existsSync checks and race to install (WOP-1440).
+ *
+ * Note: this is a single-process lock. In multi-instance deployments, races
+ * across pods are possible; a distributed lock (e.g. DB row) would be needed
+ * for full cross-instance safety.
  */
 const installLocks = new Map<string, Promise<InstallAndActivateResult>>();
 
-/** Maximum time to wait for a plugin install before giving up. */
-const INSTALL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+/** 10-minute ceiling; prevents a hung npm install from holding the lock forever. */
+const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * Install a plugin from `source`, enable it, hot-load it, and run a provider
@@ -57,17 +61,26 @@ const INSTALL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
  * state and provider availability.
  *
  * Concurrent requests for the same source are serialized via an in-memory lock
- * to prevent TOCTOU races on filesystem checks (WOP-1440). A 5-minute timeout
- * prevents a hung install from holding the lock indefinitely.
+ * to prevent TOCTOU races on filesystem checks (WOP-1440). A timeout ensures
+ * a hung install never holds the lock permanently.
  */
 export function installAndActivatePlugin(source: string): Promise<InstallAndActivateResult> {
   const existing = installLocks.get(source);
   if (existing) return existing;
 
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`Plugin install timed out after ${INSTALL_TIMEOUT_MS}ms`)), INSTALL_TIMEOUT_MS),
-  );
-  const promise = Promise.race([doInstallAndActivate(source), timeoutPromise]).finally(() => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error(`Plugin install from '${source}' timed out after ${INSTALL_TIMEOUT_MS / 1000}s`)),
+      INSTALL_TIMEOUT_MS,
+    );
+  });
+
+  const promise = Promise.race<InstallAndActivateResult>([
+    doInstallAndActivate(source),
+    timeoutPromise,
+  ]).finally(() => {
+    clearTimeout(timeoutId);
     installLocks.delete(source);
   });
   installLocks.set(source, promise);

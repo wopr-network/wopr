@@ -120,15 +120,23 @@ describe("installAndActivatePlugin TOCTOU lock (WOP-1440)", () => {
       resolveA = r;
     });
 
+    // Resolves once both mock installs have been entered — no wall-clock delay needed
+    let installsStartedResolve!: () => void;
+    const installsStarted = new Promise<void>((r) => {
+      installsStartedResolve = r;
+    });
+
     mockInstallPlugin
       .mockImplementationOnce(async () => {
         callOrder.push("install-a-start");
+        if (callOrder.includes("install-b")) installsStartedResolve();
         await aBlocks;
         callOrder.push("install-a-end");
         return { ...SAMPLE_PLUGIN, name: "plugin-a" };
       })
       .mockImplementationOnce(async () => {
         callOrder.push("install-b");
+        if (callOrder.includes("install-a-start")) installsStartedResolve();
         return { ...SAMPLE_PLUGIN, name: "plugin-b" };
       });
 
@@ -139,11 +147,8 @@ describe("installAndActivatePlugin TOCTOU lock (WOP-1440)", () => {
     // The two promises must be different objects
     expect(pA).not.toBe(pB);
 
-    // Flush the microtask queue so both async mock calls have started.
-    // Using Promise.resolve() chains is deterministic — no real-timer dependency.
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    // Wait until both installs have entered their mock (deterministic, no wall-clock delay)
+    await installsStarted;
 
     // Both installs should have begun (no lock contention between different sources)
     expect(callOrder).toContain("install-a-start");
@@ -153,5 +158,25 @@ describe("installAndActivatePlugin TOCTOU lock (WOP-1440)", () => {
     const [rA, rB] = await Promise.all([pA, pB]);
     expect(rA.plugin.name).toBe("plugin-a");
     expect(rB.plugin.name).toBe("plugin-b");
+  });
+
+  it("releases lock when post-install steps fail so subsequent installs can proceed", async () => {
+    // Use a fresh source to avoid interference from other tests
+    mockInstallPlugin.mockResolvedValue({ ...SAMPLE_PLUGIN });
+
+    mockEnablePlugin
+      .mockRejectedValueOnce(new Error("enable failed"))
+      .mockResolvedValueOnce(undefined);
+
+    // First attempt fails during enablement (after installPlugin succeeds)
+    await expect(
+      installAndActivatePlugin("lock-test-error-recovery-post-install"),
+    ).rejects.toThrow("enable failed");
+
+    // Lock must be released in the finally block — second attempt should succeed
+    const result = await installAndActivatePlugin("lock-test-error-recovery-post-install");
+    expect(result.plugin.name).toBe("test-plugin");
+    expect(mockInstallPlugin).toHaveBeenCalledTimes(2);
+    expect(mockEnablePlugin).toHaveBeenCalledTimes(2);
   });
 });
