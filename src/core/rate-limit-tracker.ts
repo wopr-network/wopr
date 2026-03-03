@@ -15,7 +15,6 @@ export interface RateLimitEntry {
 
 export class RateLimitTracker {
   private limits = new Map<string, RateLimitEntry>();
-
   /** Base delay in ms for exponential backoff */
   private readonly baseDelayMs: number;
   /** Maximum backoff cap in ms */
@@ -34,20 +33,14 @@ export class RateLimitTracker {
   markRateLimited(providerId: string, retryAfterSeconds?: number): void {
     const existing = this.limits.get(providerId);
     const hits = (existing?.consecutiveHits ?? 0) + 1;
-
     let backoffMs: number;
     if (retryAfterSeconds !== undefined && retryAfterSeconds > 0) {
-      // Respect Retry-After header, but cap to maxDelayMs to prevent a
-      // misbehaving or malicious provider from forcing unbounded backoff.
-      backoffMs = Math.min(retryAfterSeconds * 1000, this.maxDelayMs);
+      // Respect Retry-After header
+      backoffMs = retryAfterSeconds * 1000;
     } else {
-      // Exponential backoff with jitter: base * 2^(hits-1) + random jitter.
-      // Cap exponent at 30 to prevent 2**n from producing Infinity for large
-      // hit counts (the outer Math.min already caps the final value).
-      const exp = Math.min(hits - 1, 30);
-      backoffMs = Math.min(this.baseDelayMs * 2 ** exp + Math.random() * 500, this.maxDelayMs);
+      // Exponential backoff with jitter: base * 2^(hits-1) + random jitter
+      backoffMs = Math.min(this.baseDelayMs * 2 ** (hits - 1) + Math.random() * 500, this.maxDelayMs);
     }
-
     this.limits.set(providerId, {
       retryAfter: Date.now() + backoffMs,
       consecutiveHits: hits,
