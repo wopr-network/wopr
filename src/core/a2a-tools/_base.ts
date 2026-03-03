@@ -156,9 +156,9 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     }
   }
 
-  const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2}[tT][\d:]+)$/);
+  const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})[tT]([\d:]+)$/);
   if (isoMatch) {
-    const date = new Date(isoMatch[1]);
+    const date = new Date(`${isoMatch[1]}T${isoMatch[2]}`);
     if (!Number.isNaN(date.getTime())) {
       return { after: date.getTime() };
     }
