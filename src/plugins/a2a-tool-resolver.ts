@@ -40,7 +40,8 @@ export function resolveA2AToolDependencies(): ResolveResult {
 
       if (registeredTool) {
         const proxy = async (args: Record<string, unknown>): Promise<A2AToolResult> => {
-          return registeredTool.handler(args, { sessionName: "" }) as Promise<A2AToolResult>;
+          // Use a sentinel session name to make the absence of a real user session explicit
+          return registeredTool.handler(args, { sessionName: "a2a-dependency" }) as Promise<A2AToolResult>;
         };
 
         pluginToolMap.set(dep.toolName, proxy);

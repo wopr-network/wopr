@@ -43,6 +43,6 @@ export interface A2AServerConfig {
 export interface A2AToolDependency {
   /** Tool name to depend on (e.g., "search", "translate") */
   toolName: string;
-  /** If true, missing tool logs a warning instead of throwing */
+  /** If true, missing tool logs a warning; if false/absent, missing tool logs an error */
   optional?: boolean;
 }

@@ -624,6 +624,8 @@ export async function loadAllPlugins(
   }
 
   // ── Post-load: resolve A2A tool dependencies ──
+  // Full reload may change the set of installed plugins; clear to avoid stale entries
+  resolvedA2ATools.clear();
   const a2aResult = resolveA2AToolDependencies();
   for (const [pluginName, toolMap] of a2aResult.toolMap) {
     resolvedA2ATools.set(pluginName, toolMap);
