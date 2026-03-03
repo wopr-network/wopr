@@ -74,9 +74,10 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     return null;
   }
 
-  const trimmed = expr.trim().toLowerCase();
+  const trimmed = expr.trim();
+  const trimmedLower = trimmed.toLowerCase();
 
-  const relativeMatch = trimmed.match(/^(\d+)(h|d|w|m)$/);
+  const relativeMatch = trimmedLower.match(/^(\d+)(h|d|w|m)$/);
   if (relativeMatch) {
     const amount = parseInt(relativeMatch[1], 10);
     const unit = relativeMatch[2];
@@ -103,7 +104,7 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     return { after: now - msAgo };
   }
 
-  const lastMatch = trimmed.match(/^last\s+(\d+)\s+(hours?|days?|weeks?|months?)$/);
+  const lastMatch = trimmedLower.match(/^last\s+(\d+)\s+(hours?|days?|weeks?|months?)$/);
   if (lastMatch) {
     const amount = parseInt(lastMatch[1], 10);
     const unit = lastMatch[2];
@@ -126,7 +127,7 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
   }
 
   const rangeMatch = trimmed.match(
-    /^(\d{4}-\d{2}-\d{2})(?:T[\d:]+)?(?:\s*(?:-|to)\s*)(\d{4}-\d{2}-\d{2})(?:T[\d:]+)?$/,
+    /^(\d{4}-\d{2}-\d{2})(?:[tT][\d:]+)?(?:\s*(?:-|to)\s*)(\d{4}-\d{2}-\d{2})(?:[tT][\d:]+)?$/i,
   );
   if (rangeMatch) {
     const startDate = new Date(rangeMatch[1]);
@@ -155,7 +156,7 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     }
   }
 
-  const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2}T[\d:]+)$/);
+  const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2}[tT][\d:]+)$/);
   if (isoMatch) {
     const date = new Date(isoMatch[1]);
     if (!Number.isNaN(date.getTime())) {
