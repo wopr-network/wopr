@@ -162,6 +162,7 @@ describe("createPluginContext", () => {
     // Reset mock return values after clearAllMocks
     vi.mocked(centralConfig.get).mockReturnValue({ plugins: { data: {} } } as any);
     vi.mocked(mockProviderRegistry.listProviders).mockReturnValue([]);
+    vi.mocked(mockProviderRegistry.getProvider).mockReturnValue(undefined);
     vi.mocked(getCapabilityRegistry).mockReturnValue({
       registerProvider: vi.fn(),
       unregisterProvider: vi.fn(),
