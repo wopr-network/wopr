@@ -897,8 +897,8 @@ export interface WOPRPluginContext {
 
   // A2A (Agent-to-Agent) tools - plugins register MCP tools
   // Example: P2P plugin registers p2p_join_topic, p2p_send_message, etc.
-  registerA2AServer?(config: A2AServerConfig): void;
-  unregisterA2AServer?(config: A2AServerConfig): void;
+  registerA2AServer(config: A2AServerConfig): void;
+  unregisterA2AServer(config: A2AServerConfig): void;
   /** Get a resolved A2A tool declared in toolDependencies. Returns undefined if optional and not found. */
   getA2ATool(toolName: string): ((args: Record<string, unknown>) => Promise<A2AToolResult>) | undefined;
 

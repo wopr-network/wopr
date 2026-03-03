@@ -226,8 +226,8 @@ export interface WOPRPluginContext {
   getChannelProviders(): ChannelProvider[];
 
   // A2A tools
-  registerA2AServer?(config: A2AServerConfig): void;
-  unregisterA2AServer?(config: A2AServerConfig): void;
+  registerA2AServer(config: A2AServerConfig): void;
+  unregisterA2AServer(config: A2AServerConfig): void;
   /** Get a resolved A2A tool declared in toolDependencies. Returns undefined if optional and not found. */
   getA2ATool(toolName: string): ((args: Record<string, unknown>) => Promise<A2AToolResult>) | undefined;
 
