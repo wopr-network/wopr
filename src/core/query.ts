@@ -8,8 +8,10 @@ import { logger } from "../logger.js";
  */
 
 import type { ModelQueryOptions, ModelResponse, ProviderConfig } from "../types/provider.js";
+import { RateLimitError } from "../types/provider.js";
 import { config as configManager } from "./config.js";
 import { providerRegistry } from "./providers.js";
+import { rateLimitTracker } from "./rate-limit-tracker.js";
 
 /**
  * Query options normalized from session context
@@ -48,10 +50,10 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     logger.info(`[Query] Auto-selected provider: ${available[0].id}`);
   }
 
-  try {
-    // Resolve provider with fallback
-    const resolved = await providerRegistry.resolveProvider(config);
+  // Resolve provider outside try so it is accessible in catch
+  const resolved = await providerRegistry.resolveProvider(config);
 
+  try {
     // Get global provider defaults from config
     const globalDefaults = configManager.getProviderDefaults(resolved.provider.id);
 
@@ -107,6 +109,9 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
 
     logger.info(`[Query] Used provider: ${providerUsed} (${modelUsed})`);
 
+    // Successful query - clear any rate limit state for this provider
+    rateLimitTracker.clearProvider(resolved.name);
+
     return {
       content: chunks.join(""),
       provider: providerUsed,
@@ -115,6 +120,21 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+
+    // Detect 429 rate limiting from provider errors
+    const is429 =
+      error instanceof RateLimitError ||
+      (error as { status?: number }).status === 429 ||
+      (error as { statusCode?: number }).statusCode === 429 ||
+      errorMsg.includes("429") ||
+      errorMsg.toLowerCase().includes("rate limit");
+
+    if (is429) {
+      const retryAfter = error instanceof RateLimitError ? error.retryAfterSeconds : undefined;
+      rateLimitTracker.markRateLimited(resolved.name, retryAfter);
+      logger.warn(`[Query] Provider ${resolved.name} rate-limited (429). Backoff applied.`);
+    }
+
     logger.error(`[Query] Failed: ${errorMsg}`);
     throw error;
   }

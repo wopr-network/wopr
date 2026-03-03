@@ -97,3 +97,18 @@ export interface ResolvedProvider {
   credential: string;
   fallbackChain: string[]; // Remaining fallbacks
 }
+
+/**
+ * Error thrown when a provider returns HTTP 429 (rate limited).
+ * Carries optional Retry-After value from response headers.
+ */
+export class RateLimitError extends Error {
+  readonly statusCode = 429;
+  readonly retryAfterSeconds?: number;
+
+  constructor(providerId: string, retryAfterSeconds?: number) {
+    super(`Provider ${providerId} rate limited (429)`);
+    this.name = "RateLimitError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
