@@ -30,8 +30,10 @@ export function getDaemonPid(): number | null {
   try {
     process.kill(pid, 0);
     return pid;
-  } catch {
-    unlinkSync(PID_FILE);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ESRCH") {
+      unlinkSync(PID_FILE);
+    }
     return null;
   }
 }

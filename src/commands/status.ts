@@ -29,8 +29,9 @@ export async function statusCommand(): Promise<void> {
   logger.info(`Daemon:    running (PID ${pid ?? "unknown"})`);
 
   try {
-    const plugins = await client.getPlugins();
-    logger.info(`Plugins:   ${plugins.length} loaded`);
+    const plugins = (await client.getPlugins()) as { enabled?: boolean }[];
+    const loaded = plugins.filter((p) => p.enabled);
+    logger.info(`Plugins:   ${loaded.length} loaded`);
   } catch {
     logger.info("Plugins:   unknown (API error)");
   }

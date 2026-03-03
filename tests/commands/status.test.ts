@@ -41,8 +41,8 @@ describe("statusCommand", () => {
     vi.mocked(getDaemonPid).mockReturnValue(12345);
     vi.mocked(client.isRunning).mockResolvedValue(true);
     vi.mocked(client.getPlugins).mockResolvedValue([
-      { name: "wopr-plugin-cron" },
-      { name: "wopr-plugin-skills" },
+      { name: "wopr-plugin-cron", enabled: true },
+      { name: "wopr-plugin-skills", enabled: true },
     ]);
     vi.mocked(client.getProviders).mockResolvedValue([
       { id: "anthropic", available: true },
@@ -55,8 +55,8 @@ describe("statusCommand", () => {
     const output = calls.join("\n");
     expect(output).toContain("running");
     expect(output).toContain("12345");
-    expect(output).toContain("2"); // 2 plugins
-    expect(output).toContain("1"); // 1 active provider
+    expect(output).toContain("2 loaded"); // 2 plugins loaded
+    expect(output).toContain("1/2 active"); // 1 of 2 providers active
   });
 
   it("handles daemon running but API unreachable", async () => {
