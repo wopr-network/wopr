@@ -199,6 +199,7 @@ const DEFAULT_CONFIG: WoprConfig = {
 
 export class ConfigManager {
   private config: WoprConfig = DEFAULT_CONFIG;
+  private reloadInFlight: Promise<void> | null = null;
 
   async load(): Promise<WoprConfig> {
     const configPath = getConfigFilePath();
@@ -329,6 +330,48 @@ export class ConfigManager {
       this.config.providers[providerId] = {};
     }
     (this.config.providers[providerId] as Record<string, unknown>)[key] = value;
+  }
+
+  /**
+   * Reload config from disk. Validates new config before applying.
+   * Logs a summary of changed top-level keys. Safe to call at any time.
+   */
+  async reload(): Promise<void> {
+    if (this.reloadInFlight) {
+      return this.reloadInFlight;
+    }
+    this.reloadInFlight = this._doReload().finally(() => {
+      this.reloadInFlight = null;
+    });
+    return this.reloadInFlight;
+  }
+
+  private async _doReload(): Promise<void> {
+    const prev = structuredClone(this.config);
+    try {
+      await this.load();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error("[config] Reload failed — keeping existing config:", message);
+      this.config = prev;
+      return;
+    }
+    // Log changed top-level keys
+    const changed: string[] = [];
+    const keys = new Set([...Object.keys(prev), ...Object.keys(this.config)]);
+    for (const key of keys) {
+      if (
+        JSON.stringify((prev as unknown as Record<string, unknown>)[key]) !==
+        JSON.stringify((this.config as unknown as Record<string, unknown>)[key])
+      ) {
+        changed.push(key);
+      }
+    }
+    if (changed.length > 0) {
+      logger.info(`[config] Reloaded — changed sections: ${changed.join(", ")}`);
+    } else {
+      logger.info("[config] Reloaded — no changes detected");
+    }
   }
 
   private merge(defaults: unknown, overrides: unknown): unknown {
