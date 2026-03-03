@@ -49,25 +49,27 @@ export async function runChecks(): Promise<CheckResult[]> {
     });
   }
 
-  // 3. Required env vars — at least one provider credential available
-  const hasAnthropicKey = !!(configLoaded && config.get().anthropic?.apiKey) || !!process.env.ANTHROPIC_API_KEY;
-  const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
-  const hasAnyKey = hasAnthropicKey || hasOpenAIKey;
+  // 3. Environment variables — check env vars only (not config file)
+  const hasAnthropicEnv = !!process.env.ANTHROPIC_API_KEY;
+  const hasOpenAIEnv = !!process.env.OPENAI_API_KEY;
+  const hasAnyEnv = hasAnthropicEnv || hasOpenAIEnv;
   results.push({
     name: "Environment variables",
-    pass: hasAnyKey,
-    detail: hasAnyKey
-      ? `${[hasAnthropicKey && "ANTHROPIC_API_KEY", hasOpenAIKey && "OPENAI_API_KEY"].filter(Boolean).join(", ")} set`
-      : "No provider API keys found",
-    fix: hasAnyKey ? undefined : 'Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or run "wopr auth login" for OAuth',
+    pass: hasAnyEnv,
+    detail: hasAnyEnv
+      ? `${[hasAnthropicEnv && "ANTHROPIC_API_KEY", hasOpenAIEnv && "OPENAI_API_KEY"].filter(Boolean).join(", ")} set`
+      : "No provider API key environment variables found",
+    fix: hasAnyEnv ? undefined : 'Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or run "wopr auth login" for OAuth',
   });
 
-  // 4. Provider credentials — lightweight check (full ping requires daemon)
+  // 4. Provider credentials — check config-loaded credentials only (not env vars)
+  const hasAnthropicConfig = !!(configLoaded && config.get().anthropic?.apiKey);
+  const hasAnyConfig = hasAnthropicConfig;
   results.push({
     name: "Provider credentials",
-    pass: hasAnyKey,
-    detail: hasAnyKey ? "At least one provider key configured" : "No credentials",
-    fix: hasAnyKey ? undefined : 'Run "wopr providers add <id> <key>" or "wopr auth login"',
+    pass: hasAnyConfig,
+    detail: hasAnyConfig ? "At least one provider key configured" : "No credentials in config",
+    fix: hasAnyConfig ? undefined : 'Run "wopr providers add <id> <key>" or "wopr auth login"',
   });
 
   // 5. Plugin manifests
@@ -117,12 +119,14 @@ export async function runChecks(): Promise<CheckResult[]> {
   try {
     await access(WOPR_HOME, constants.W_OK);
     results.push({ name: "Data directory", pass: true, detail: WOPR_HOME });
-  } catch {
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const isEnoent = code === "ENOENT";
     results.push({
       name: "Data directory",
       pass: false,
-      detail: `${WOPR_HOME} is not writable`,
-      fix: `Run "mkdir -p ${WOPR_HOME} && chmod 700 ${WOPR_HOME}"`,
+      detail: isEnoent ? `${WOPR_HOME} does not exist` : `${WOPR_HOME} is not writable`,
+      fix: isEnoent ? `Run "mkdir -p ${WOPR_HOME} && chmod 700 ${WOPR_HOME}"` : `Run "chmod 700 ${WOPR_HOME}"`,
     });
   }
 
