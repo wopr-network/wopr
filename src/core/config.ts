@@ -64,8 +64,11 @@ export interface WoprConfig {
   providers?: Record<string, ProviderDefaults>;
   /** Default inference routing strategy */
   routingStrategy?: "first" | "cheapest" | "capable" | "preferred";
-  /** Memory system configuration (chunking, sync, etc.) */
-  /** Memory system configuration — passed through to wopr-plugin-memory-semantic */
+  /**
+   * Legacy memory configuration field. Not automatically forwarded to plugins.
+   * To configure wopr-plugin-memory-semantic, use plugins.data["wopr-plugin-memory-semantic"].
+   * @deprecated
+   */
   memory?: Record<string, unknown>;
   /** SOUL_EVIL personality override configuration */
   soulEvil?: SoulEvilConfig;
