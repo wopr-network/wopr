@@ -55,8 +55,8 @@ describe("statusCommand", () => {
     const output = calls.join("\n");
     expect(output).toContain("running");
     expect(output).toContain("12345");
-    expect(output).toContain("2 loaded"); // 2 plugins loaded
-    expect(output).toContain("1/2 active"); // 1 of 2 providers active
+    expect(output).toContain("Plugins:   2 loaded");
+    expect(output).toContain("Providers: 1/2 active");
   });
 
   it("handles daemon running but API unreachable", async () => {

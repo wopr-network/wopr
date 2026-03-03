@@ -38,9 +38,7 @@ export async function statusCommand(): Promise<void> {
 
   try {
     const providers = await client.getProviders();
-    const active = providers.filter(
-      (p) => typeof p === "object" && p !== null && "available" in p && (p as { available: unknown }).available,
-    ).length;
+    const active = providers.filter((p) => p.available).length;
     logger.info(`Providers: ${active}/${providers.length} active`);
   } catch {
     logger.info("Providers: unknown (API error)");
