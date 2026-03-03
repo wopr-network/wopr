@@ -18,6 +18,8 @@ export interface ProviderDefaults {
   topP?: number;
   reasoningEffort?: string; // For Codex: minimal/low/medium/high/xhigh
   options?: Record<string, unknown>;
+  costPerToken?: number;
+  preferred?: boolean;
 }
 
 export interface WoprConfig {
@@ -60,6 +62,8 @@ export interface WoprConfig {
    *       providers.anthropic.model = "claude-opus-4-5-20251101"
    */
   providers?: Record<string, ProviderDefaults>;
+  /** Default inference routing strategy */
+  routingStrategy?: "first" | "cheapest" | "capable" | "preferred";
   /** Memory system configuration (chunking, sync, etc.) */
   /** Memory system configuration — passed through to wopr-plugin-memory-semantic */
   memory?: Record<string, unknown>;
@@ -99,6 +103,8 @@ const ProviderDefaultsSchema = z.object({
   topP: z.number().optional(),
   reasoningEffort: z.string().optional(),
   options: z.record(z.string(), z.unknown()).optional(),
+  costPerToken: z.number().optional(),
+  preferred: z.boolean().optional(),
 });
 
 const WoprConfigSchema = z.object({
@@ -137,6 +143,7 @@ const WoprConfigSchema = z.object({
     })
     .optional(),
   providers: z.record(z.string(), ProviderDefaultsSchema).optional(),
+  routingStrategy: z.enum(["first", "cheapest", "capable", "preferred"]).optional(),
   memory: z.record(z.string(), z.unknown()).optional(),
   soulEvil: z
     .object({
