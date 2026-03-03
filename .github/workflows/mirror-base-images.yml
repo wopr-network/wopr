@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   mirror:
-    name: Mirror ${{ matrix.source }}
+    name: Mirror ${{ matrix.image }}
     runs-on: [self-hosted, Linux, X64]
     strategy:
       matrix:
@@ -32,5 +32,7 @@ jobs:
 
       - name: Mirror image
         run: |
-          docker buildx imagetools create --tag "${{ matrix.target }}" "${{ matrix.source }}"
+          docker pull ${{ matrix.source }}
+          docker tag ${{ matrix.source }} ${{ matrix.target }}
+          docker push ${{ matrix.target }}
           echo "Mirrored ${{ matrix.source }} → ${{ matrix.target }}"
