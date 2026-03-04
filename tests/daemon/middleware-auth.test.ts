@@ -1,7 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 
-// Mock ensureToken to return a known token
+// vi.mock is hoisted before imports by vitest, ensuring mocks are in place
+// when auth.ts loads and first calls ensureToken (populating its module-scope
+// cachedToken). Since ensureToken always returns the same value here, the cache
+// is stable — tests are NOT execution-order-dependent.
 vi.mock("../../src/daemon/auth-token.js", () => ({
   ensureToken: vi.fn(() => "test-daemon-token-abc123"),
 }));
@@ -32,6 +35,10 @@ describe("daemon auth middleware (WOP-1572)", () => {
   beforeEach(() => {
     app = buildApp();
     mockValidateApiKey.mockReset().mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   describe("skip-auth paths", () => {
