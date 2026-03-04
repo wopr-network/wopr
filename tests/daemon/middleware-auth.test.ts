@@ -1,16 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 
-// vi.mock is hoisted before imports by vitest, ensuring mocks are in place
-// when auth.ts loads and first calls ensureToken (populating its module-scope
-// cachedToken). Since ensureToken always returns the same value here, the cache
-// is stable — tests are NOT execution-order-dependent.
+// Hoist mockValidateApiKey so it is initialized before the vi.mock factory that
+// references it (required by Vitest's hoisting transform).
+const { mockValidateApiKey } = vi.hoisted(() => ({
+  mockValidateApiKey: vi.fn().mockResolvedValue(null),
+}));
+
+// Mock ensureToken — use the same token value as plugin-routes-auth.test.ts so
+// that the module-scope cachedToken in auth.ts is consistent if module state is
+// ever shared across files (e.g., vitest --no-isolate).
 vi.mock("../../src/daemon/auth-token.js", () => ({
-  ensureToken: vi.fn(() => "test-daemon-token-abc123"),
+  ensureToken: vi.fn(() => "test-token"),
 }));
 
 // Mock validateApiKey — default: returns null (invalid)
-const mockValidateApiKey = vi.fn().mockResolvedValue(null);
 vi.mock("../../src/daemon/api-keys.js", () => ({
   validateApiKey: (...args: unknown[]) => mockValidateApiKey(...args),
 }));
@@ -21,6 +25,9 @@ import {
   requireAdmin,
   isDaemonBearerValid,
 } from "../../src/daemon/middleware/auth.js";
+
+/** Shared daemon token — must match the mock above. */
+const DAEMON_TOKEN = "test-token";
 
 function buildApp() {
   const app = new Hono();
@@ -90,7 +97,7 @@ describe("daemon auth middleware (WOP-1572)", () => {
   describe("daemon bearer token", () => {
     it("accepts valid daemon bearer token", async () => {
       const res = await app.request("/api/some-route", {
-        headers: { Authorization: "Bearer test-daemon-token-abc123" },
+        headers: { Authorization: `Bearer ${DAEMON_TOKEN}` },
       });
       expect(res.status).toBe(200);
     });
@@ -105,8 +112,10 @@ describe("daemon auth middleware (WOP-1572)", () => {
     });
 
     it("rejects token with correct prefix but wrong value", async () => {
+      // Same length as DAEMON_TOKEN, last char changed — verifies timing-safe rejection
+      const sameLength = DAEMON_TOKEN.slice(0, -1) + "X";
       const res = await app.request("/api/some-route", {
-        headers: { Authorization: "Bearer test-daemon-token-abc12X" },
+        headers: { Authorization: `Bearer ${sameLength}` },
       });
       expect(res.status).toBe(401);
     });
@@ -121,7 +130,7 @@ describe("daemon auth middleware (WOP-1572)", () => {
 
   describe("isDaemonBearerValid", () => {
     it("returns true for valid token", () => {
-      expect(isDaemonBearerValid("Bearer test-daemon-token-abc123")).toBe(true);
+      expect(isDaemonBearerValid(`Bearer ${DAEMON_TOKEN}`)).toBe(true);
     });
 
     it("returns false for wrong token", () => {
@@ -137,7 +146,7 @@ describe("daemon auth middleware (WOP-1572)", () => {
     });
 
     it("returns false for same-length but wrong content (timing-safe)", () => {
-      const sameLength = "Bearer " + "x".repeat("test-daemon-token-abc123".length);
+      const sameLength = "Bearer " + "x".repeat(DAEMON_TOKEN.length);
       expect(isDaemonBearerValid(sameLength)).toBe(false);
     });
   });
@@ -209,7 +218,7 @@ describe("daemon auth middleware (WOP-1572)", () => {
       const res = await app.request("/api/ws", {
         headers: {
           Upgrade: "websocket",
-          "Sec-WebSocket-Protocol": "auth.test-daemon-token-abc123",
+          "Sec-WebSocket-Protocol": `auth.${DAEMON_TOKEN}`,
         },
       });
       expect(res.status).toBe(200);
@@ -252,7 +261,7 @@ describe("daemon auth middleware (WOP-1572)", () => {
       const res = await app.request("/api/ws", {
         headers: {
           Upgrade: "websocket",
-          "Sec-WebSocket-Protocol": "graphql-ws, auth.test-daemon-token-abc123",
+          "Sec-WebSocket-Protocol": `graphql-ws, auth.${DAEMON_TOKEN}`,
         },
       });
       expect(res.status).toBe(200);
@@ -282,7 +291,7 @@ describe("daemon auth middleware (WOP-1572)", () => {
 
     it("accepts valid daemon bearer and sets admin role", async () => {
       const res = await authApp.request("/api/test", {
-        headers: { Authorization: "Bearer test-daemon-token-abc123" },
+        headers: { Authorization: `Bearer ${DAEMON_TOKEN}` },
       });
       expect(res.status).toBe(200);
       const body = await res.json();
