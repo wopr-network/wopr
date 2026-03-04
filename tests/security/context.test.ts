@@ -271,7 +271,8 @@ describe("Security Context Module", () => {
       const result = ctx.canUseTool("http_fetch");
       // In warn mode, allowed but with warning
       expect(result.allowed).toBe(true);
-      expect(result.warning).toBeDefined();
+      expect(result.warning).toMatch(/http_fetch/i);
+      expect(result.warning).toMatch(/warn/i);
     });
   });
 
@@ -362,7 +363,9 @@ describe("Security Context Module", () => {
       const ctx = new SecurityContext(source, "gw-session");
 
       expect(ctx.isGateway()).toBe(true);
-      expect(ctx.getForwardRules()).toBeDefined();
+      expect(ctx.getForwardRules()).toEqual(
+        expect.objectContaining({ allowForwardTo: ["main"] }),
+      );
       expect(ctx.getForwardRules()!.allowForwardTo).toContain("main");
     });
 
@@ -771,7 +774,12 @@ describe("Security Context Module", () => {
       const ctx = createCliContext("");
 
       expect(ctx.session).toBe("");
-      expect(ctx.policy).toBeDefined();
+      expect(ctx.policy).toEqual(
+        expect.objectContaining({
+          trustLevel: "owner",
+          capabilities: expect.arrayContaining(["*"]),
+        }),
+      );
     });
 
     it("should handle P2P context with elevated trust correctly", () => {

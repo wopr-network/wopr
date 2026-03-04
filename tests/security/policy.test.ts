@@ -115,7 +115,12 @@ describe("Security Policy Module", () => {
       const config = await getSecurityConfigAsync();
       expect(config.enforcement).toBe("enforce");
       // Defaults should still be merged
-      expect(config.defaults).toBeDefined();
+      expect(config.defaults).toEqual(
+        expect.objectContaining({
+          minTrustLevel: "semi-trusted",
+          capabilities: expect.arrayContaining(["inject"]),
+        }),
+      );
     });
 
     it("should cache loaded config on subsequent calls", async () => {
@@ -292,7 +297,12 @@ describe("Security Policy Module", () => {
       const policy = resolvePolicy(source, "discord-gateway");
 
       expect(policy.isGateway).toBe(true);
-      expect(policy.forwardRules).toBeDefined();
+      expect(policy.forwardRules).toEqual(
+        expect.objectContaining({
+          allowForwardTo: expect.arrayContaining(["main"]),
+          allowActions: expect.arrayContaining(["inject"]),
+        }),
+      );
       expect(policy.forwardRules!.allowForwardTo).toContain("main");
     });
 
@@ -599,7 +609,8 @@ describe("Security Policy Module", () => {
       // Default untrusted has tools: { deny: ["*"] }
       // With warn mode, this should warn
       expect(result.allowed).toBe(true); // warn mode
-      expect(result.warning).toBeDefined();
+      expect(result.warning).toMatch(/unknown_tool/i);
+      expect(result.warning).toMatch(/warn/i);
     });
   });
 
@@ -916,7 +927,13 @@ describe("Security Policy Module", () => {
       });
 
       const rules = getGatewayRules("my-gw");
-      expect(rules).toBeDefined();
+      expect(rules).toEqual(
+        expect.objectContaining({
+          allowForwardTo: expect.arrayContaining(["main", "backup"]),
+          allowActions: expect.arrayContaining(["inject"]),
+          requireApproval: true,
+        }),
+      );
       expect(rules!.allowForwardTo).toEqual(["main", "backup"]);
       expect(rules!.requireApproval).toBe(true);
     });
@@ -1047,7 +1064,7 @@ describe("Security Policy Module", () => {
 
       // Should fall back to defaults
       expect(policy.trustLevel).toBe("untrusted");
-      expect(policy.capabilities).toBeDefined();
+      expect(policy.capabilities).toEqual(expect.arrayContaining(["inject"]));
     });
 
     it("should handle conflicting allow and deny tool lists", async () => {
