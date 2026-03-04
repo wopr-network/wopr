@@ -3,7 +3,7 @@ import { Hono } from "hono";
 
 // Mock getConnInfo to return a controlled socket IP
 const { mockGetConnInfo } = vi.hoisted(() => ({
-  mockGetConnInfo: vi.fn().mockReturnValue({ remote: { address: "192.168.1.1" } }),
+  mockGetConnInfo: vi.fn().mockReturnValue({ remote: { address: "127.0.0.1" } }),
 }));
 
 vi.mock("@hono/node-server/conninfo", () => ({
@@ -14,7 +14,7 @@ import { rateLimit } from "../../../src/daemon/middleware/rate-limit.js";
 
 describe("rate-limit middleware (WOP-1585)", () => {
   beforeEach(() => {
-    mockGetConnInfo.mockReturnValue({ remote: { address: "192.168.1.1" } });
+    mockGetConnInfo.mockReturnValue({ remote: { address: "127.0.0.1" } });
     delete process.env.TRUSTED_PROXY;
   });
 
@@ -261,9 +261,9 @@ describe("rate-limit middleware (WOP-1585)", () => {
       app.use("*", rateLimit({ windowMs: 60_000, limit: 1, keyByIp: true }));
       app.all("*", (c) => c.json({ ok: true }));
 
-      // Socket is 192.168.1.1 (not in trusted list), XFF is 1.2.3.4 (also not trusted)
+      // Socket is 127.0.0.1 (not in trusted list), XFF is 1.2.3.4 (also not trusted)
       // getClientIp returns 1.2.3.4 as the leftmost non-trusted IP from XFF
-      mockGetConnInfo.mockReturnValue({ remote: { address: "192.168.1.1" } });
+      mockGetConnInfo.mockReturnValue({ remote: { address: "127.0.0.1" } });
       const res1 = await app.request("/api/test", {
         headers: { "X-Forwarded-For": "1.2.3.4" },
       });
@@ -283,12 +283,12 @@ describe("rate-limit middleware (WOP-1585)", () => {
     });
 
     it("trusts XFF when connecting IP matches TRUSTED_PROXY", async () => {
-      vi.stubEnv("TRUSTED_PROXY", "192.168.1.1");
+      vi.stubEnv("TRUSTED_PROXY", "127.0.0.1");
       const app = new Hono();
       app.use("*", rateLimit({ windowMs: 60_000, limit: 1, keyByIp: true }));
       app.all("*", (c) => c.json({ ok: true }));
 
-      // Socket is trusted proxy, so XFF is used for keying
+      // Socket (127.0.0.1) is trusted proxy, so XFF is used for keying
       const res1 = await app.request("/api/test", {
         headers: { "X-Forwarded-For": "203.0.113.1" },
       });
