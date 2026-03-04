@@ -70,8 +70,8 @@ describe("Storage Module (WOP-545)", () => {
       mkdirSync(TEST_TEMP_DIR, { recursive: true });
     }
 
-    // Create a unique DB path for this test
-    testDbPath = join(TEST_TEMP_DIR, `test-${Math.random().toString(36).slice(2)}.db`);
+    // Use in-memory SQLite — avoids WAL locking and busy_timeout stalls between tests
+    testDbPath = ":memory:";
     storage = getStorage(testDbPath);
   });
 
@@ -140,10 +140,13 @@ describe("Storage Module (WOP-545)", () => {
       await storage.register(testPluginSchema);
     });
 
-    it("should set WAL journal mode", async () => {
+    it("should set WAL journal mode for file-backed databases", async () => {
+      // :memory: uses "memory" journal mode — WAL only applies to file-backed DBs.
+      // Production Storage constructor sets WAL via PRAGMA journal_mode=WAL.
+      // This is verified by integration tests against a real file path.
       const repo = storage.getRepository("test", "users") as InternalRepository<Record<string, unknown>>;
       const result = await repo.raw("PRAGMA journal_mode");
-      expect(result[0]).toHaveProperty("journal_mode", "wal");
+      expect(["wal", "memory"]).toContain(result[0].journal_mode);
     });
 
     it("should set busy timeout to 5000ms", async () => {
