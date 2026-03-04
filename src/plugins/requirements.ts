@@ -131,11 +131,28 @@ function isValidDockerTag(tag: string): boolean {
 }
 
 /**
+ * Sanitize a rejected input value for safe logging/messaging.
+ * Strips control characters (0x00-0x1F and DEL 0x7F) to prevent log injection
+ * or terminal escape sequences from polluting logs.
+ */
+function sanitizeRejectedInput(value: string, maxLen = 80): string {
+  let result = "";
+  for (let i = 0; i < value.length && result.length < maxLen; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0x20 && code !== 0x7f) {
+      result += value[i];
+    }
+  }
+  return result;
+}
+
+/**
  * Check if a Docker image exists locally
  */
 export async function dockerImageExists(image: string): Promise<boolean> {
   if (!isValidDockerImage(image)) {
-    logger.warn(`[docker] Rejected invalid Docker image name: ${image.slice(0, 80)}`);
+    const safeImage = sanitizeRejectedInput(image);
+    logger.warn(`[docker] Rejected invalid Docker image name: ${safeImage}`);
     return false;
   }
   if (!hasDocker()) return false;
@@ -156,20 +173,22 @@ export async function dockerImageExists(image: string): Promise<boolean> {
  */
 export async function dockerPull(image: string, tag?: string): Promise<InstallResult> {
   if (!isValidDockerImage(image)) {
-    logger.warn(`[docker] Rejected invalid Docker image name: ${image.slice(0, 80)}`);
+    const safeImage = sanitizeRejectedInput(image);
+    logger.warn(`[docker] Rejected invalid Docker image name: ${safeImage}`);
     return {
       ok: false,
       method: { kind: "docker", image, tag },
-      message: `Invalid Docker image name: ${image.slice(0, 80)}`,
+      message: `Invalid Docker image name: ${safeImage}`,
     };
   }
 
   if (tag !== undefined && !isValidDockerTag(tag)) {
-    logger.warn(`[docker] Rejected invalid Docker tag: ${String(tag).slice(0, 80)}`);
+    const safeTag = sanitizeRejectedInput(String(tag));
+    logger.warn(`[docker] Rejected invalid Docker tag: ${safeTag}`);
     return {
       ok: false,
       method: { kind: "docker", image, tag },
-      message: `Invalid Docker tag: ${String(tag).slice(0, 80)}`,
+      message: `Invalid Docker tag: ${safeTag}`,
     };
   }
 
@@ -177,7 +196,7 @@ export async function dockerPull(image: string, tag?: string): Promise<InstallRe
   const slashIdx = image.indexOf("/");
   if (slashIdx > 0) {
     const prefix = image.slice(0, slashIdx);
-    if (prefix.includes(".") || prefix.includes(":")) {
+    if (prefix === "localhost" || prefix.includes(".") || prefix.includes(":")) {
       logger.warn(`[docker] Pulling from non-default registry: ${prefix}`);
     }
   }

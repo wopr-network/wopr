@@ -40,6 +40,8 @@ vi.mock("../../src/logger.js", () => ({
   },
 }));
 
+import { spawn } from "node:child_process";
+
 import {
   hasBinary,
   whichBinary,
@@ -545,52 +547,64 @@ describe("ensureRequirements", () => {
 // ============================================================================
 
 describe("docker image validation", () => {
+  beforeEach(() => {
+    vi.mocked(spawn).mockClear();
+  });
+
   it("should reject image names containing URL schemes", async () => {
     const result = await dockerPull("https://evil.com/malicious");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker image name");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject image names with shell metacharacters (semicolon)", async () => {
     const result = await dockerPull("nginx; rm -rf /");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker image name");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject image names with backticks", async () => {
     const result = await dockerPull("nginx`whoami`");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker image name");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject image names with $() command substitution", async () => {
     const result = await dockerPull("nginx$(evil)");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker image name");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject image names with newlines", async () => {
     const result = await dockerPull("nginx\n--config=evil");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker image name");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject image names with spaces", async () => {
     const result = await dockerPull("nginx --flag");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker image name");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject empty image names", async () => {
     const result = await dockerPull("");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker image name");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject image names with pipe characters", async () => {
     const result = await dockerPull("nginx|cat /etc/passwd");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker image name");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should return false from dockerImageExists for invalid image names", async () => {
@@ -607,18 +621,21 @@ describe("docker image validation", () => {
     const result = await dockerPull("nginx", "; rm -rf /");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker tag");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject tag containing newline", async () => {
     const result = await dockerPull("nginx", "latest\nevil");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker tag");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should reject tag containing spaces", async () => {
     const result = await dockerPull("nginx", "latest --flag");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Invalid Docker tag");
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
   });
 
   it("should accept valid tag", async () => {
