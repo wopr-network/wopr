@@ -74,7 +74,7 @@ describe("Security Context Module", () => {
       mkdirSync(testDir, { recursive: true });
     }
     resetStorage();
-    getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
   });
 

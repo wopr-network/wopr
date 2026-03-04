@@ -5,20 +5,16 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { randomBytes } from "node:crypto";
-
-// Mock WOPR_HOME to a temp directory so we don't touch real data
-const TEST_DB_DIR = `/tmp/wopr-test-api-keys-${randomBytes(4).toString("hex")}`;
 
 vi.mock("../../src/paths.js", () => ({
-  WOPR_HOME: TEST_DB_DIR,
+  WOPR_HOME: "/tmp/wopr-test-api-keys-unused",
 }));
-
-import { mkdirSync, rmSync } from "node:fs";
 
 describe("API Key Management (WOP-209)", () => {
   beforeEach(async () => {
-    mkdirSync(TEST_DB_DIR, { recursive: true });
+    // Prime the storage singleton with :memory: before AuthStore can claim it
+    const { getStorage } = await import("../../src/storage/index.js");
+    getStorage(":memory:");
 
     // Initialize auth storage (required for api-keys module)
     const { AuthStore } = await import("../../src/auth/auth-store.js");
@@ -30,10 +26,9 @@ describe("API Key Management (WOP-209)", () => {
   });
 
   afterEach(async () => {
-    // Reset storage and clean up
+    // Reset storage singleton between tests
     const { resetStorage } = await import("../../src/storage/index.js");
     resetStorage();
-    rmSync(TEST_DB_DIR, { recursive: true, force: true });
     vi.resetModules();
   });
 

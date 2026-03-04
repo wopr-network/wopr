@@ -65,7 +65,7 @@ describe("Session Context Repository (WOP-556)", () => {
     }
     resetStorage();
     resetSessionContextStorageInit();
-    testDbPath = join(TEST_DIR, `sctx-${Math.random().toString(36).slice(2)}.db`);
+    testDbPath = ":memory:";
     storage = getStorage(testDbPath);
     await initSessionContextStorage();
   });

@@ -39,7 +39,7 @@ describe("Plugin Trust Downgrade (WOP-1408)", () => {
       mkdirSync(testDir, { recursive: true });
     }
     resetStorage();
-    getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
   });
 

@@ -56,7 +56,7 @@ describe("parseHookCommand", () => {
       mkdirSync(testDir, { recursive: true });
     }
     resetStorage();
-    getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
   });
 
@@ -175,7 +175,7 @@ describe("shell denylist (WOP-1423)", () => {
       mkdirSync(testDir, { recursive: true });
     }
     resetStorage();
-    getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
   });
 
@@ -230,7 +230,7 @@ describe("runPreInjectHooks", () => {
       mkdirSync(testDir, { recursive: true });
     }
     resetStorage();
-    getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
     spawnMock.mockReset();
   });
@@ -343,7 +343,7 @@ describe("fail-closed hook behavior (WOP-1378)", () => {
       mkdirSync(testDir, { recursive: true });
     }
     resetStorage();
-    getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
     spawnMock.mockReset();
   });
@@ -498,7 +498,7 @@ describe("runPostInjectHooks", () => {
       mkdirSync(testDir, { recursive: true });
     }
     resetStorage();
-    getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
     spawnMock.mockReset();
   });

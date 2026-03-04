@@ -35,8 +35,8 @@ vi.mock("../../src/paths.js", () => ({
   WOPR_HOME: "/tmp/wopr-drizzle-repo-test",
 }));
 
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, rmSync } from "node:fs";
+
 import { getStorage, resetStorage } from "../../src/storage/public.js";
 import type { InternalRepository, StorageApi } from "../../src/storage/api/plugin-storage.js";
 
@@ -70,8 +70,7 @@ describe("DrizzleRepository gap coverage (WOP-954)", () => {
 
   beforeEach(() => {
     resetStorage();
-    if (!existsSync(TEST_DIR)) mkdirSync(TEST_DIR, { recursive: true });
-    storage = getStorage(join(TEST_DIR, `test-${Math.random().toString(36).slice(2)}.db`));
+    storage = getStorage(":memory:");
   });
 
   afterEach(() => {
