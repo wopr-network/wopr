@@ -302,7 +302,7 @@ export class ConfigManager {
     validateKeySegments(parts);
     let value: unknown = this.config;
     for (const part of parts) {
-      if (value && typeof value === "object" && part in value) {
+      if (value && typeof value === "object" && Object.hasOwn(value as object, part)) {
         value = (value as Record<string, unknown>)[part];
       } else {
         return undefined;
@@ -318,8 +318,8 @@ export class ConfigManager {
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
-      if (!(part in target)) {
-        target[part] = {};
+      if (!Object.hasOwn(target, part) || target[part] === null || typeof target[part] !== "object") {
+        target[part] = Object.create(null) as Record<string, unknown>;
       }
       target = target[part] as Record<string, unknown>;
     }

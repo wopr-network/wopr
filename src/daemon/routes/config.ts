@@ -50,7 +50,12 @@ configRouter.get(
       return c.json({ error: "Invalid config key" }, 400);
     }
     await config.load();
-    const value = config.getValue(key);
+    let value: unknown;
+    try {
+      value = config.getValue(key);
+    } catch {
+      return c.json({ error: "Invalid config key" }, 400);
+    }
 
     if (value === undefined) {
       return c.json({ error: `Config key "${key}" not found` }, 404);
@@ -84,7 +89,11 @@ configRouter.put(
       return c.json({ error: "Missing value in request body" }, 400);
     }
 
-    config.setValue(key, value);
+    try {
+      config.setValue(key, value);
+    } catch {
+      return c.json({ error: "Invalid config key" }, 400);
+    }
     await config.save();
 
     return c.json({ key, value: redactSensitive(value, key) });

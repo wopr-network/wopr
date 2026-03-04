@@ -294,6 +294,22 @@ describe("ConfigManager", () => {
       await loadFreshDefaults();
       expect(() => mgr.getValue("prototype")).toThrow("Invalid config key");
     });
+
+    it("should allow keys that contain forbidden words as substrings", async () => {
+      await loadFreshDefaults();
+      expect(() => mgr.getValue("foo.__proto__bar")).not.toThrow();
+      expect(() => mgr.getValue("constructorValue")).not.toThrow();
+      expect(() => mgr.getValue("some.prototypeSuffix.path")).not.toThrow();
+    });
+  });
+
+  describe("setValue() prototype pollution guard — substring allowlist", () => {
+    it("should allow keys that contain forbidden words as substrings", async () => {
+      await loadFreshDefaults();
+      expect(() => mgr.setValue("foo.__proto__bar", true)).not.toThrow();
+      expect(() => mgr.setValue("constructorValue", 42)).not.toThrow();
+      expect(() => mgr.setValue("some.prototypeSuffix.path", "ok")).not.toThrow();
+    });
   });
 
   describe("reset()", () => {
