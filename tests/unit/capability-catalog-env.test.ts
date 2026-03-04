@@ -18,6 +18,20 @@ describe("capability-catalog hostedDefaults baseUrl", () => {
     ).toBe(true);
   });
 
+  it("falls back to WOPR_API_BASE_URL when WOPR_CAPABILITY_CATALOG_URL is whitespace-only", async () => {
+    vi.stubEnv("WOPR_CAPABILITY_CATALOG_URL", "   ");
+    vi.stubEnv("WOPR_API_BASE_URL", "http://api-base:1234");
+    const { CAPABILITY_CATALOG } = await import(
+      "../../src/core/capability-catalog.js"
+    );
+    const voice = CAPABILITY_CATALOG.find((c: any) => c.id === "voice");
+    expect(
+      voice?.plugins.every(
+        (p: any) => p?.hostedConfig?.baseUrl === "http://api-base:1234",
+      ),
+    ).toBe(true);
+  });
+
   it("strips trailing slashes from WOPR_CAPABILITY_CATALOG_URL", async () => {
     vi.stubEnv("WOPR_CAPABILITY_CATALOG_URL", "http://catalog:8080///");
     const { CAPABILITY_CATALOG } = await import(

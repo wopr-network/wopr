@@ -35,7 +35,11 @@ describe("capability-catalog", () => {
 
     it("plugins have hostedConfig with baseUrl where applicable", () => {
       const voice = CAPABILITY_CATALOG.find((c) => c.id === "voice");
-      expect(voice?.plugins[0].hostedConfig.baseUrl).toBe("https://api.wopr.bot");
+      // baseUrl is env-dependent; verify it's a non-empty string without trailing slash
+      const baseUrl = voice?.plugins[0].hostedConfig.baseUrl as string;
+      expect(typeof baseUrl).toBe("string");
+      expect(baseUrl).toBeTruthy();
+      expect(baseUrl).not.toMatch(/\/$/);
     });
 
     it("web-search plugin has empty hostedConfig", () => {
