@@ -292,14 +292,30 @@ server {
     location / {
         auth_basic "WOPR";
         auth_basic_user_file /etc/nginx/.htpasswd;
-        
+
         proxy_pass http://wopr:7437;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 ```
+
+**Trusted proxy configuration:** When WOPR is behind nginx or another reverse proxy, set the `TRUSTED_PROXY` environment variable to the proxy container's IP address so that WOPR reads the real client IP from `X-Forwarded-For` instead of the proxy IP:
+
+```yaml
+services:
+  wopr:
+    environment:
+      TRUSTED_PROXY: "172.18.0.2"  # nginx container IP on the Docker network
+```
+
+To find the nginx container IP: `docker inspect wopr-nginx | grep IPAddress`
+
+WOPR uses a right-to-left walk of the `X-Forwarded-For` header, skipping trusted proxy entries, to find the real client IP. This prevents attackers from spoofing their IP by prepending fake values to the header.
 
 ### Behind VPN
 

@@ -774,6 +774,21 @@ Default rate limits (configurable):
 - 100 requests per minute per IP
 - 10 concurrent streaming connections
 
+### Reverse Proxy Deployments
+
+When WOPR runs behind a reverse proxy (nginx, Caddy, etc.), rate limiting is applied per client IP. Set the `TRUSTED_PROXY` environment variable to your proxy's IP address so WOPR can read the real client IP from `X-Forwarded-For`:
+
+```
+TRUSTED_PROXY=172.18.0.2
+```
+
+Multiple trusted proxies (comma-separated):
+```
+TRUSTED_PROXY=172.18.0.2,10.0.0.1
+```
+
+Only valid IPv4 and IPv6 addresses are accepted. WOPR walks the `X-Forwarded-For` header right-to-left, skipping trusted proxy entries, to identify the real client IP. Without `TRUSTED_PROXY` set, `X-Forwarded-For` is ignored and the socket address is used directly.
+
 ## SDK Examples
 
 ### JavaScript/TypeScript
