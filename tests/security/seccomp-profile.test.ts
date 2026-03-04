@@ -5,7 +5,15 @@ describe("generateSeccompProfile", () => {
   it("returns valid JSON", () => {
     const raw = generateSeccompProfile();
     const profile = JSON.parse(raw);
-    expect(profile).toBeDefined();
+    expect(profile).toEqual(
+      expect.objectContaining({
+        defaultAction: "SCMP_ACT_ERRNO",
+        architectures: expect.arrayContaining(["SCMP_ARCH_X86_64"]),
+        syscalls: expect.arrayContaining([
+          expect.objectContaining({ action: "SCMP_ACT_ALLOW" }),
+        ]),
+      }),
+    );
   });
 
   it("uses SCMP_ACT_ERRNO as defaultAction (default-deny)", () => {
