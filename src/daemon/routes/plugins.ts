@@ -191,7 +191,8 @@ pluginsRouter.get(
     },
   }),
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
 
     try {
       validatePluginName(name);
@@ -429,7 +430,8 @@ pluginsRouter.delete(
   }),
   installRateLimit,
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
 
     try {
       validatePluginName(name);
@@ -478,7 +480,8 @@ pluginsRouter.post(
   }),
   mutateRateLimit,
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
 
     try {
       validatePluginName(name);
@@ -532,7 +535,8 @@ pluginsRouter.post(
   }),
   mutateRateLimit,
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
 
     try {
       validatePluginName(name);
@@ -581,7 +585,8 @@ pluginsRouter.post(
   }),
   mutateRateLimit,
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
 
     try {
       validatePluginName(name);
@@ -642,7 +647,8 @@ pluginsRouter.get(
     },
   }),
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
     const state = getPluginState(name);
     return c.json({ name, state: state ?? "unloaded" });
   },
@@ -661,7 +667,8 @@ pluginsRouter.get(
     },
   }),
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
 
     const plugins = await listPlugins();
     const plugin = plugins.find((p: { name: string }) => p.name === name);
@@ -704,7 +711,8 @@ pluginsRouter.put(
   }),
   mutateRateLimit,
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
 
     const plugins = await listPlugins();
     const plugin = plugins.find((p: { name: string }) => p.name === name);
@@ -765,7 +773,8 @@ pluginsRouter.get(
     },
   }),
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Plugin name is required" }, 400);
 
     const plugins = await listPlugins();
     const plugin = plugins.find((p: { name: string }) => p.name === name);
@@ -872,7 +881,8 @@ pluginsRouter.delete(
     },
   }),
   async (c) => {
-    const name = c.req.param("name") as string;
+    const name = c.req.param("name");
+    if (!name) return c.json({ error: "Registry name is required" }, 400);
     await removeRegistry(name);
     return c.json({ removed: true });
   },

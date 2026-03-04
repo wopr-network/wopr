@@ -20,7 +20,7 @@ import { ensureToken } from "../auth-token.js";
 
 // WebSocket upgrade paths are no longer skipped — auth happens at the HTTP
 // upgrade request via bearer token or Sec-WebSocket-Protocol header (WOP-1407)
-const SKIP_AUTH_PATHS = new Set([
+export const SKIP_AUTH_PATHS = new Set([
   "/health",
   "/ready",
   "/healthz",

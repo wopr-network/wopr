@@ -20,6 +20,7 @@ vi.mock("../../src/daemon/api-keys.js", () => ({
 }));
 
 import {
+  SKIP_AUTH_PATHS,
   bearerAuth,
   requireAuth,
   requireAdmin,
@@ -49,17 +50,9 @@ describe("daemon auth middleware (WOP-1572)", () => {
   });
 
   describe("skip-auth paths", () => {
-    const skipPaths = [
-      "/health",
-      "/ready",
-      "/healthz",
-      "/healthz/history",
-      "/openapi.json",
-      "/docs",
-      "/openapi/websocket.json",
-      "/openapi/plugin-manifest.schema.json",
-      "/",
-    ];
+    // Derive skip paths from the single source of truth in auth.ts, plus "/" which
+    // is handled separately in the middleware condition (not part of the Set).
+    const skipPaths = [...SKIP_AUTH_PATHS, "/"];
 
     for (const path of skipPaths) {
       it(`skips auth for ${path}`, async () => {

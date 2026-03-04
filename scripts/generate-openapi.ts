@@ -27,6 +27,12 @@ async function main() {
   // Invoke the /openapi.json endpoint directly with a synthetic Request
   const req = new Request("http://localhost/openapi.json");
   const res = await app.fetch(req);
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`/openapi.json returned HTTP ${res.status}:\n${body}`);
+  }
+
   const spec = await res.json();
 
   mkdirSync(dirname(outputPath), { recursive: true });
