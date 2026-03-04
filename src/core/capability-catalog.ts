@@ -36,9 +36,15 @@ export interface CapabilityPluginRef {
  * Get the default WOPR-hosted config shared by all capability plugins.
  * Uses the bot's platform token from env/config.
  */
-function hostedDefaults(): { baseUrl: string } {
-  const configured = process.env.WOPR_API_BASE_URL?.trim();
-  const baseUrl = configured ? configured.replace(/\/+$/, "") : "https://api.wopr.bot";
+const DEFAULT_CATALOG_BASE_URL = "https://api.wopr.bot";
+
+/** Exported for testing. */
+export function buildHostedDefaults(): { baseUrl: string } {
+  const catalogUrl = process.env.WOPR_CAPABILITY_CATALOG_URL?.trim();
+  const apiUrl = process.env.WOPR_API_BASE_URL?.trim();
+  const raw = catalogUrl || apiUrl || DEFAULT_CATALOG_BASE_URL;
+  const stripped = raw.replace(/\/+$/, "");
+  const baseUrl = stripped || DEFAULT_CATALOG_BASE_URL;
   return {
     baseUrl,
   };
@@ -54,12 +60,12 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
       {
         source: "github:wopr-network/wopr-plugin-voice-chatterbox",
         name: "wopr-plugin-voice-chatterbox",
-        hostedConfig: { ...hostedDefaults(), capability: "tts" },
+        hostedConfig: { ...buildHostedDefaults(), capability: "tts" },
       },
       {
         source: "github:wopr-network/wopr-plugin-voice-whisper-local",
         name: "wopr-plugin-voice-whisper-local",
-        hostedConfig: { ...hostedDefaults(), capability: "stt" },
+        hostedConfig: { ...buildHostedDefaults(), capability: "stt" },
       },
     ],
     activatedMessage: "Voice activated! 🎙️",
@@ -73,7 +79,7 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
       {
         source: "github:wopr-network/wopr-plugin-imagegen",
         name: "wopr-plugin-imagegen",
-        hostedConfig: { ...hostedDefaults(), capability: "image-gen" },
+        hostedConfig: { ...buildHostedDefaults(), capability: "image-gen" },
       },
     ],
     activatedMessage: "Image generation activated! 🎨",
@@ -87,7 +93,7 @@ export const CAPABILITY_CATALOG: CapabilityCatalogEntry[] = [
       {
         source: "github:wopr-network/wopr-plugin-videogen",
         name: "wopr-plugin-videogen",
-        hostedConfig: { ...hostedDefaults(), capability: "video-gen" },
+        hostedConfig: { ...buildHostedDefaults(), capability: "video-gen" },
       },
     ],
     activatedMessage: "Video generation activated! 🎬",
