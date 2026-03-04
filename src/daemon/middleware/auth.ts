@@ -20,16 +20,24 @@ import { ensureToken } from "../auth-token.js";
 
 // WebSocket upgrade paths are no longer skipped — auth happens at the HTTP
 // upgrade request via bearer token or Sec-WebSocket-Protocol header (WOP-1407)
-const SKIP_AUTH_PATHS = new Set([
-  "/health",
-  "/ready",
-  "/healthz",
-  "/healthz/history",
+
+/** Paths that never require authentication (probe endpoints). */
+const ALWAYS_SKIP_PATHS = new Set(["/health", "/ready", "/healthz"]);
+
+/** Documentation paths — only skip auth when WOPR_EXPOSE_DOCS=true. */
+const DOC_PATHS = new Set([
   "/openapi.json",
   "/docs",
   "/openapi/websocket.json",
   "/openapi/plugin-manifest.schema.json",
 ]);
+
+/** Build the skip-auth path set. Exported for testing. */
+export function buildSkipAuthPaths(exposeDocs: boolean): Set<string> {
+  return new Set([...ALWAYS_SKIP_PATHS, ...(exposeDocs ? DOC_PATHS : [])]);
+}
+
+const SKIP_AUTH_PATHS = buildSkipAuthPaths(process.env.WOPR_EXPOSE_DOCS === "true");
 
 /** Map an API key scope to its corresponding auth role. */
 function scopeToRole(scope: string): string {
