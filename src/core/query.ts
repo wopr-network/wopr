@@ -41,7 +41,9 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     config = request.providerConfig;
   } else {
     // Auto-detect: use first available provider
-    const available = providerRegistry.listProviders().filter((p) => p.available);
+    const available = providerRegistry
+      .listProviders()
+      .filter((p) => p.available && !rateLimitTracker.isRateLimited(p.id));
     if (available.length === 0) {
       throw new Error("No providers available. Configure at least one provider (anthropic, kimi, openai, etc.)");
     }
@@ -131,8 +133,11 @@ export async function executeQuery(request: QueryRequest): Promise<ModelResponse
     // excluded — they produce false positives on unrelated errors and would
     // mark healthy providers as rate-limited unnecessarily.
     // Note: RateLimitError always has statusCode=429, so it is caught below.
+    // Guard against null/undefined errors before property access.
     const is429 =
-      (error as { status?: number }).status === 429 || (error as { statusCode?: number }).statusCode === 429;
+      error != null &&
+      typeof error === "object" &&
+      ((error as { status?: number }).status === 429 || (error as { statusCode?: number }).statusCode === 429);
 
     if (is429 && resolved) {
       const retryAfter = (error as { retryAfterSeconds?: number }).retryAfterSeconds;

@@ -435,8 +435,10 @@ async function executeInjectInternal(
     // Reuse early provider config (fetched above for context windowing)
     let providerConfig = earlyProviderConfig;
     if (!providerConfig) {
-      // Auto-detect: use first available provider
-      const available = providerRegistry.listProviders().filter((p) => p.available);
+      // Auto-detect: use first available, non-rate-limited provider
+      const available = providerRegistry
+        .listProviders()
+        .filter((p) => p.available && !rateLimitTracker.isRateLimited(p.id));
       if (available.length > 0) {
         providerConfig = {
           name: available[0].id,
