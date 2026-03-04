@@ -35,6 +35,13 @@ import {
 let securityStore: SecurityStore | null = null;
 
 /**
+ * Reset security store state — for testing only
+ */
+export function resetSecurityStore(): void {
+  securityStore = null;
+}
+
+/**
  * Initialize security system with config path
  */
 export async function initSecurity(woprDir: string): Promise<void> {
