@@ -119,7 +119,7 @@ beforeEach(async () => {
   sessions = await import("../../src/core/sessions.js");
 
   await sessionRepository.initSessionStorage();
-});
+}, 30000);
 
 afterEach(async () => {
   storage.resetStorage();

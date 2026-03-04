@@ -14,6 +14,22 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Mock child_process so docker pull returns immediately (no daemon in CI)
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    spawn: vi.fn((..._args: unknown[]) => {
+      const { EventEmitter } = require("node:events");
+      const proc = new EventEmitter();
+      proc.stdout = new EventEmitter();
+      proc.stderr = new EventEmitter();
+      setImmediate(() => proc.emit("close", 1));
+      return proc;
+    }),
+  };
+});
+
 // Mock logger
 vi.mock("../../src/logger.js", () => ({
   logger: {
