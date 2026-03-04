@@ -262,6 +262,38 @@ describe("ConfigManager", () => {
       mgr.setValue("daemon.host", "0.0.0.0");
       expect(mgr.getValue("daemon.host")).toBe("0.0.0.0");
     });
+
+    it("should reject __proto__ key segment", async () => {
+      await loadFreshDefaults();
+      expect(() => mgr.setValue("__proto__.polluted", true)).toThrow("Invalid config key");
+    });
+
+    it("should reject constructor key segment", async () => {
+      await loadFreshDefaults();
+      expect(() => mgr.setValue("foo.constructor.polluted", true)).toThrow("Invalid config key");
+    });
+
+    it("should reject prototype key segment", async () => {
+      await loadFreshDefaults();
+      expect(() => mgr.setValue("prototype.polluted", true)).toThrow("Invalid config key");
+    });
+  });
+
+  describe("getValue() prototype pollution guard", () => {
+    it("should reject __proto__ key segment", async () => {
+      await loadFreshDefaults();
+      expect(() => mgr.getValue("__proto__.polluted")).toThrow("Invalid config key");
+    });
+
+    it("should reject constructor key segment", async () => {
+      await loadFreshDefaults();
+      expect(() => mgr.getValue("foo.constructor.bar")).toThrow("Invalid config key");
+    });
+
+    it("should reject prototype key segment", async () => {
+      await loadFreshDefaults();
+      expect(() => mgr.getValue("prototype")).toThrow("Invalid config key");
+    });
   });
 
   describe("reset()", () => {
