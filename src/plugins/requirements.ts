@@ -106,9 +106,55 @@ export function hasDocker(): boolean {
 }
 
 /**
+ * Docker image name pattern: lowercase alphanumeric, dots, hyphens, underscores,
+ * slashes (for registry/org/image paths), colons (for tags), and digits for port numbers.
+ * Rejects URL schemes, shell metacharacters, whitespace, and control characters.
+ *
+ * Valid examples: nginx, library/nginx, ghcr.io/org/image:v1, myregistry.com:5000/app
+ * Invalid examples: https://evil.com/img, nginx; rm -rf /, image$(cmd)
+ */
+const DOCKER_IMAGE_PATTERN = /^[a-z0-9][a-z0-9._\-/:]*$/;
+const DOCKER_TAG_PATTERN = /^[a-z0-9._-]+$/i;
+
+function isValidDockerImage(image: string): boolean {
+  if (!image || image.length > 255) return false;
+  // Reject URL schemes
+  if (/^[a-z]+:\/\//i.test(image)) return false;
+  // Reject shell metacharacters and control characters
+  if (!DOCKER_IMAGE_PATTERN.test(image)) return false;
+  return true;
+}
+
+function isValidDockerTag(tag: string): boolean {
+  if (!tag || tag.length > 128) return false;
+  return DOCKER_TAG_PATTERN.test(tag);
+}
+
+/**
+ * Sanitize a rejected input value for safe logging/messaging.
+ * Strips control characters (0x00-0x1F and DEL 0x7F) to prevent log injection
+ * or terminal escape sequences from polluting logs.
+ */
+function sanitizeRejectedInput(value: string, maxLen = 80): string {
+  let result = "";
+  for (let i = 0; i < value.length && result.length < maxLen; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0x20 && code !== 0x7f) {
+      result += value[i];
+    }
+  }
+  return result;
+}
+
+/**
  * Check if a Docker image exists locally
  */
 export async function dockerImageExists(image: string): Promise<boolean> {
+  if (!isValidDockerImage(image)) {
+    const safeImage = sanitizeRejectedInput(image);
+    logger.warn(`[docker] Rejected invalid Docker image name: ${safeImage}`);
+    return false;
+  }
   if (!hasDocker()) return false;
 
   try {
@@ -126,6 +172,35 @@ export async function dockerImageExists(image: string): Promise<boolean> {
  * Pull a Docker image
  */
 export async function dockerPull(image: string, tag?: string): Promise<InstallResult> {
+  if (!isValidDockerImage(image)) {
+    const safeImage = sanitizeRejectedInput(image);
+    logger.warn(`[docker] Rejected invalid Docker image name: ${safeImage}`);
+    return {
+      ok: false,
+      method: { kind: "docker", image, tag },
+      message: `Invalid Docker image name: ${safeImage}`,
+    };
+  }
+
+  if (tag !== undefined && !isValidDockerTag(tag)) {
+    const safeTag = sanitizeRejectedInput(String(tag));
+    logger.warn(`[docker] Rejected invalid Docker tag: ${safeTag}`);
+    return {
+      ok: false,
+      method: { kind: "docker", image, tag },
+      message: `Invalid Docker tag: ${safeTag}`,
+    };
+  }
+
+  // Warn on non-default registries: hostname with dot OR colon (port) before first slash
+  const slashIdx = image.indexOf("/");
+  if (slashIdx > 0) {
+    const prefix = image.slice(0, slashIdx);
+    if (prefix === "localhost" || prefix.includes(".") || prefix.includes(":")) {
+      logger.warn(`[docker] Pulling from non-default registry: ${prefix}`);
+    }
+  }
+
   const fullImage = tag ? `${image}:${tag}` : image;
 
   return new Promise((resolve) => {

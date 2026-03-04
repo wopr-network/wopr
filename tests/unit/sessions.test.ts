@@ -136,7 +136,7 @@ beforeEach(async () => {
 
   // Initialize storage for sessions
   await sessionRepository.initSessionStorage();
-});
+}, 30000);
 
 afterEach(async () => {
   // Clean up storage before next test

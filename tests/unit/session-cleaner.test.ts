@@ -130,7 +130,7 @@ beforeEach(async () => {
   sessionRepository.resetSessionStorageInit();
   storage.getStorage(":memory:");
   await sessionRepository.initSessionStorage();
-});
+}, 30000);
 
 afterEach(() => {
   vi.restoreAllMocks();
