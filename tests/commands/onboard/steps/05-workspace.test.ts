@@ -41,6 +41,10 @@ describe("05-workspace step", () => {
   });
 
   it("should use CLI override workspace when provided", async () => {
+    ensureWorkspaceMock.mockResolvedValue({
+      dir: "/custom/workspace",
+      created: false,
+    });
     const { workspaceStep } = await import(
       "../../../../src/commands/onboard/steps/05-workspace.js"
     );
@@ -54,7 +58,7 @@ describe("05-workspace step", () => {
 
     const result = await workspaceStep(ctx as Parameters<typeof workspaceStep>[0]);
     expect(ensureWorkspaceMock).toHaveBeenCalledWith("/custom/workspace");
-    expect(result).toEqual({ workspace: "/home/test/.wopr/workspace" });
+    expect(result).toEqual({ workspace: "/custom/workspace" });
   });
 
   it("should use default workspace in quickstart mode", async () => {

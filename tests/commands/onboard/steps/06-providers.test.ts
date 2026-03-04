@@ -106,7 +106,7 @@ describe("06-providers step", () => {
     expect(result).toEqual({ provider: { primary: "anthropic" } });
   });
 
-  it("should handle install failure and return empty when user confirms continue", async () => {
+  it("should handle install failure and return provider config when user confirms continue", async () => {
     selectMock.mockResolvedValue("openai");
     installPluginMock.mockRejectedValue(new Error("network error"));
     confirmMock.mockResolvedValue(true);
