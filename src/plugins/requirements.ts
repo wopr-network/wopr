@@ -106,9 +106,32 @@ export function hasDocker(): boolean {
 }
 
 /**
+ * Docker image name pattern: lowercase alphanumeric, dots, hyphens, underscores,
+ * slashes (for registry/org/image paths), colons (for tags), and digits for port numbers.
+ * Rejects URL schemes, shell metacharacters, whitespace, and control characters.
+ *
+ * Valid examples: nginx, library/nginx, ghcr.io/org/image:v1, myregistry.com:5000/app
+ * Invalid examples: https://evil.com/img, nginx; rm -rf /, image$(cmd)
+ */
+const DOCKER_IMAGE_PATTERN = /^[a-z0-9][a-z0-9._\-/:]*$/;
+
+function isValidDockerImage(image: string): boolean {
+  if (!image || image.length > 255) return false;
+  // Reject URL schemes
+  if (/^[a-z]+:\/\//i.test(image)) return false;
+  // Reject shell metacharacters and control characters
+  if (!DOCKER_IMAGE_PATTERN.test(image)) return false;
+  return true;
+}
+
+/**
  * Check if a Docker image exists locally
  */
 export async function dockerImageExists(image: string): Promise<boolean> {
+  if (!isValidDockerImage(image)) {
+    logger.warn(`[docker] Rejected invalid Docker image name: ${image.slice(0, 80)}`);
+    return false;
+  }
   if (!hasDocker()) return false;
 
   try {
@@ -126,6 +149,21 @@ export async function dockerImageExists(image: string): Promise<boolean> {
  * Pull a Docker image
  */
 export async function dockerPull(image: string, tag?: string): Promise<InstallResult> {
+  if (!isValidDockerImage(image)) {
+    logger.warn(`[docker] Rejected invalid Docker image name: ${image.slice(0, 80)}`);
+    return {
+      ok: false,
+      method: { kind: "docker", image, tag },
+      message: `Invalid Docker image name: ${image.slice(0, 80)}`,
+    };
+  }
+
+  // Warn on non-default registries (image contains a dot before the first slash = custom registry)
+  const slashIdx = image.indexOf("/");
+  if (slashIdx > 0 && image.slice(0, slashIdx).includes(".")) {
+    logger.warn(`[docker] Pulling from non-default registry: ${image.slice(0, slashIdx)}`);
+  }
+
   const fullImage = tag ? `${image}:${tag}` : image;
 
   return new Promise((resolve) => {

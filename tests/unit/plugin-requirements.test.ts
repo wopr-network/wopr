@@ -29,6 +29,8 @@ import {
   whichBinary,
   hasEnv,
   hasDocker,
+  dockerPull,
+  dockerImageExists,
   resolveConfigPath,
   isConfigPathTruthy,
   checkOsRequirement,
@@ -519,5 +521,69 @@ describe("ensureRequirements", () => {
   it("should return satisfied for undefined requirements", async () => {
     const result = await ensureRequirements(undefined, undefined);
     expect(result.satisfied).toBe(true);
+  });
+});
+
+// ============================================================================
+// Docker Image Validation (WOP-1545)
+// ============================================================================
+
+describe("docker image validation", () => {
+  it("should reject image names containing URL schemes", async () => {
+    const result = await dockerPull("https://evil.com/malicious");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker image name");
+  });
+
+  it("should reject image names with shell metacharacters (semicolon)", async () => {
+    const result = await dockerPull("nginx; rm -rf /");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker image name");
+  });
+
+  it("should reject image names with backticks", async () => {
+    const result = await dockerPull("nginx`whoami`");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker image name");
+  });
+
+  it("should reject image names with $() command substitution", async () => {
+    const result = await dockerPull("nginx$(evil)");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker image name");
+  });
+
+  it("should reject image names with newlines", async () => {
+    const result = await dockerPull("nginx\n--config=evil");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker image name");
+  });
+
+  it("should reject image names with spaces", async () => {
+    const result = await dockerPull("nginx --flag");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker image name");
+  });
+
+  it("should reject empty image names", async () => {
+    const result = await dockerPull("");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker image name");
+  });
+
+  it("should reject image names with pipe characters", async () => {
+    const result = await dockerPull("nginx|cat /etc/passwd");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker image name");
+  });
+
+  it("should return false from dockerImageExists for invalid image names", async () => {
+    const result = await dockerImageExists("https://evil.com/image");
+    expect(result).toBe(false);
+  });
+
+  it("should return false from dockerImageExists for shell injection", async () => {
+    const result = await dockerImageExists("nginx; rm -rf /");
+    expect(result).toBe(false);
   });
 });
