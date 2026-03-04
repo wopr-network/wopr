@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseTemporalFilter } from "../../src/core/a2a-tools/_base.js";
 
 describe("parseTemporalFilter", () => {
@@ -30,19 +30,25 @@ describe("parseTemporalFilter", () => {
   });
 
   it("parses relative expressions", () => {
-    const before = Date.now();
-    const result = parseTemporalFilter("last 7 days");
-    const after = Date.now();
-    expect(result).not.toBeNull();
-    const expected7d = 7 * 24 * 60 * 60 * 1000;
-    expect(result?.after).toBeGreaterThanOrEqual(before - expected7d);
-    expect(result?.after).toBeLessThanOrEqual(after - expected7d);
+    const fixedNow = new Date("2024-06-15T12:00:00.000Z").getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+    try {
+      const result = parseTemporalFilter("last 7 days");
+      expect(result).not.toBeNull();
+      const expected7d = 7 * 24 * 60 * 60 * 1000;
+      expect(result?.after).toBe(fixedNow - expected7d);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("parses single date", () => {
+    const startOfDayMs = new Date(2024, 5, 15, 0, 0, 0, 0).getTime();
+    const endOfDayMs = new Date(2024, 5, 15, 23, 59, 59, 999).getTime();
     const result = parseTemporalFilter("2024-06-15");
     expect(result).not.toBeNull();
-    expect(result?.after).toBe(new Date(2024, 5, 15, 0, 0, 0, 0).getTime());
-    expect(result?.before).toBe(new Date(2024, 5, 15, 23, 59, 59, 999).getTime());
+    expect(result?.after).toBe(startOfDayMs);
+    expect(result?.before).toBe(endOfDayMs);
   });
 });
