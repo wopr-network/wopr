@@ -868,6 +868,7 @@ pluginsRouter.delete(
     summary: "Remove plugin registry",
     responses: {
       200: { description: "Registry removed" },
+      404: { description: "Registry not found" },
       401: { description: "Unauthorized" },
     },
   }),

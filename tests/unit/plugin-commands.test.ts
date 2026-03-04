@@ -89,6 +89,18 @@ describe("tryPluginCommand", () => {
     expect(await tryPluginCommand("test", [])).toBe(false);
   });
 
+  it("propagates error when handler throws", async () => {
+    const handler = vi.fn().mockRejectedValue(new Error("handler boom"));
+    const plugins = [{ name: "p1", enabled: true }];
+    mockGetInstalledPlugins.mockResolvedValue(plugins);
+    mockGetLoadedPlugin.mockReturnValue({
+      plugin: { commands: [{ name: "boom", handler }] },
+      context: {},
+    });
+
+    await expect(tryPluginCommand("boom", [])).rejects.toThrow("handler boom");
+  });
+
   it("finds command in second plugin when first has none", async () => {
     const handler = vi.fn();
     const plugins = [
