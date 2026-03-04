@@ -299,7 +299,6 @@ export class ConfigManager {
 
   getValue(key: string): unknown {
     const parts = key.split(".");
-    validateKeySegments(parts);
     let value: unknown = this.config;
     for (const part of parts) {
       if (value && typeof value === "object" && Object.hasOwn(value as object, part)) {
