@@ -152,7 +152,7 @@ const WoprConfigSchema = z.object({
     .object({
       file: z.string().optional(),
       chance: z.number().optional(),
-      purge: z.record(z.string(), z.unknown()).optional(),
+      purge: z.object({ at: z.string(), duration: z.string() }).optional(),
     })
     .optional(),
   sandbox: z

@@ -153,7 +153,8 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     const startDate = new Date(year, month, day, 0, 0, 0, 0);
     const endDate = new Date(year, month, day, 23, 59, 59, 999);
 
-    if (!Number.isNaN(startDate.getTime())) {
+    // Validate that the date components didn't roll over (e.g., 2024-02-31 → 2024-03-02)
+    if (startDate.getFullYear() === year && startDate.getMonth() === month && startDate.getDate() === day) {
       return {
         after: startDate.getTime(),
         before: endDate.getTime(),

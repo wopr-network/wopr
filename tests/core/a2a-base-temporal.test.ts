@@ -39,4 +39,10 @@ describe("parseTemporalFilter", () => {
     const result = parseTemporalFilter("2024-06-15");
     expect(result).not.toBeNull();
   });
+
+  it("returns null for invalid calendar date (rollover)", () => {
+    // 2024-02-31 doesn't exist; JS Date would roll it over to 2024-03-02
+    const result = parseTemporalFilter("2024-02-31");
+    expect(result).toBeNull();
+  });
 });
