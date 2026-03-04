@@ -26,6 +26,7 @@ const { getStorage, resetStorage } = await import("../../src/storage/index.js");
 // Import after mocks are set up
 const {
   initSecurity,
+  resetSecurityStore,
   getSecurityConfig,
   getSecurityConfigAsync,
   saveSecurityConfig,
@@ -43,6 +44,8 @@ const {
   canSessionForward,
   canGatewayForward,
 } = await import("../../src/security/policy.js");
+
+const { resetSessionStorageInit } = await import("../../src/core/session-repository.js");
 
 const { createInjectionSource, DEFAULT_SECURITY_CONFIG } = await import(
   "../../src/security/types.js"
@@ -90,6 +93,8 @@ describe("Security Policy Module", () => {
   });
 
   afterEach(() => {
+    resetSecurityStore();
+    resetSessionStorageInit();
     resetStorage();
     vi.restoreAllMocks();
   });

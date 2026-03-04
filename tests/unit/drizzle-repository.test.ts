@@ -17,7 +17,7 @@
  * operators via findMany, transactions, JSON serialization, schema lifecycle.
  * This file targets ONLY the gaps.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 // Mock the logger
@@ -76,6 +76,9 @@ describe("DrizzleRepository gap coverage (WOP-954)", () => {
 
   afterEach(() => {
     resetStorage();
+  });
+
+  afterAll(() => {
     if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true, force: true });
   });
 

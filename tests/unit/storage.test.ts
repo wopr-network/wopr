@@ -6,7 +6,7 @@
  * transactions, JSON column serialization, schema versioning,
  * and error cases.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 // Mock the logger
@@ -76,6 +76,18 @@ describe("Storage Module (WOP-545)", () => {
   });
 
   afterEach(() => {
+    // Flush WAL to main DB file before closing. In WAL mode, SQLite holds shared
+    // locks until a checkpoint runs. Without this, the next test's beforeEach
+    // (which calls register + insertMany) can hit the 5000ms busy_timeout twice
+    // (5000ms × 2 = 10000ms), exactly matching the vitest hook timeout and
+    // causing "Hook timed out in 10000ms" on the 5th QueryBuilder test.
+    try {
+      const rawDb = (storage as unknown as { sqliteRaw: { pragma: (s: string) => void } }).sqliteRaw;
+      rawDb.pragma("wal_checkpoint(TRUNCATE)");
+    } catch {
+      // Storage may already be closed or not yet initialized
+    }
+
     // Close and reset storage
     resetStorage();
 

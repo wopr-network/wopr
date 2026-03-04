@@ -24,7 +24,8 @@ vi.mock("../../src/logger.js", () => ({
 const { getStorage, resetStorage } = await import("../../src/storage/index.js");
 
 // Import after mocks are set up
-const { initSecurity, saveSecurityConfig } = await import("../../src/security/policy.js");
+const { initSecurity, saveSecurityConfig, resetSecurityStore } = await import("../../src/security/policy.js");
+const { resetSessionStorageInit } = await import("../../src/core/session-repository.js");
 const {
   SecurityContext,
   createSecurityContext,
@@ -78,6 +79,8 @@ describe("Security Context Module", () => {
   });
 
   afterEach(() => {
+    resetSecurityStore();
+    resetSessionStorageInit();
     resetStorage();
     vi.restoreAllMocks();
   });
