@@ -31,11 +31,10 @@ const { eventBus } = await import("../../src/core/events.js");
 // Import the module under test — this registers the session:destroy listener
 await import("../../src/security/sandbox.js");
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 describe("connectionTimestamps cleanup on session:destroy", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
   it("should register a session:destroy listener on the event bus", () => {
     // The sandbox module must register at least one session:destroy listener
     const count = eventBus.listenerCount("session:destroy");

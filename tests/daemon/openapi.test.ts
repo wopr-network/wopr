@@ -194,11 +194,10 @@ vi.mock("../../src/daemon/validation.js", () => ({
   validateSessionName: vi.fn(),
 }));
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 describe("OpenAPI endpoints (WOP-522)", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
   describe("GET /openapi.json", () => {
     it("returns 200 with valid OpenAPI JSON", async () => {
       const { createApp } = await import("../../src/daemon/index.js");

@@ -46,7 +46,7 @@ describe("readiness probe", () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it("returns not ready before startup completes", () => {

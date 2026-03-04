@@ -18,11 +18,10 @@ vi.mock("../../src/plugins/loading.js", () => ({
 
 import { checkPluginDependencies } from "../../src/plugins/dependency-check.js";
 
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
 describe("checkPluginDependencies", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
   it("returns ok:true when dependencies is undefined", () => {
     const result = checkPluginDependencies(undefined, []);
     expect(result).toEqual({ ok: true, missing: [] });
