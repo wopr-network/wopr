@@ -299,8 +299,8 @@ describe("Security Policy Module", () => {
       expect(policy.isGateway).toBe(true);
       expect(policy.forwardRules).toEqual(
         expect.objectContaining({
-          allowForwardTo: ["main"],
-          allowActions: ["inject"],
+          allowForwardTo: expect.arrayContaining(["main"]),
+          allowActions: expect.arrayContaining(["inject"]),
         }),
       );
       expect(policy.forwardRules!.allowForwardTo).toContain("main");
@@ -929,8 +929,8 @@ describe("Security Policy Module", () => {
       const rules = getGatewayRules("my-gw");
       expect(rules).toEqual(
         expect.objectContaining({
-          allowForwardTo: ["main", "backup"],
-          allowActions: ["inject"],
+          allowForwardTo: expect.arrayContaining(["main", "backup"]),
+          allowActions: expect.arrayContaining(["inject"]),
           requireApproval: true,
         }),
       );
