@@ -50,11 +50,25 @@ describe("daemon auth middleware (WOP-1572)", () => {
   });
 
   describe("skip-auth paths", () => {
-    // Derive skip paths from the single source of truth in auth.ts, plus "/" which
-    // is handled separately in the middleware condition (not part of the Set).
-    const skipPaths = [...SKIP_AUTH_PATHS, "/"];
+    // Explicit allowlist — keeps SKIP_AUTH_PATHS honest. If the set is accidentally
+    // broadened, this assertion will fail and alert the developer to review.
+    const expectedSkipPaths = [
+      "/health",
+      "/ready",
+      "/healthz",
+      "/healthz/history",
+      "/openapi.json",
+      "/docs",
+      "/openapi/websocket.json",
+      "/openapi/plugin-manifest.schema.json",
+      "/",
+    ];
 
-    for (const path of skipPaths) {
+    it("SKIP_AUTH_PATHS matches expected allowlist", () => {
+      expect(new Set([...SKIP_AUTH_PATHS, "/"])).toEqual(new Set(expectedSkipPaths));
+    });
+
+    for (const path of expectedSkipPaths) {
       it(`skips auth for ${path}`, async () => {
         const res = await app.request(path);
         expect(res.status).toBe(200);
