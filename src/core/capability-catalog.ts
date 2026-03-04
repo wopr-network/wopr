@@ -40,7 +40,8 @@ function hostedDefaults(): { baseUrl: string } {
   const catalogUrl = process.env.WOPR_CAPABILITY_CATALOG_URL?.trim();
   const apiUrl = process.env.WOPR_API_BASE_URL?.trim();
   const raw = catalogUrl || apiUrl || "https://api.wopr.bot";
-  const baseUrl = raw.replace(/\/+$/, "");
+  const normalized = raw.replace(/\/+$/, "");
+  const baseUrl = normalized || "https://api.wopr.bot";
   return {
     baseUrl,
   };
