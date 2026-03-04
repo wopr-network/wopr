@@ -150,8 +150,8 @@ export function parseTemporalFilter(expr: string): TemporalFilter | null {
     const year = Number.parseInt(singleDateMatch[1], 10);
     const month = Number.parseInt(singleDateMatch[2], 10) - 1;
     const day = Number.parseInt(singleDateMatch[3], 10);
-    const startDate = new Date(year, month, day, 0, 0, 0, 0);
-    const endDate = new Date(year, month, day, 23, 59, 59, 999);
+    const startDate = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, month, day, 23, 59, 59, 999));
 
     if (!Number.isNaN(startDate.getTime())) {
       return {
