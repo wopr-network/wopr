@@ -4,7 +4,7 @@
 
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
-import { config } from "../../core/config.js";
+import { config, WoprConfigSchema } from "../../core/config.js";
 import { redactSensitive } from "../../security/redact.js";
 
 const FORBIDDEN_KEY_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
@@ -94,6 +94,13 @@ configRouter.put(
     } catch {
       return c.json({ error: "Invalid config key" }, 400);
     }
+
+    const candidate = config.get();
+    const result = WoprConfigSchema.safeParse(candidate);
+    if (!result.success) {
+      return c.json({ error: "Invalid config value", details: result.error.message }, 400);
+    }
+
     await config.save();
 
     return c.json({ key, value: redactSensitive(value, key) });

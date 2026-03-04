@@ -110,7 +110,7 @@ const ProviderDefaultsSchema = z.object({
   preferred: z.boolean().optional(),
 });
 
-const WoprConfigSchema = z.object({
+export const WoprConfigSchema = z.object({
   daemon: z.object({
     port: z.number(),
     host: z.string(),
