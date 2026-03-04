@@ -229,11 +229,13 @@ describe("session-schema", () => {
 
     it("sessions table schema matches sessionSchema", () => {
       // Verify the schema in the plugin config is the same object as the exported schema
+      expect(sessionsPluginSchema.tables.sessions.schema).toBe(sessionSchema);
       const result = sessionsPluginSchema.tables.sessions.schema.safeParse(validSession);
       expect(result.success).toBe(true);
     });
 
     it("session_messages table schema matches sessionMessageSchema", () => {
+      expect(sessionsPluginSchema.tables.session_messages.schema).toBe(sessionMessageSchema);
       const result = sessionsPluginSchema.tables.session_messages.schema.safeParse(validMessage);
       expect(result.success).toBe(true);
     });
