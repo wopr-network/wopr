@@ -856,7 +856,7 @@ pluginsRouter.post(
       return c.json({ error: "name and url are required" }, 400);
     }
 
-    await addRegistry(name, url);
+    await addRegistry(url, name);
     return c.json({ added: true, name, url }, 201);
   },
 );
@@ -873,7 +873,12 @@ pluginsRouter.delete(
   }),
   async (c) => {
     const name = c.req.param("name") as string;
-    await removeRegistry(name);
+    const registries = await listRegistries();
+    const entry = registries.find((r) => r.name === name);
+    if (!entry) {
+      return c.json({ error: `Registry '${name}' not found` }, 404);
+    }
+    await removeRegistry(entry.url);
     return c.json({ removed: true });
   },
 );

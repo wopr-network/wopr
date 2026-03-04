@@ -14,7 +14,9 @@ const { tryPluginCommand } = await import("../../src/commands/plugin-commands.js
 
 describe("tryPluginCommand", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockGetInstalledPlugins.mockResolvedValue([]);
+    mockGetLoadedPlugin.mockReturnValue(undefined);
   });
 
   it("returns false for empty command string", async () => {
