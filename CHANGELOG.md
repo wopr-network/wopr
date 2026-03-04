@@ -34,6 +34,158 @@ documentation and configuration options.
 
 ---
 
+## [1.6.0](https://github.com/wopr-network/wopr/compare/wopr-v1.5.0...wopr-v1.6.0) (2026-03-04)
+
+
+### Features
+
+* add --config &lt;path&gt; global flag to CLI (WOP-1501) ([#1842](https://github.com/wopr-network/wopr/issues/1842)) ([63aab76](https://github.com/wopr-network/wopr/commit/63aab76b8619271a614aafe6a2e4753cec746b58))
+* add non-LLM capability routing endpoints (WOP-1509) ([#1811](https://github.com/wopr-network/wopr/issues/1811)) ([799f9df](https://github.com/wopr-network/wopr/commit/799f9df9cca50718f4ef7af02be4103fc4ebbbdf))
+* add optional streaming interface for A2A tool handlers (WOP-1507) ([#1852](https://github.com/wopr-network/wopr/issues/1852)) ([cfe4618](https://github.com/wopr-network/wopr/commit/cfe4618c46da4ae6b491580b3f85327441001e66))
+* add session TTL expiry, periodic cleanup, and LRU eviction (WOP-1505) ([#1808](https://github.com/wopr-network/wopr/issues/1808)) ([1d07f21](https://github.com/wopr-network/wopr/commit/1d07f2105cdc93f37d2f554c579798bf4af6d68b))
+* add SIGHUP config hot-reload to daemon (WOP-1502) ([#1849](https://github.com/wopr-network/wopr/issues/1849)) ([bd3402f](https://github.com/wopr-network/wopr/commit/bd3402f22a92fdff3dfd49606bc8120508a81d39))
+* add src/index.ts barrel export and package.json exports map (WOP-1381) ([#1652](https://github.com/wopr-network/wopr/issues/1652)) ([227e640](https://github.com/wopr-network/wopr/commit/227e6404a2adf632544a6f1baa97fbcd43042d0c))
+* add WOPR marketing bot config and content strategy skill (WOP-1253) ([#1482](https://github.com/wopr-network/wopr/issues/1482)) ([3e568b7](https://github.com/wopr-network/wopr/commit/3e568b7af28f2624a571bc78cd4df2d947ffbf44))
+* add wopr status command (WOP-1474) ([#1820](https://github.com/wopr-network/wopr/issues/1820)) ([6ccb8b3](https://github.com/wopr-network/wopr/commit/6ccb8b366027bbcec9c42a048c7d2328ead865b5))
+* **core:** implement unregisterSetupContextProvider in context-factory (WOP-1017) ([#1351](https://github.com/wopr-network/wopr/issues/1351)) ([83bd630](https://github.com/wopr-network/wopr/commit/83bd6308b061ab7633b862178910cff7fa2cb7b2))
+* emit provider:added/removed/status events from ProviderRegistry (WOP-1508) ([#1812](https://github.com/wopr-network/wopr/issues/1812)) ([f50d98b](https://github.com/wopr-network/wopr/commit/f50d98b5ce99bcb11549217db9ca4c61daeb8e93))
+* enforce plugin requires[] on marketplace install (WOP-1461) ([#1814](https://github.com/wopr-network/wopr/issues/1814)) ([0c36841](https://github.com/wopr-network/wopr/commit/0c36841b4192b60c550e83ff3247f01596832c26))
+* expose session.getContext/setContext/readConversationLog as ctx extensions (WOP-1538) ([#1857](https://github.com/wopr-network/wopr/issues/1857)) ([b9b10b3](https://github.com/wopr-network/wopr/commit/b9b10b3fd9caad53eeed09f16767970d755d89d7))
+* implement pluggable inference routing strategies (WOP-1476) ([#1830](https://github.com/wopr-network/wopr/issues/1830)) ([850d6b4](https://github.com/wopr-network/wopr/commit/850d6b4bd9ee615912854d45251bb07d740711fd))
+* per-provider rate limiting with exponential backoff (WOP-1475) ([#1838](https://github.com/wopr-network/wopr/issues/1838)) ([78dbdc2](https://github.com/wopr-network/wopr/commit/78dbdc21bc4ab477fe2e4d6c6df3c3f5d189cdc4))
+* per-provider rate limiting with exponential backoff (WOP-1475) ([#1938](https://github.com/wopr-network/wopr/issues/1938)) ([1ac57cf](https://github.com/wopr-network/wopr/commit/1ac57cfe259a8e04be3c5dd9a0054e8062f938a3))
+* plugin circuit breaker to prevent misbehaving plugins crashing daemon (WOP-1471) ([#1818](https://github.com/wopr-network/wopr/issues/1818)) ([fc65d77](https://github.com/wopr-network/wopr/commit/fc65d776845dcf39f0456b78c2acdc900d2fc8c5))
+* plugin-to-plugin A2A tool dependency auto-connection (WOP-1469) ([#1816](https://github.com/wopr-network/wopr/issues/1816)) ([e7d0fc9](https://github.com/wopr-network/wopr/commit/e7d0fc9ee38b9e3816b9feee24828c7f26e99b52))
+* probe plugin healthCheck() in daemon health monitor (WOP-1470) ([#1822](https://github.com/wopr-network/wopr/issues/1822)) ([fcb28d4](https://github.com/wopr-network/wopr/commit/fcb28d45ebefd643fc329283e6037194fb00978c))
+* read WOPR_PLUGINS_* env vars at daemon startup to auto-install plugins (WOP-1327) ([#1559](https://github.com/wopr-network/wopr/issues/1559)) ([676068e](https://github.com/wopr-network/wopr/commit/676068e54fc2628be2c2650c437092609d7bc239))
+* scope-aware injection trust for /inject and /v1/chat endpoints (WOP-1422) ([#1721](https://github.com/wopr-network/wopr/issues/1721)) ([3b1730d](https://github.com/wopr-network/wopr/commit/3b1730d59918ea920e8d30b710755aeef1b20bd6))
+* token-aware context window management (WOP-1477) ([#1819](https://github.com/wopr-network/wopr/issues/1819)) ([1bf57d6](https://github.com/wopr-network/wopr/commit/1bf57d61c7c914f9232e8c66724c0933d48bec4d))
+* warn at startup when plugin sandboxing is disabled (WOP-1510) ([#1809](https://github.com/wopr-network/wopr/issues/1809)) ([e2230dc](https://github.com/wopr-network/wopr/commit/e2230dc126dc1f3f2fae647900c85d3e941c790d))
+* wopr doctor command (WOP-1503) ([#1839](https://github.com/wopr-network/wopr/issues/1839)) ([5370217](https://github.com/wopr-network/wopr/commit/53702172991029b20ea6655b5375a4786c1f67dd))
+
+
+### Bug Fixes
+
+* add error boundary to plugin init() with cleanup on failure (WOP-1466) ([#1826](https://github.com/wopr-network/wopr/issues/1826)) ([e36bd0f](https://github.com/wopr-network/wopr/commit/e36bd0fc90a2429b66ec42f0664fcc69327c842f))
+* add permissions and setup fields to Zod manifest schema (WOP-1464) ([#1829](https://github.com/wopr-network/wopr/issues/1829)) ([22a28e9](https://github.com/wopr-network/wopr/commit/22a28e90aaf9d4b5389f49307488ccd36eb0b122))
+* add Zod runtime validation to WoprConfig (WOP-1412) ([#1799](https://github.com/wopr-network/wopr/issues/1799)) ([7c9d574](https://github.com/wopr-network/wopr/commit/7c9d5748082e9b42636c9ba1459d17e833893dcf))
+* address review feedback on session-cleaner (WOP-1505) ([#1810](https://github.com/wopr-network/wopr/issues/1810)) ([6cf3d39](https://github.com/wopr-network/wopr/commit/6cf3d3924228b885ba403df404908b527b4d7ea3))
+* allow better-sqlite3 native build in pnpm install ([#1833](https://github.com/wopr-network/wopr/issues/1833)) ([bc2d93f](https://github.com/wopr-network/wopr/commit/bc2d93f9eaf1a8ecb11ae3add3717e554d1ba900))
+* always log in to GHCR so PR builds can pull private base image ([#1847](https://github.com/wopr-network/wopr/issues/1847)) ([9f689e5](https://github.com/wopr-network/wopr/commit/9f689e5a8819efb0bdff30040b29f7df784c8299))
+* await handler result before streaming check, fix isAsyncIterable guard, fix A2AToolResult passthrough (WOP-1507) ([#1859](https://github.com/wopr-network/wopr/issues/1859)) ([6a743c7](https://github.com/wopr-network/wopr/commit/6a743c777eabbd1bc956cbefef8b3643b753e633))
+* clean up connectionTimestamps on session:destroy (WOP-1387) ([#1650](https://github.com/wopr-network/wopr/issues/1650)) ([d50f560](https://github.com/wopr-network/wopr/commit/d50f5607d6b15b343d6b753af0e60985b49b6c03))
+* clear timeout timer and guard stdin errors in runCommandHook (WOP-1378) ([#1640](https://github.com/wopr-network/wopr/issues/1640)) ([34827bc](https://github.com/wopr-network/wopr/commit/34827bc6ae8f6420fc67246397d1626c8a8300a7))
+* clear timeout timers in Promise.race patterns to prevent leaks (WOP-1438) ([#1834](https://github.com/wopr-network/wopr/issues/1834)) ([a346de0](https://github.com/wopr-network/wopr/commit/a346de09d493a6423bb6853a9f90ea0cf56e8de7))
+* clear timeout timers in Promise.race patterns to prevent leaks (WOP-1438) ([#1925](https://github.com/wopr-network/wopr/issues/1925)) ([1353d57](https://github.com/wopr-network/wopr/commit/1353d57681c9f61a0586721365084e9f5ff546e2))
+* config flag and paths mock (WOP-1501) ([#1939](https://github.com/wopr-network/wopr/issues/1939)) ([ab5f602](https://github.com/wopr-network/wopr/commit/ab5f60216680dcd7e520823e2f8e132c06b2da98))
+* config hot reload (WOP-1502) ([#1932](https://github.com/wopr-network/wopr/issues/1932)) ([39b3502](https://github.com/wopr-network/wopr/commit/39b35021a60cb3fa6651dfd4700de2ea487c90d2))
+* daemon crashes on uncaught exceptions instead of swallowing them (WOP-1411) ([#1714](https://github.com/wopr-network/wopr/issues/1714)) ([708945a](https://github.com/wopr-network/wopr/commit/708945ab1ae4c7e09d98312a0fc4b5fb7a61074d))
+* define concrete InjectionSource type for PluginInjectOptions.source (WOP-1498) ([#1848](https://github.com/wopr-network/wopr/issues/1848)) ([11a2cc3](https://github.com/wopr-network/wopr/commit/11a2cc3b526ea0498645071ff736a683facb45e9))
+* doctor auth check, align plugin check with loader (WOP-1503) ([#1933](https://github.com/wopr-network/wopr/issues/1933)) ([2ff1c4a](https://github.com/wopr-network/wopr/commit/2ff1c4a221e4b89e9805a2f5e57cdc7bd92352a6))
+* document missing env vars in .env.example (WOP-1504) ([#1832](https://github.com/wopr-network/wopr/issues/1832)) ([2e5c3bf](https://github.com/wopr-network/wopr/commit/2e5c3bf888cbcc6d9cf4d0186ffa51c0af047c6b))
+* eliminate TOCTOU race in transaction() with promise-based lock (WOP-1380) ([#1653](https://github.com/wopr-network/wopr/issues/1653)) ([d710bba](https://github.com/wopr-network/wopr/commit/d710bbafb977f39663e8cb87b01fb302cb8da9cd))
+* emit zero usage in streaming final chunk when provider omits usage (WOP-1478) ([#1815](https://github.com/wopr-network/wopr/issues/1815)) ([177fb67](https://github.com/wopr-network/wopr/commit/177fb670f7957bb984d9376ec4632df8511bb644))
+* export SetupContextProvider from plugin-types index (WOP-1500) ([#1831](https://github.com/wopr-network/wopr/issues/1831)) ([60784ac](https://github.com/wopr-network/wopr/commit/60784acce8a6f744074796bd4b64ad47db3b83fa))
+* gate stack traces on shouldLogStack() in production (WOP-1433) ([#1723](https://github.com/wopr-network/wopr/issues/1723)) ([9dcbff4](https://github.com/wopr-network/wopr/commit/9dcbff4fe37c7f02ca129c4f31270db4c62b00a6))
+* guard SSE writes with aborted flag after client disconnect (WOP-1439) ([#1841](https://github.com/wopr-network/wopr/issues/1841)) ([e8753fc](https://github.com/wopr-network/wopr/commit/e8753fce690a7aad32658e97657467c0c5845b36))
+* log selfdoc dynamic import errors instead of swallowing (WOP-1390) ([#1647](https://github.com/wopr-network/wopr/issues/1647)) ([21cad15](https://github.com/wopr-network/wopr/commit/21cad1511e223a99cea5b472bb0e82fff39a9a46))
+* make OAuth token URL configurable via WOPR_OAUTH_TOKEN_URL env var (WOP-1403) ([#1646](https://github.com/wopr-network/wopr/issues/1646)) ([b6d243b](https://github.com/wopr-network/wopr/commit/b6d243b67fef9a2830636e77d9c26a541029b1e0))
+* namespace A2A tool keys by pluginId to prevent silent overwrites (WOP-1467) ([#1824](https://github.com/wopr-network/wopr/issues/1824)) ([f2d3c51](https://github.com/wopr-network/wopr/commit/f2d3c51520edbc699b81bc38fd0e7e0483b5c803))
+* node:sqlite import error handling, encoder init race condition (WOP-1435) ([#1928](https://github.com/wopr-network/wopr/issues/1928)) ([d883d6d](https://github.com/wopr-network/wopr/commit/d883d6d4a1b793aa4594d60116e973943502bc99))
+* notify running daemon on config set/reset (WOP-1473) ([#1821](https://github.com/wopr-network/wopr/issues/1821)) ([9d0c6cf](https://github.com/wopr-network/wopr/commit/9d0c6cf58aa7e91d1f43b4c252e6b15adb180f04))
+* read capability catalog baseUrl from WOPR_API_BASE_URL env var (WOP-1434) ([#1722](https://github.com/wopr-network/wopr/issues/1722)) ([5bbf251](https://github.com/wopr-network/wopr/commit/5bbf251f855cdec6431082ea7683e257c94f51a1))
+* redact auth token from logs (WOP-1442) ([#1930](https://github.com/wopr-network/wopr/issues/1930)) ([14f1049](https://github.com/wopr-network/wopr/commit/14f1049b8139f8475b995403dfaae88f294e3705))
+* remove greptile-apps[bot] trigger from auto-fix workflow ([babe5b0](https://github.com/wopr-network/wopr/commit/babe5b06236420f677216cfc6e59d5dab5c85347))
+* remove memory module / fix temporal filter (WOP-1506) ([#1934](https://github.com/wopr-network/wopr/issues/1934)) ([5aa437e](https://github.com/wopr-network/wopr/commit/5aa437eba0acb7941395fe592c8d8b4e4546a6d3))
+* remove optional markers from registerA2AServer/unregisterA2AServer (WOP-1468) ([#1828](https://github.com/wopr-network/wopr/issues/1828)) ([e3416dd](https://github.com/wopr-network/wopr/commit/e3416dd191c54555f144b31134d710c7bf5b9bac))
+* replace unknown with ModelProvider type on registerLLMProvider (WOP-1465) ([#1825](https://github.com/wopr-network/wopr/issues/1825)) ([5c328bf](https://github.com/wopr-network/wopr/commit/5c328bf4107fc838fac083a1a8d5b8073d9a9656))
+* return real token usage from OpenAI-compatible endpoint (WOP-1459) ([#1807](https://github.com/wopr-network/wopr/issues/1807)) ([91d11bc](https://github.com/wopr-network/wopr/commit/91d11bce8c3b544f759f7544d402e1dfb98dcf33))
+* **security:** redact auth token from onboarding logs (WOP-1442) ([#1844](https://github.com/wopr-network/wopr/issues/1844)) ([83c8ad5](https://github.com/wopr-network/wopr/commit/83c8ad5a8898e5a37d34bb832772618c276c537a))
+* serialize concurrent plugin installs to prevent TOCTOU race (WOP-1440) ([#1846](https://github.com/wopr-network/wopr/issues/1846)) ([e51ce52](https://github.com/wopr-network/wopr/commit/e51ce52f8104e088a15a229a0ef3a1ee775d6383))
+* suppress late healthCheck rejection after timeout in runProbeWithTimeout (WOP-1533) ([#1827](https://github.com/wopr-network/wopr/issues/1827)) ([659ab1d](https://github.com/wopr-network/wopr/commit/659ab1d8beff294891097c1e2048f40517b37ab4))
+* surface non-ENOENT errors in session context filesystem migration (WOP-1441) ([#1845](https://github.com/wopr-network/wopr/issues/1845)) ([0b5bcdf](https://github.com/wopr-network/wopr/commit/0b5bcdf9a580fad871514b1ea741660df4e60885))
+* tighten A2AToolResult guard and fix streaming bug (WOP-1507) ([#1935](https://github.com/wopr-network/wopr/issues/1935)) ([307f471](https://github.com/wopr-network/wopr/commit/307f47127e3f8d5f99a74e34a72a3f3bc4cf4970))
+* TOCTOU lock race condition (WOP-1440) ([#1929](https://github.com/wopr-network/wopr/issues/1929)) ([3d43785](https://github.com/wopr-network/wopr/commit/3d43785bcbcbfcb19f417b7f72bb4aedc6f6fa0c))
+* use setSessionProviderAsync instead of writing .provider.json (WOP-1534) ([#1936](https://github.com/wopr-network/wopr/issues/1936)) ([20cfa7c](https://github.com/wopr-network/wopr/commit/20cfa7ce4c7765507697044d902392ea4b38b3ae))
+* use setSessionProviderAsync instead of writing .provider.json to disk (WOP-1534) ([#1856](https://github.com/wopr-network/wopr/issues/1856)) ([36f6d50](https://github.com/wopr-network/wopr/commit/36f6d500aa16f4b8935103e4b60c1e840b3d23f8))
+* validate OpenAI message content types, reject non-string silently coerced (WOP-1425) ([#1718](https://github.com/wopr-network/wopr/issues/1718)) ([cf9c659](https://github.com/wopr-network/wopr/commit/cf9c659ad5efe10821b6d731446665fb609ca2ae))
+* validate plugin configSchema before init() (WOP-1458) ([#1805](https://github.com/wopr-network/wopr/issues/1805)) ([033f3a8](https://github.com/wopr-network/wopr/commit/033f3a82eec5b58432f5908e839a6cd9a2556811))
+* validate plugin manifest against Zod schema at load time (WOP-1499) ([#1837](https://github.com/wopr-network/wopr/issues/1837)) ([f4f1cd6](https://github.com/wopr-network/wopr/commit/f4f1cd683d271217d15acf8149c771dfc1bb69ea))
+
+
+### Code Refactoring
+
+* extract shared installAndActivatePlugin to unify install paths (WOP-1487) ([#1813](https://github.com/wopr-network/wopr/issues/1813)) ([e22f362](https://github.com/wopr-network/wopr/commit/e22f3628270a140c46809eacb6e9daf38e8baad9))
+* remove memory stub from wopr core (WOP-1506) ([#1836](https://github.com/wopr-network/wopr/issues/1836)) ([1531dc9](https://github.com/wopr-network/wopr/commit/1531dc90006dc2d4171dc0472966587d6914b6d7))
+* replace require() with dynamic import() (WOP-1435) ([#1840](https://github.com/wopr-network/wopr/issues/1840)) ([b573f86](https://github.com/wopr-network/wopr/commit/b573f860feda7f7f572c0a351eda76788d4e2a63))
+
+
+### Security
+
+* add hardcoded shell denylist to hook commands (WOP-1423) ([#1719](https://github.com/wopr-network/wopr/issues/1719)) ([ecbca76](https://github.com/wopr-network/wopr/commit/ecbca760b1e081de1102b4ec4c24054dbc75c2da))
+* downgrade default plugin trust to semi-trusted (WOP-1408) ([#1716](https://github.com/wopr-network/wopr/issues/1716)) ([3605c0e](https://github.com/wopr-network/wopr/commit/3605c0ec57c9af9471d9320b5d21036629cd1162))
+* enforce WebSocket auth at HTTP upgrade time (WOP-1407) ([#1717](https://github.com/wopr-network/wopr/issues/1717)) ([03afdd8](https://github.com/wopr-network/wopr/commit/03afdd8e5c605eb717ed47978f55b9001dbc451a))
+* fail closed on hook errors by default (WOP-1378) ([#1637](https://github.com/wopr-network/wopr/issues/1637)) ([a9c6151](https://github.com/wopr-network/wopr/commit/a9c6151ebed7e3f022688db6017061de238add7f))
+* guard _setTokenVerifier and _resetForTesting behind NODE_ENV=test (WOP-1389) ([#1644](https://github.com/wopr-network/wopr/issues/1644)) ([90db8ed](https://github.com/wopr-network/wopr/commit/90db8edd11b6fb8b6c72e0559056277e1ed0404b))
+* invert seccomp to default-deny with explicit syscall allowlist (WOP-1363) ([#1636](https://github.com/wopr-network/wopr/issues/1636)) ([651fec0](https://github.com/wopr-network/wopr/commit/651fec068fb69a65829e16579b25b7d6649e9578))
+* pass --ignore-scripts to npm install in plugin installation (WOP-1388) ([#1645](https://github.com/wopr-network/wopr/issues/1645)) ([cb3630f](https://github.com/wopr-network/wopr/commit/cb3630f0cf95fadc7010fb22e1d9b44f9e7845e2))
+* pin rollup to ^4.59.0 to fix path traversal CVE ([88d9baa](https://github.com/wopr-network/wopr/commit/88d9baa5cfefd3dfa3837543f4c17e9f967e1283))
+* rate limiter keyed by socket IP, not X-Forwarded-For (WOP-1544) ([#1944](https://github.com/wopr-network/wopr/issues/1944)) ([ae8fe2c](https://github.com/wopr-network/wopr/commit/ae8fe2c6896c678b63ea11a0f4fad4d72976b2a1))
+* remove raw()/run() from plugin-facing StorageApi (WOP-1379) ([#1638](https://github.com/wopr-network/wopr/issues/1638)) ([6125904](https://github.com/wopr-network/wopr/commit/6125904a244e98f5439750d2306fddea6273a1b5))
+* replace Math.random() with crypto.randomBytes for request IDs (WOP-1420) ([#1804](https://github.com/wopr-network/wopr/issues/1804)) ([8441196](https://github.com/wopr-network/wopr/commit/84411960f57aa38e40ca094df573068b56536b2d))
+* replace RegExp with glob matching in canIndexSession (WOP-1421) ([#1720](https://github.com/wopr-network/wopr/issues/1720)) ([c3d31df](https://github.com/wopr-network/wopr/commit/c3d31df3dac5e975203742157afa5324e2e8dda4))
+* restrict WOPR_SECURITY_ENFORCEMENT override to dev builds only (WOP-1364) ([#1635](https://github.com/wopr-network/wopr/issues/1635)) ([f7a42f2](https://github.com/wopr-network/wopr/commit/f7a42f23c1d046fdc409a7e4dd8b8de46d1effe9))
+
+
+### Tests
+
+* add auth-schema and selfdoc-context unit tests (WOP-1392) ([#1648](https://github.com/wopr-network/wopr/issues/1648)) ([ea38a9c](https://github.com/wopr-network/wopr/commit/ea38a9caaa0bd319034c36888694e7abe0ff6e9f))
+* add comprehensive unit tests for daemon plugin routes (WOP-1414) ([#1800](https://github.com/wopr-network/wopr/issues/1800)) ([4d1619c](https://github.com/wopr-network/wopr/commit/4d1619c69d3fd8fe27cbea2bcb1f7460053dcf4f))
+* add ConfigManager unit tests (WOP-1416) ([#1803](https://github.com/wopr-network/wopr/issues/1803)) ([7a426a5](https://github.com/wopr-network/wopr/commit/7a426a5751872bc953a8156767c56c7991e0c201))
+* add coverage for session-migration and auth-migrate (WOP-1367) ([#1642](https://github.com/wopr-network/wopr/issues/1642)) ([196096d](https://github.com/wopr-network/wopr/commit/196096d67c8beb3831b7497463239df719c3c4b1))
+* add getConfigFilePath and setConfigFileOverride to paths mock ([#1926](https://github.com/wopr-network/wopr/issues/1926)) ([d0ab0ee](https://github.com/wopr-network/wopr/commit/d0ab0ee429dbce20e5ac667e3a789f9258f370ae))
+* add getConfigFilePath and setConfigFileOverride to paths mock in file-permissions tests ([#1858](https://github.com/wopr-network/wopr/issues/1858)) ([a38cd3e](https://github.com/wopr-network/wopr/commit/a38cd3ea9ed047e73b52f787437be7f20aafd548))
+* add hook-manager unit tests (WOP-1365) ([#1639](https://github.com/wopr-network/wopr/issues/1639)) ([8c6d33d](https://github.com/wopr-network/wopr/commit/8c6d33d60f67cb128f2839d4f766ee6cab964738))
+* add instance routes unit tests (WOP-1415) ([#1801](https://github.com/wopr-network/wopr/issues/1801)) ([536f937](https://github.com/wopr-network/wopr/commit/536f9371caecba0fa5269a26d89eb5a7be813c2f))
+* add plugin context factory unit tests (WOP-1417) ([#1806](https://github.com/wopr-network/wopr/issues/1806)) ([a35d113](https://github.com/wopr-network/wopr/commit/a35d113c7f4ce4fd3e75f10d5b0bbef6a371f02b))
+* add unit tests for 4 untested security module files (WOP-1066) ([#1301](https://github.com/wopr-network/wopr/issues/1301)) ([ae10954](https://github.com/wopr-network/wopr/commit/ae10954bfab398198dd7b52092ceffc9f3713bf8))
+* add unit tests for plugin event-bus wrapper (WOP-1366) ([#1641](https://github.com/wopr-network/wopr/issues/1641)) ([4cf4a0e](https://github.com/wopr-network/wopr/commit/4cf4a0e62e0be1a4ad064381f68837a5de489cd5))
+* add unit tests for schema-converter, accessors, migrate-json (WOP-1391) ([#1649](https://github.com/wopr-network/wopr/issues/1649)) ([c20561c](https://github.com/wopr-network/wopr/commit/c20561c5988eb7eea9df17dd333bb203391d95b6))
+* add unit tests for skill-frontmatter-parser (WOP-1368) ([#1661](https://github.com/wopr-network/wopr/issues/1661)) ([26e3336](https://github.com/wopr-network/wopr/commit/26e333695d4d42f2aa4a50cbe29a8382f542f442))
+* add unit tests for unregisterSetupContextProvider (WOP-1017) ([#1352](https://github.com/wopr-network/wopr/issues/1352)) ([6d8910e](https://github.com/wopr-network/wopr/commit/6d8910e85e11ce27581398fc71e5cc5c2164cb1f))
+* add WoprClient unit tests — 92 tests covering full HTTP API (WOP-1413) ([#1802](https://github.com/wopr-network/wopr/issues/1802)) ([9662e8b](https://github.com/wopr-network/wopr/commit/9662e8b8a4191707b80201611139f20f8ffabc04))
+* document spoofable x-forwarded-for behavior in rate limiter (WOP-1404) ([#1643](https://github.com/wopr-network/wopr/issues/1643)) ([0a35e09](https://github.com/wopr-network/wopr/commit/0a35e09e855208b28b603cbe63f6b5d411414a04))
+* fix flaky beforeEach timeouts in storage/security tests ([#1941](https://github.com/wopr-network/wopr/issues/1941)) ([608f7bb](https://github.com/wopr-network/wopr/commit/608f7bb338e266883ac72c08aeb784589360b6ce))
+* restart-on-idle, capability-catalog/deps, a2a-mcp unit tests (WOP-1432) ([#1835](https://github.com/wopr-network/wopr/issues/1835)) ([8e6a032](https://github.com/wopr-network/wopr/commit/8e6a03211b288723aae25a8c7b01b9d165409ca7))
+* strengthen weak toBeDefined/toBeTruthy assertions (WOP-1384) ([#1651](https://github.com/wopr-network/wopr/issues/1651)) ([302ddea](https://github.com/wopr-network/wopr/commit/302ddead53b01f14e973362d5105b8ddd9d06ee5))
+* use :memory: SQLite in api-keys and storage tests ([#2005](https://github.com/wopr-network/wopr/issues/2005)) ([c41902d](https://github.com/wopr-network/wopr/commit/c41902df9f0d01b0701eda71e188d682c0cb21aa))
+
+
+### Documentation
+
+* add launch day runbook for April 1 drop (WOP-456) ([#1487](https://github.com/wopr-network/wopr/issues/1487)) ([17d08ad](https://github.com/wopr-network/wopr/commit/17d08ad465aff98a62860ad1e8a7b20a36f1733e))
+* update CLAUDE.md gotchas from WOP-1407 fixer findings ([fb1cc2f](https://github.com/wopr-network/wopr/commit/fb1cc2fcd894607c807993afaf97ba74a0e75a79))
+* update CLAUDE.md gotchas from WOP-1461 fixer findings ([94aa34a](https://github.com/wopr-network/wopr/commit/94aa34ad11299aa7e3b515972f4486b2f4b6cc13))
+
+
+### Miscellaneous
+
+* add MIT license ([bd0db6a](https://github.com/wopr-network/wopr/commit/bd0db6aea1517926ab7bba155bf60a4f5a31ccd5))
+* **ci:** bump actions/checkout from 4 to 6 ([#1656](https://github.com/wopr-network/wopr/issues/1656)) ([3c246d1](https://github.com/wopr-network/wopr/commit/3c246d11fc84cdb994b4be9d1350307f88ef29b9))
+* **ci:** bump actions/download-artifact from 7 to 8 ([#1655](https://github.com/wopr-network/wopr/issues/1655)) ([ed0986b](https://github.com/wopr-network/wopr/commit/ed0986b9d39374325c576f67c2339e1c332b3c87))
+* **ci:** bump actions/setup-node from 4 to 6 ([#1654](https://github.com/wopr-network/wopr/issues/1654)) ([90ed085](https://github.com/wopr-network/wopr/commit/90ed085f9055e5f22a09b186d49d7f33c910e17d))
+* **deps:** bump @anthropic-ai/claude-agent-sdk from 0.2.44 to 0.2.63 ([#1657](https://github.com/wopr-network/wopr/issues/1657)) ([37025c7](https://github.com/wopr-network/wopr/commit/37025c71dbab55c1db6034c80e442c29d88413ac))
+* **deps:** bump @scalar/hono-api-reference from 0.9.44 to 0.9.46 ([#1660](https://github.com/wopr-network/wopr/issues/1660)) ([5abd495](https://github.com/wopr-network/wopr/commit/5abd49554cd0a5d7c619823f94f80577276b7125))
+* **deps:** bump @types/node from 25.3.0 to 25.3.3 ([#1659](https://github.com/wopr-network/wopr/issues/1659)) ([686f957](https://github.com/wopr-network/wopr/commit/686f957b02b01a694054c5772368de00d54ccfd9))
+* **deps:** bump hono from 4.12.2 to 4.12.3 ([#1658](https://github.com/wopr-network/wopr/issues/1658)) ([6543ac9](https://github.com/wopr-network/wopr/commit/6543ac9b2d836a5170dc7510d45a3ba8db561d2b))
+* pull node base image from GHCR mirror to avoid Docker Hub rate limits ([#1843](https://github.com/wopr-network/wopr/issues/1843)) ([5f02ca7](https://github.com/wopr-network/wopr/commit/5f02ca7b7e7eb44a599f2799b5ef53e109d895b0))
+* skip docker builds on PRs, only run on main and tags ([#1940](https://github.com/wopr-network/wopr/issues/1940)) ([c091dde](https://github.com/wopr-network/wopr/commit/c091ddeb3013c2b5840d721ebfee548805ad0735))
+
+
+### DevOps
+
+* remove Trivy from Docker build workflow (WOP-1126) ([#1587](https://github.com/wopr-network/wopr/issues/1587)) ([d3ef3f9](https://github.com/wopr-network/wopr/commit/d3ef3f903c15cf5ecc64ff31d864a7b5a64a6578))
+
 ## [1.5.0](https://github.com/wopr-network/wopr/compare/wopr-v1.4.1...wopr-v1.5.0) (2026-02-27)
 
 
