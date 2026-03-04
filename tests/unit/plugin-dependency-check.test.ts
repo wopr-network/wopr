@@ -4,7 +4,7 @@
  * Tests for src/plugins/dependency-check.ts
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock loading.js to avoid pulling in the full plugin loading stack
 vi.mock("../../src/plugins/loading.js", () => ({
@@ -17,6 +17,10 @@ vi.mock("../../src/plugins/loading.js", () => ({
 }));
 
 import { checkPluginDependencies } from "../../src/plugins/dependency-check.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("checkPluginDependencies", () => {
   it("returns ok:true when dependencies is undefined", () => {

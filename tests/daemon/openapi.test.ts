@@ -5,7 +5,7 @@
  * the spec is valid and includes all expected routes.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 
 // Mock heavy daemon dependencies that aren't needed for OpenAPI tests
@@ -193,6 +193,10 @@ vi.mock("../../src/security/index.js", () => ({
 vi.mock("../../src/daemon/validation.js", () => ({
   validateSessionName: vi.fn(),
 }));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("OpenAPI endpoints (WOP-522)", () => {
   describe("GET /openapi.json", () => {

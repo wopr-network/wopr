@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock node:sqlite before importing readiness module
 vi.mock("node:sqlite", () => ({
@@ -43,6 +43,10 @@ describe("readiness probe", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(providerRegistry.listProviders).mockReturnValue([]);
     loadedPlugins.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("returns not ready before startup completes", () => {
