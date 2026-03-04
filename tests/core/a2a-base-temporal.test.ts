@@ -41,9 +41,7 @@ describe("parseTemporalFilter", () => {
   });
 
   it("parses relative expressions", () => {
-    const before = Date.now();
     const result = parseTemporalFilter("last 7 days");
-    const after = Date.now();
     expect(result).not.toBeNull();
     const expected7d = 7 * 24 * 60 * 60 * 1000;
     expect(result?.after).toBe(FIXED_NOW - expected7d);
