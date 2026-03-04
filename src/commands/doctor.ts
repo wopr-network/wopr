@@ -5,7 +5,7 @@ import { access, constants, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { config } from "../core/config.js";
 import { logger } from "../logger.js";
-import { getConfigFilePath, WOPR_HOME } from "../paths.js";
+import { CONFIG_FILE, WOPR_HOME } from "../paths.js";
 import { getInstalledPlugins } from "../plugins/installation.js";
 
 export interface CheckResult {
@@ -37,14 +37,14 @@ export async function runChecks(): Promise<CheckResult[]> {
   try {
     await config.load();
     configLoaded = true;
-    results.push({ name: "Config file", pass: true, detail: getConfigFilePath() });
+    results.push({ name: "Config file", pass: true, detail: CONFIG_FILE });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     results.push({
       name: "Config file",
       pass: false,
       detail: msg,
-      fix: `Run "wopr init" to create a valid config, or check ${getConfigFilePath()}`,
+      fix: `Run "wopr init" to create a valid config, or check ${CONFIG_FILE}`,
     });
   }
 
