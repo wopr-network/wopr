@@ -285,6 +285,9 @@ describe("SessionCleaner", () => {
 
   it("should start and stop the interval", async () => {
     const cleaner = new SessionCleaner({ ttlMs: 86400000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    // Spy on cleanup so start()'s fire-and-forget initial cleanup doesn't race with
+    // the next test's beforeEach resetting storage (which would cause a 24s hang).
+    vi.spyOn(cleaner, "cleanup").mockResolvedValue({ expiredRemoved: 0, lruEvicted: 0, lastCleanupAt: 0, isRunning: false });
 
     cleaner.start();
     expect(cleaner.getStats().isRunning).toBe(true);
@@ -295,6 +298,8 @@ describe("SessionCleaner", () => {
 
   it("should not start a second interval if already running", async () => {
     const cleaner = new SessionCleaner({ ttlMs: 86400000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    // Same guard: prevent start()'s background cleanup from racing with storage reset.
+    vi.spyOn(cleaner, "cleanup").mockResolvedValue({ expiredRemoved: 0, lruEvicted: 0, lastCleanupAt: 0, isRunning: false });
 
     cleaner.start();
     const statsBefore = cleaner.getStats();
