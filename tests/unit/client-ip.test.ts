@@ -64,6 +64,20 @@ describe("getClientIp", () => {
     expect(ip).toBe("127.0.0.1");
   });
 
+  it("should skip empty segments in malformed X-Forwarded-For when trusted", async () => {
+    const app = new Hono();
+    let ip: string | undefined;
+    app.get("/test", (c) => {
+      ip = getClientIp(c, ["127.0.0.1"]);
+      return c.json({ ip });
+    });
+
+    await app.request("/test", {
+      headers: { "X-Forwarded-For": ", 203.0.113.50, 127.0.0.1" },
+    });
+    expect(ip).toBe("203.0.113.50");
+  });
+
   it("should fallback to 'unknown' when socket has no address and no headers trusted", async () => {
     const { getConnInfo } = await import("@hono/node-server/conninfo");
     vi.mocked(getConnInfo).mockReturnValueOnce({ remote: { address: undefined } } as ReturnType<typeof getConnInfo>);

@@ -20,7 +20,12 @@ export function getClientIp(c: Context, trustedProxies?: string[]): string {
     const forwarded = c.req.header("x-forwarded-for");
     if (forwarded) {
       // X-Forwarded-For: client, proxy1, proxy2 — leftmost is the original client
-      return forwarded.split(",")[0].trim();
+      // Use find(Boolean) to skip empty segments from malformed headers like ", 1.2.3.4"
+      const first = forwarded
+        .split(",")
+        .map((s) => s.trim())
+        .find(Boolean);
+      if (first) return first;
     }
   }
 
