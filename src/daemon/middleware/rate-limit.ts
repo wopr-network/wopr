@@ -8,6 +8,7 @@
 
 import type { MiddlewareHandler } from "hono";
 import { rateLimiter } from "hono-rate-limiter";
+import { getClientIp, parseTrustedProxies } from "./client-ip.js";
 
 /** Paths exempt from rate limiting (health/readiness probes). */
 const SKIP_PATHS = new Set(["/health", "/ready"]);
@@ -25,13 +26,16 @@ export interface RateLimitConfig {
  * Creates a rate limiting middleware for the Hono API.
  *
  * Identifies clients by Authorization header (since all non-health
- * routes require bearer auth) with IP fallback.
- * When keyByIp is true, always uses IP for keying (for auth endpoints).
+ * routes require bearer auth) with socket IP fallback.
+ * When keyByIp is true, always uses socket IP for keying (for auth endpoints).
+ * Only trusts X-Forwarded-For when TRUSTED_PROXY env var is set and the
+ * connecting IP matches a trusted proxy.
  */
 export function rateLimit(config: RateLimitConfig = {}): MiddlewareHandler {
   const windowMs = config.windowMs ?? 60_000;
   const limit = config.limit ?? 60;
   const keyByIp = config.keyByIp ?? false;
+  const trustedProxies = parseTrustedProxies();
 
   return rateLimiter({
     windowMs,
@@ -39,9 +43,9 @@ export function rateLimit(config: RateLimitConfig = {}): MiddlewareHandler {
     standardHeaders: "draft-6",
     keyGenerator: (c) => {
       if (keyByIp) {
-        return c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? "anonymous";
+        return getClientIp(c, trustedProxies);
       }
-      return c.req.header("authorization") ?? c.req.header("x-forwarded-for") ?? "anonymous";
+      return c.req.header("authorization") ?? getClientIp(c, trustedProxies);
     },
     skip: (c) => SKIP_PATHS.has(c.req.path),
     handler: (c) => {

@@ -28,13 +28,15 @@ import {
   unloadPlugin,
 } from "../../plugins.js";
 import type { InstalledPlugin, PluginInjectOptions } from "../../types.js";
+import { getClientIp, parseTrustedProxies } from "../middleware/client-ip.js";
 
 // ============================================================================
 // Rate limiting
 // ============================================================================
 
-const rateLimitKey = (c: { req: { header: (name: string) => string | undefined } }) =>
-  c.req.header("authorization") ?? c.req.header("x-forwarded-for") ?? "anonymous";
+const _trustedProxies = parseTrustedProxies();
+const rateLimitKey = (c: Parameters<typeof getClientIp>[0]) =>
+  c.req.header("authorization") ?? getClientIp(c, _trustedProxies);
 
 /** 10 requests/minute for activate/deactivate (heavy operations). */
 const mutateRateLimit = rateLimiter({

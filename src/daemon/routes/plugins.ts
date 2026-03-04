@@ -35,6 +35,7 @@ import {
   unloadPlugin,
 } from "../../plugins.js";
 import type { ConfigSchema } from "../../types.js";
+import { getClientIp, parseTrustedProxies } from "../middleware/client-ip.js";
 
 // ============================================================================
 // Error classes
@@ -78,7 +79,8 @@ function validatePluginName(name: string): void {
 // Rate limiting — stricter limits for mutating plugin operations
 // ============================================================================
 
-const rateLimitKey = (c: Context) => c.req.header("authorization") ?? c.req.header("x-forwarded-for") ?? "anonymous";
+const _trustedProxies = parseTrustedProxies();
+const rateLimitKey = (c: Context) => c.req.header("authorization") ?? getClientIp(c, _trustedProxies);
 
 /** 10 requests/minute for install/uninstall (heavy operations). */
 const installRateLimit = rateLimiter({
