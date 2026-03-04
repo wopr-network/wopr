@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock logger
 vi.mock("../../src/logger.js", () => ({
@@ -32,6 +32,9 @@ const { eventBus } = await import("../../src/core/events.js");
 await import("../../src/security/sandbox.js");
 
 describe("connectionTimestamps cleanup on session:destroy", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
   it("should register a session:destroy listener on the event bus", () => {
     // The sandbox module must register at least one session:destroy listener
     const count = eventBus.listenerCount("session:destroy");
