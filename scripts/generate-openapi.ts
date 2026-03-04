@@ -19,6 +19,11 @@ const repoRoot = resolve(__dirname, "..");
 const outputPath = process.argv[2] ?? resolve(repoRoot, "dist", "openapi.json");
 
 async function main() {
+  // Expose docs so the auth middleware skips /openapi.json for this synthetic fetch.
+  // Must be set before importing createApp() because SKIP_AUTH_PATHS is computed
+  // inside bearerAuth() at middleware-factory time.
+  process.env.WOPR_EXPOSE_DOCS = "true";
+
   // Dynamically import to avoid loading the full daemon at top level
   const { createApp } = await import("../src/daemon/index.js");
 
@@ -27,6 +32,13 @@ async function main() {
   // Invoke the /openapi.json endpoint directly with a synthetic Request
   const req = new Request("http://localhost/openapi.json");
   const res = await app.fetch(req);
+
+  if (!res.ok) {
+    throw new Error(
+      `Failed to fetch OpenAPI spec: ${res.status} ${res.statusText} — is the daemon configured correctly?`,
+    );
+  }
+
   const spec = await res.json();
 
   mkdirSync(dirname(outputPath), { recursive: true });

@@ -24,6 +24,7 @@ import {
   requireAuth,
   requireAdmin,
   isDaemonBearerValid,
+  buildSkipAuthPaths,
 } from "../../src/daemon/middleware/auth.js";
 
 /** Shared daemon token — must match the mock above. */
@@ -53,11 +54,6 @@ describe("daemon auth middleware (WOP-1572)", () => {
       "/health",
       "/ready",
       "/healthz",
-      "/healthz/history",
-      "/openapi.json",
-      "/docs",
-      "/openapi/websocket.json",
-      "/openapi/plugin-manifest.schema.json",
       "/",
     ];
 
@@ -67,6 +63,88 @@ describe("daemon auth middleware (WOP-1572)", () => {
         expect(res.status).toBe(200);
       });
     }
+  });
+
+  describe("WOPR_EXPOSE_DOCS gating (WOP-1550)", () => {
+    const docPaths = [
+      "/openapi.json",
+      "/docs",
+      "/openapi/websocket.json",
+      "/openapi/plugin-manifest.schema.json",
+    ];
+
+    // Ensure env is unset and app is rebuilt fresh for each test in this block,
+    // regardless of what the outer environment has set.
+    beforeEach(() => {
+      delete process.env.WOPR_EXPOSE_DOCS;
+      app = buildApp();
+    });
+
+    afterEach(() => {
+      delete process.env.WOPR_EXPOSE_DOCS;
+    });
+
+    for (const path of docPaths) {
+      it(`requires auth for ${path} when WOPR_EXPOSE_DOCS is not set`, async () => {
+        const res = await app.request(path);
+        expect(res.status).toBe(401);
+      });
+    }
+
+    it("requires auth for /healthz/history always", async () => {
+      const res = await app.request("/healthz/history");
+      expect(res.status).toBe(401);
+    });
+
+    it("allows unauthenticated access to doc paths when WOPR_EXPOSE_DOCS=true", async () => {
+      process.env.WOPR_EXPOSE_DOCS = "true";
+      const exposedApp = buildApp();
+      for (const path of docPaths) {
+        const res = await exposedApp.request(path);
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it("still requires auth for /healthz/history even when WOPR_EXPOSE_DOCS=true", async () => {
+      process.env.WOPR_EXPOSE_DOCS = "true";
+      const exposedApp = buildApp();
+      const res = await exposedApp.request("/healthz/history");
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe("buildSkipAuthPaths (WOP-1550)", () => {
+    it("excludes doc paths when exposeDocs is false", () => {
+      const paths = buildSkipAuthPaths(false);
+      expect(paths.has("/openapi.json")).toBe(false);
+      expect(paths.has("/docs")).toBe(false);
+      expect(paths.has("/openapi/websocket.json")).toBe(false);
+      expect(paths.has("/openapi/plugin-manifest.schema.json")).toBe(false);
+    });
+
+    it("includes doc paths when exposeDocs is true", () => {
+      const paths = buildSkipAuthPaths(true);
+      expect(paths.has("/openapi.json")).toBe(true);
+      expect(paths.has("/docs")).toBe(true);
+      expect(paths.has("/openapi/websocket.json")).toBe(true);
+      expect(paths.has("/openapi/plugin-manifest.schema.json")).toBe(true);
+    });
+
+    it("always includes probe paths", () => {
+      for (const expose of [true, false]) {
+        const paths = buildSkipAuthPaths(expose);
+        expect(paths.has("/health")).toBe(true);
+        expect(paths.has("/ready")).toBe(true);
+        expect(paths.has("/healthz")).toBe(true);
+      }
+    });
+
+    it("never includes /healthz/history", () => {
+      for (const expose of [true, false]) {
+        const paths = buildSkipAuthPaths(expose);
+        expect(paths.has("/healthz/history")).toBe(false);
+      }
+    });
   });
 
   describe("missing or malformed Authorization header", () => {
