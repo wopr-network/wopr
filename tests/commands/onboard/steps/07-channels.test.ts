@@ -90,9 +90,7 @@ describe("07-channels step", () => {
     };
 
     const result = await channelsStep(ctx as Parameters<typeof channelsStep>[0]);
-    expect(installPluginMock).toHaveBeenCalledWith(
-      expect.stringContaining("discord"),
-    );
+    expect(installPluginMock).toHaveBeenCalledWith("wopr-plugin-discord");
     expect(result).toEqual({ channels: expect.arrayContaining(["discord"]) });
   });
 
