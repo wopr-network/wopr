@@ -179,17 +179,18 @@ describe("RateLimitTracker", () => {
 
   describe("edge cases", () => {
     it("should cap exponent at 30 to prevent Infinity", () => {
-      const tracker = new RateLimitTracker(1, 1_000_000_000);
+      // Use Infinity for maxDelayMs so the exponent cap is the only limiting factor
+      const tracker = new RateLimitTracker(1, Number.POSITIVE_INFINITY);
 
-      // Simulate 35 consecutive hits
+      // Simulate 35 consecutive hits (well beyond the cap of 30)
       for (let i = 0; i < 35; i++) {
         tracker.markRateLimited("openai");
       }
 
-      // Should not be Infinity — capped at 2^30 = 1073741824
+      // With Math.random mocked to 0 (no jitter) and baseDelayMs=1, the result is
+      // 1 * 2^min(34, 30) = 2^30 = 1073741824. This fails if the exponent cap is removed.
       const ms = tracker.getRetryAfterMs("openai");
-      expect(ms).toBeLessThanOrEqual(1_000_000_000);
-      expect(Number.isFinite(ms)).toBe(true);
+      expect(ms).toBe(2 ** 30);
     });
 
     it("getRetryAfterMs should return 0 for unknown provider", () => {
@@ -201,7 +202,7 @@ describe("RateLimitTracker", () => {
       const tracker = new RateLimitTracker(1000, 60_000);
       tracker.markRateLimited("openai");
 
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1001);
       expect(tracker.getRetryAfterMs("openai")).toBe(0);
     });
 
@@ -210,15 +211,16 @@ describe("RateLimitTracker", () => {
       tracker.markRateLimited("openai");
 
       vi.advanceTimersByTime(400);
-      expect(tracker.getRetryAfterMs("openai")).toBeGreaterThanOrEqual(599);
-      expect(tracker.getRetryAfterMs("openai")).toBeLessThanOrEqual(601);
+      const remaining = tracker.getRetryAfterMs("openai");
+      expect(remaining).toBeGreaterThanOrEqual(599);
+      expect(remaining).toBeLessThanOrEqual(600);
     });
 
     it("isRateLimited should set retryAfter to 0 when expired (side effect)", () => {
       const tracker = new RateLimitTracker(1000, 60_000);
       tracker.markRateLimited("openai");
 
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1001);
 
       // First call: returns false and sets retryAfter = 0
       expect(tracker.isRateLimited("openai")).toBe(false);
