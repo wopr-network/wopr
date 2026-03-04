@@ -89,6 +89,7 @@ describe("Authentication Module", () => {
       "WOPR_API_KEY",
       "WOPR_PLUGIN_CONFIG",
       "WOPR_CREDENTIAL_KEY",
+      "WOPR_OAUTH_AUTH_URL",
     ]) {
       envBackup[key] = process.env[key];
       delete process.env[key];
