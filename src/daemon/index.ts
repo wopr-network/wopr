@@ -410,6 +410,12 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   daemonLog(`[heap] after plugins: ${heapMB()}`);
 
+  // Require auth context for plugin-mounted routes (WOP-1546)
+  app.use("/skills/*", requireAuth());
+  app.use("/crons/*", requireAuth());
+  app.use("/canvas/*", requireAuth());
+  app.use("/observability/*", requireAuth());
+
   // Mount plugin-provided REST routers
   const { getPluginExtension } = await import("../plugins/extensions.js");
   const maybeSkillsRouter = getPluginExtension("skills:router");

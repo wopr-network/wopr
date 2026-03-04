@@ -12,12 +12,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
-// Mocks — must be declared before any dynamic imports
+// Mocks — must be declared before imports
 // ---------------------------------------------------------------------------
 
-const TEST_WOPR_HOME = mkdtempSync(join(tmpdir(), "wopr-session-cleaner-test-"));
-const TEST_SESSIONS_DIR = join(TEST_WOPR_HOME, "sessions");
-const TEST_SESSIONS_FILE = join(TEST_WOPR_HOME, "sessions.json");
+// vi.hoisted runs before vi.mock factories (and before module imports), so
+// TEST_WOPR_HOME is available when the paths.js mock factory executes.
+// Must use require() since static imports aren't available here.
+const { TEST_WOPR_HOME, TEST_SESSIONS_DIR, TEST_SESSIONS_FILE } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { mkdtempSync: mktmp, join: pjoin } = require("node:path") as typeof import("node:path");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { mkdtempSync: mktmpfs } = require("node:fs") as typeof import("node:fs");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { tmpdir: td } = require("node:os") as typeof import("node:os");
+  const woprHome = mktmpfs(pjoin(td(), "wopr-session-cleaner-test-"));
+  return {
+    TEST_WOPR_HOME: woprHome,
+    TEST_SESSIONS_DIR: pjoin(woprHome, "sessions"),
+    TEST_SESSIONS_FILE: pjoin(woprHome, "sessions.json"),
+  };
+});
 
 vi.mock("../../src/paths.js", () => ({
   WOPR_HOME: TEST_WOPR_HOME,
@@ -81,7 +95,7 @@ vi.mock("../../src/core/a2a-mcp.js", () => ({
   unregisterA2ATool: vi.fn(),
 }));
 
-const mockQueueManager = {
+const mockQueueManager = vi.hoisted(() => ({
   inject: vi.fn(),
   cancelActive: vi.fn(() => false),
   hasPending: vi.fn(() => false),
@@ -89,22 +103,21 @@ const mockQueueManager = {
   getAllStats: vi.fn(() => ({})),
   setExecutor: vi.fn(),
   on: vi.fn(),
-};
+}));
 
 vi.mock("../../src/core/queue/index.js", () => ({
   queueManager: mockQueueManager,
 }));
 
 // ---------------------------------------------------------------------------
-// Import modules under test
+// Import modules under test (static — mocks are hoisted above imports)
 // ---------------------------------------------------------------------------
-let sessions: typeof import("../../src/core/sessions.js");
-let sessionRepository: typeof import("../../src/core/session-repository.js");
-let storage: typeof import("../../src/storage/index.js");
+import * as storage from "../../src/storage/index.js";
+import * as sessionRepository from "../../src/core/session-repository.js";
+import * as sessions from "../../src/core/sessions.js";
+import { SessionCleaner } from "../../src/core/session-cleaner.js";
 
 beforeEach(async () => {
-  vi.resetModules();
-
   mockQueueManager.inject.mockReset();
   mockQueueManager.cancelActive.mockReset().mockReturnValue(false);
   mockQueueManager.hasPending.mockReset().mockReturnValue(false);
@@ -113,18 +126,13 @@ beforeEach(async () => {
   mockQueueManager.setExecutor.mockReset();
   mockQueueManager.on.mockReset();
 
-  storage = await import("../../src/storage/index.js");
+  storage.resetStorage();
+  sessionRepository.resetSessionStorageInit();
   storage.getStorage(":memory:");
-  sessionRepository = await import("../../src/core/session-repository.js");
-  sessions = await import("../../src/core/sessions.js");
-
   await sessionRepository.initSessionStorage();
 }, 30000);
 
-afterEach(async () => {
-  storage.resetStorage();
-  sessionRepository.resetSessionStorageInit();
-
+afterEach(() => {
   vi.restoreAllMocks();
 });
 
@@ -134,8 +142,7 @@ afterAll(() => {
 
 // Helper: backdate a session's lastActivityAt
 async function backdateSession(name: string, ageMs: number): Promise<void> {
-  const storageMod = await import("../../src/storage/index.js");
-  const repo = storageMod.getStorage().getRepository("sessions", "sessions");
+  const repo = storage.getStorage().getRepository("sessions", "sessions");
   const record = await repo.findFirst({ name });
   if (record) {
     await repo.update(record.id, { lastActivityAt: Date.now() - ageMs });
@@ -226,7 +233,6 @@ describe("SessionCleaner", () => {
     await sessions.saveSessionId("expired", "id-exp");
     await backdateSession("expired", 48 * 60 * 60 * 1000);
 
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
     const stats = await cleaner.cleanup();
 
@@ -238,7 +244,6 @@ describe("SessionCleaner", () => {
   it("should not remove fresh sessions", async () => {
     await sessions.saveSessionId("fresh", "id-fresh");
 
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
     const stats = await cleaner.cleanup();
 
@@ -255,7 +260,6 @@ describe("SessionCleaner", () => {
     await backdateSession("s0", 3000);
     await backdateSession("s1", 2000);
 
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 2, cleanupIntervalMs: 60000 });
     const stats = await cleaner.cleanup();
 
@@ -271,7 +275,6 @@ describe("SessionCleaner", () => {
     // Mock hasPending to return true for "busy"
     mockQueueManager.hasPending.mockImplementation((name: string) => name === "busy");
 
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
     const stats = await cleaner.cleanup();
 
@@ -281,8 +284,10 @@ describe("SessionCleaner", () => {
   });
 
   it("should start and stop the interval", async () => {
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 86400000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    // Spy on cleanup so start()'s fire-and-forget initial cleanup doesn't race with
+    // the next test's beforeEach resetting storage (which would cause a 24s hang).
+    vi.spyOn(cleaner, "cleanup").mockResolvedValue({ expiredRemoved: 0, lruEvicted: 0, lastCleanupAt: 0, isRunning: false });
 
     cleaner.start();
     expect(cleaner.getStats().isRunning).toBe(true);
@@ -292,8 +297,9 @@ describe("SessionCleaner", () => {
   });
 
   it("should not start a second interval if already running", async () => {
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 86400000, maxCount: 1000, cleanupIntervalMs: 60000 });
+    // Same guard: prevent start()'s background cleanup from racing with storage reset.
+    vi.spyOn(cleaner, "cleanup").mockResolvedValue({ expiredRemoved: 0, lruEvicted: 0, lastCleanupAt: 0, isRunning: false });
 
     cleaner.start();
     const statsBefore = cleaner.getStats();
@@ -308,7 +314,6 @@ describe("SessionCleaner", () => {
     await sessions.saveSessionId("a", "id-a");
     await backdateSession("a", 48 * 60 * 60 * 1000);
 
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
 
     await cleaner.cleanup();
@@ -324,7 +329,6 @@ describe("SessionCleaner", () => {
     await sessions.saveSessionId("x", "id-x");
     await backdateSession("x", 48 * 60 * 60 * 1000);
 
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 1000, cleanupIntervalMs: 60000 });
 
     // Run two cleanups concurrently — only one should delete the session
@@ -346,7 +350,6 @@ describe("SessionCleaner", () => {
     // Only sess0 has a pending inject
     mockQueueManager.hasPending.mockImplementation((name: string) => name === "sess0");
 
-    const { SessionCleaner } = await import("../../src/core/session-cleaner.js");
     const cleaner = new SessionCleaner({ ttlMs: 24 * 60 * 60 * 1000, maxCount: 3, cleanupIntervalMs: 60000 });
     const stats = await cleaner.cleanup();
 

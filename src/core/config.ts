@@ -200,6 +200,14 @@ const DEFAULT_CONFIG: WoprConfig = {
   providers: {},
 };
 
+const FORBIDDEN_KEY_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
+function validateKeySegments(parts: string[]): void {
+  if (parts.some((p) => FORBIDDEN_KEY_SEGMENTS.has(p))) {
+    throw new Error("Invalid config key");
+  }
+}
+
 export class ConfigManager {
   private config: WoprConfig = DEFAULT_CONFIG;
   private reloadInFlight: Promise<void> | null = null;
@@ -291,6 +299,7 @@ export class ConfigManager {
 
   getValue(key: string): unknown {
     const parts = key.split(".");
+    validateKeySegments(parts);
     let value: unknown = this.config;
     for (const part of parts) {
       if (value && typeof value === "object" && part in value) {
@@ -304,6 +313,7 @@ export class ConfigManager {
 
   setValue(key: string, value: unknown): void {
     const parts = key.split(".");
+    validateKeySegments(parts);
     let target: Record<string, unknown> = this.config as unknown as Record<string, unknown>;
 
     for (let i = 0; i < parts.length - 1; i++) {

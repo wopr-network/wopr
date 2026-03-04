@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   CAPABILITY_CATALOG,
+  buildHostedDefaults,
   getCapabilityCatalogEntry,
   listCapabilityCatalog,
 } from "../../src/core/capability-catalog.js";
@@ -35,8 +36,71 @@ describe("capability-catalog", () => {
 
     it("plugins have hostedConfig with baseUrl where applicable", () => {
       const voice = CAPABILITY_CATALOG.find((c) => c.id === "voice");
-      expect(voice?.plugins[0].hostedConfig.baseUrl).toBe("https://api.wopr.bot");
+      // The catalog is built at module load time; just verify structural shape.
+      const baseUrl = voice?.plugins[0].hostedConfig.baseUrl as string;
+      expect(typeof baseUrl).toBe("string");
+      expect(baseUrl).toBeTruthy();
+      expect(baseUrl).not.toMatch(/\/$/);
     });
+  });
+
+  describe("buildHostedDefaults", () => {
+    let original: { catalog?: string; api?: string };
+
+    beforeEach(() => {
+      original = {
+        catalog: process.env.WOPR_CAPABILITY_CATALOG_URL,
+        api: process.env.WOPR_API_BASE_URL,
+      };
+      delete process.env.WOPR_CAPABILITY_CATALOG_URL;
+      delete process.env.WOPR_API_BASE_URL;
+    });
+
+    afterEach(() => {
+      if (original.catalog === undefined) {
+        delete process.env.WOPR_CAPABILITY_CATALOG_URL;
+      } else {
+        process.env.WOPR_CAPABILITY_CATALOG_URL = original.catalog;
+      }
+      if (original.api === undefined) {
+        delete process.env.WOPR_API_BASE_URL;
+      } else {
+        process.env.WOPR_API_BASE_URL = original.api;
+      }
+    });
+
+    it("returns default URL when no env vars set", () => {
+      const { baseUrl } = buildHostedDefaults();
+      expect(baseUrl).toBe("https://api.wopr.bot");
+    });
+
+    it("strips trailing slash from env var", () => {
+      process.env.WOPR_CAPABILITY_CATALOG_URL = "https://custom.example.com/";
+      const { baseUrl } = buildHostedDefaults();
+      expect(baseUrl).toBe("https://custom.example.com");
+    });
+
+    it("falls back to default when env var is bare slash", () => {
+      process.env.WOPR_CAPABILITY_CATALOG_URL = "/";
+      const { baseUrl } = buildHostedDefaults();
+      expect(baseUrl).toBe("https://api.wopr.bot");
+    });
+
+    it("prefers WOPR_CAPABILITY_CATALOG_URL over WOPR_API_BASE_URL", () => {
+      process.env.WOPR_CAPABILITY_CATALOG_URL = "https://catalog.example.com";
+      process.env.WOPR_API_BASE_URL = "https://api.example.com";
+      const { baseUrl } = buildHostedDefaults();
+      expect(baseUrl).toBe("https://catalog.example.com");
+    });
+
+    it("uses WOPR_API_BASE_URL when CATALOG_URL not set", () => {
+      process.env.WOPR_API_BASE_URL = "https://api.example.com";
+      const { baseUrl } = buildHostedDefaults();
+      expect(baseUrl).toBe("https://api.example.com");
+    });
+  });
+
+  describe("CAPABILITY_CATALOG (structure)", () => {
 
     it("web-search plugin has empty hostedConfig", () => {
       const webSearch = CAPABILITY_CATALOG.find((c) => c.id === "web-search");
