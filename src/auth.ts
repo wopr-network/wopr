@@ -23,7 +23,7 @@ const CLAUDE_CODE_CREDENTIALS = join(homedir(), ".claude", ".credentials.json");
 
 // Anthropic OAuth configuration
 const OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
-const OAUTH_AUTH_URL = "https://claude.ai/oauth/authorize";
+const OAUTH_AUTH_URL = process.env.WOPR_OAUTH_AUTH_URL?.trim() || "https://claude.ai/oauth/authorize";
 const OAUTH_TOKEN_URL = process.env.WOPR_OAUTH_TOKEN_URL ?? "https://console.anthropic.com/v1/oauth/token";
 const OAUTH_SCOPES = ["org:create_api_key", "user:profile", "user:inference"];
 
@@ -212,17 +212,25 @@ export function generatePKCE(): PKCEChallenge {
 
 // Build the OAuth authorization URL
 export function buildAuthUrl(pkce: PKCEChallenge, redirectUri: string): string {
-  const params = new URLSearchParams({
-    client_id: OAUTH_CLIENT_ID,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: OAUTH_SCOPES.join(" "),
-    state: pkce.state,
-    code_challenge: pkce.codeChallenge,
-    code_challenge_method: "S256",
-  });
+  let url: URL;
+  try {
+    url = new URL(OAUTH_AUTH_URL);
+  } catch {
+    throw new Error(`Invalid WOPR_OAUTH_AUTH_URL: "${OAUTH_AUTH_URL}" is not a valid URL`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(`Invalid WOPR_OAUTH_AUTH_URL: must use http or https scheme`);
+  }
 
-  return `${OAUTH_AUTH_URL}?${params.toString()}`;
+  url.searchParams.set("client_id", OAUTH_CLIENT_ID);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", OAUTH_SCOPES.join(" "));
+  url.searchParams.set("state", pkce.state);
+  url.searchParams.set("code_challenge", pkce.codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
+
+  return url.toString();
 }
 
 // Exchange authorization code for tokens
