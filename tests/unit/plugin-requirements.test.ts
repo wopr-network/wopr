@@ -646,4 +646,30 @@ describe("docker image validation", () => {
       expect(result.message).not.toContain("Invalid Docker tag");
     }
   });
+
+  it("should accept a simple official image name", async () => {
+    const result = await dockerPull("nginx");
+    expect(result.message).not.toContain("Invalid Docker image name");
+  });
+
+  it("should accept an official image with explicit library namespace", async () => {
+    const result = await dockerPull("library/nginx");
+    expect(result.message).not.toContain("Invalid Docker image name");
+  });
+
+  it("should accept a fully qualified image from ghcr with tag", async () => {
+    const result = await dockerPull("ghcr.io/org/image", "latest");
+    expect(result.message).not.toContain("Invalid Docker image name");
+    expect(result.message).not.toContain("Invalid Docker tag");
+  });
+
+  it("should accept an image from a custom registry with port", async () => {
+    const result = await dockerPull("myregistry.com:5000/app");
+    expect(result.message).not.toContain("Invalid Docker image name");
+  });
+
+  it("should accept a localhost registry image", async () => {
+    const result = await dockerPull("localhost/myimage");
+    expect(result.message).not.toContain("Invalid Docker image name");
+  });
 });
