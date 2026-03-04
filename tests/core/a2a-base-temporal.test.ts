@@ -1,7 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseTemporalFilter } from "../../src/core/a2a-tools/_base.js";
 
 describe("parseTemporalFilter", () => {
+  const FIXED_NOW = new Date("2024-03-15T12:00:00.000Z").getTime();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("parses ISO datetime with uppercase T", () => {
     const result = parseTemporalFilter("2024-01-01T10:00:00");
     expect(result).not.toBeNull();
@@ -30,17 +41,10 @@ describe("parseTemporalFilter", () => {
   });
 
   it("parses relative expressions", () => {
-    const fixedNow = new Date("2024-06-15T12:00:00.000Z").getTime();
-    vi.useFakeTimers();
-    vi.setSystemTime(fixedNow);
-    try {
-      const result = parseTemporalFilter("last 7 days");
-      expect(result).not.toBeNull();
-      const expected7d = 7 * 24 * 60 * 60 * 1000;
-      expect(result?.after).toBe(fixedNow - expected7d);
-    } finally {
-      vi.useRealTimers();
-    }
+    const result = parseTemporalFilter("last 7 days");
+    expect(result).not.toBeNull();
+    const expected7d = 7 * 24 * 60 * 60 * 1000;
+    expect(result?.after).toBe(FIXED_NOW - expected7d);
   });
 
   it("parses single date", () => {
