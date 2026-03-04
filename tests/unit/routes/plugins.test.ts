@@ -766,7 +766,7 @@ describe("registries", () => {
     expect(res.status).toBe(201);
     const json = await res.json();
     expect(json.added).toBe(true);
-    expect(mockAddRegistry).toHaveBeenCalledWith("custom", "https://custom.registry.com");
+    expect(mockAddRegistry).toHaveBeenCalledWith("https://custom.registry.com", "custom");
   });
 
   it("POST /registries returns 400 when name or url missing", async () => {
@@ -780,12 +780,13 @@ describe("registries", () => {
   });
 
   it("DELETE /registries/:name removes registry", async () => {
+    mockListRegistries.mockResolvedValue([{ name: "custom", url: "https://custom.registry.com" }]);
     mockRemoveRegistry.mockResolvedValue(undefined);
     const res = await req("DELETE", "/registries/custom");
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.removed).toBe(true);
-    expect(mockRemoveRegistry).toHaveBeenCalledWith("custom");
+    expect(mockRemoveRegistry).toHaveBeenCalledWith("https://custom.registry.com");
   });
 
   it("POST /registries returns 400 when url is missing", async () => {
