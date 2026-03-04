@@ -16,7 +16,11 @@ export function getClientIp(c: Context, trustedProxies?: string[]): string {
     // getConnInfo throws when there's no real socket (e.g., in tests)
   }
 
-  if (trustedProxies && socketIp && trustedProxies.includes(socketIp)) {
+  // Normalize IPv6-mapped IPv4 addresses (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
+  // so that trustedProxies entries written as plain IPv4 match local connections.
+  const normalizedIp = socketIp?.startsWith("::ffff:") ? socketIp.slice(7) : socketIp;
+
+  if (trustedProxies && normalizedIp && trustedProxies.includes(normalizedIp)) {
     const forwarded = c.req.header("x-forwarded-for");
     if (forwarded) {
       // X-Forwarded-For: client, proxy1, proxy2 — leftmost is the original client
@@ -29,7 +33,7 @@ export function getClientIp(c: Context, trustedProxies?: string[]): string {
     }
   }
 
-  return socketIp ?? "unknown";
+  return normalizedIp ?? "unknown";
 }
 
 /** Parse TRUSTED_PROXY env var into array of IPs. */
