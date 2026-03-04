@@ -7,7 +7,7 @@
  * - startSessionCleaner / stopSessionCleaner / getSessionCleanerStats (sessions.ts)
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, rmSync, unlinkSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -114,6 +114,7 @@ beforeEach(async () => {
   mockQueueManager.on.mockReset();
 
   storage = await import("../../src/storage/index.js");
+  storage.getStorage(":memory:");
   sessionRepository = await import("../../src/core/session-repository.js");
   sessions = await import("../../src/core/sessions.js");
 
@@ -123,13 +124,6 @@ beforeEach(async () => {
 afterEach(async () => {
   storage.resetStorage();
   sessionRepository.resetSessionStorageInit();
-
-  const dbPath = join(TEST_WOPR_HOME, "wopr.sqlite");
-  if (existsSync(dbPath)) unlinkSync(dbPath);
-  const walPath = `${dbPath}-wal`;
-  const shmPath = `${dbPath}-shm`;
-  if (existsSync(walPath)) unlinkSync(walPath);
-  if (existsSync(shmPath)) unlinkSync(shmPath);
 
   vi.restoreAllMocks();
 });

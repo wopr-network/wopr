@@ -58,7 +58,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
       mkdirSync(testDir, { recursive: true });
     }
     resetStorage();
-    getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
     // Clear any leftover plugin tools
     pluginTools.clear();

@@ -11,7 +11,7 @@
  * After WOP-547 migration: ALL functions are async and use Storage API (SQLite).
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, rmSync, unlinkSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -130,6 +130,7 @@ beforeEach(async () => {
 
   // Import fresh modules
   storage = await import("../../src/storage/index.js");
+  storage.getStorage(":memory:");
   sessionRepository = await import("../../src/core/session-repository.js");
   sessions = await import("../../src/core/sessions.js");
 
@@ -141,17 +142,6 @@ afterEach(async () => {
   // Clean up storage before next test
   storage.resetStorage();
   sessionRepository.resetSessionStorageInit();
-
-  // Delete the SQLite database file to ensure clean slate for next test
-  const dbPath = join(TEST_WOPR_HOME, "wopr.sqlite");
-  if (existsSync(dbPath)) {
-    unlinkSync(dbPath);
-  }
-  // Also delete WAL and SHM files if they exist
-  const walPath = `${dbPath}-wal`;
-  const shmPath = `${dbPath}-shm`;
-  if (existsSync(walPath)) unlinkSync(walPath);
-  if (existsSync(shmPath)) unlinkSync(shmPath);
 
   vi.restoreAllMocks();
 });

@@ -88,7 +88,7 @@ describe("Security Policy Module", () => {
 
     // Reset storage and initialize security
     resetStorage();
-    const storage = getStorage(join(testDir, "test.sqlite"));
+    getStorage(":memory:");
     await initSecurity(testDir);
   });
 

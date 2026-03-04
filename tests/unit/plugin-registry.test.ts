@@ -10,7 +10,7 @@
  * - discoverVoicePlugins (categorized voice plugin discovery)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -75,11 +75,9 @@ beforeEach(async () => {
   const { resetStorage } = await import("../../src/storage/index.js");
   resetStorage();
 
-  mkdirSync(TEST_DIR, { recursive: true });
-
   // Initialize storage for plugin schema (WOP-547)
   const { getStorage } = await import("../../src/storage/index.js");
-  getStorage(join(TEST_DIR, "wopr.sqlite"));
+  getStorage(":memory:");
 
   const { ensurePluginSchema } = await import("../../src/plugins/plugin-storage.js");
   await ensurePluginSchema();
