@@ -156,7 +156,7 @@ export function createApp(healthMonitor?: HealthMonitor) {
     app.route("/healthz", createHealthzRouter(healthMonitor));
   }
 
-  // OpenAPI spec (unauthenticated — excluded from bearerAuth via SKIP_AUTH_PATHS)
+  // OpenAPI spec (authenticated — WOP-1550)
   app.get(
     "/openapi.json",
     openAPIRouteHandler(app, {
@@ -176,10 +176,10 @@ export function createApp(healthMonitor?: HealthMonitor) {
     }),
   );
 
-  // WebSocket documentation (unauthenticated — not describable in OpenAPI 3.1 REST spec)
+  // WebSocket documentation (authenticated — WOP-1550)
   app.get("/openapi/websocket.json", (c) => c.json(websocketDocs));
 
-  // Plugin manifest JSON Schema (unauthenticated)
+  // Plugin manifest JSON Schema (authenticated — WOP-1550)
   // Convert Zod schema to JSON Schema for external tooling / plugin authors
   app.get("/openapi/plugin-manifest.schema.json", (c) => c.json(PluginManifestSchema.toJSONSchema()));
 

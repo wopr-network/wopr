@@ -49,21 +49,34 @@ describe("daemon auth middleware (WOP-1572)", () => {
   });
 
   describe("skip-auth paths", () => {
-    const skipPaths = [
-      "/health",
-      "/ready",
-      "/healthz",
-      "/healthz/history",
-      "/openapi.json",
-      "/docs",
-      "/openapi/websocket.json",
-      "/openapi/plugin-manifest.schema.json",
-      "/",
-    ];
+    const skipPaths = ["/health", "/ready", "/healthz", "/docs", "/"];
 
     for (const path of skipPaths) {
       it(`skips auth for ${path}`, async () => {
         const res = await app.request(path);
+        expect(res.status).toBe(200);
+      });
+    }
+  });
+
+  describe("auth-required paths (WOP-1550)", () => {
+    const authRequiredPaths = [
+      "/openapi.json",
+      "/openapi/websocket.json",
+      "/openapi/plugin-manifest.schema.json",
+      "/healthz/history",
+    ];
+
+    for (const path of authRequiredPaths) {
+      it(`returns 401 for ${path} without auth`, async () => {
+        const res = await app.request(path);
+        expect(res.status).toBe(401);
+      });
+
+      it(`returns 200 for ${path} with valid bearer token`, async () => {
+        const res = await app.request(path, {
+          headers: { Authorization: `Bearer ${DAEMON_TOKEN}` },
+        });
         expect(res.status).toBe(200);
       });
     }
