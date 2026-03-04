@@ -7,6 +7,12 @@ import { describeRoute } from "hono-openapi";
 import { config } from "../../core/config.js";
 import { redactSensitive } from "../../security/redact.js";
 
+const FORBIDDEN_KEY_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
+function isForbiddenKey(key: string): boolean {
+  return key.split(".").some((p) => FORBIDDEN_KEY_SEGMENTS.has(p));
+}
+
 export const configRouter = new Hono();
 
 // GET /config - Get all config
@@ -39,8 +45,11 @@ configRouter.get(
     },
   }),
   async (c) => {
-    await config.load();
     const key = c.req.param("key");
+    if (isForbiddenKey(key)) {
+      return c.json({ error: "Invalid config key" }, 400);
+    }
+    await config.load();
     const value = config.getValue(key);
 
     if (value === undefined) {
@@ -64,8 +73,11 @@ configRouter.put(
     },
   }),
   async (c) => {
-    await config.load();
     const key = c.req.param("key");
+    if (isForbiddenKey(key)) {
+      return c.json({ error: "Invalid config key" }, 400);
+    }
+    await config.load();
     const { value } = await c.req.json();
 
     if (value === undefined) {
