@@ -15,7 +15,7 @@ import { rateLimit } from "../../../src/daemon/middleware/rate-limit.js";
 describe("rate-limit middleware (WOP-1585)", () => {
   beforeEach(() => {
     mockGetConnInfo.mockReturnValue({ remote: { address: "127.0.0.1" } });
-    delete process.env.TRUSTED_PROXY;
+    vi.stubEnv("TRUSTED_PROXY", undefined);
   });
 
   afterEach(() => {
