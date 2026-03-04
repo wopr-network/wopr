@@ -37,8 +37,6 @@ export function buildSkipAuthPaths(exposeDocs: boolean): Set<string> {
   return new Set([...ALWAYS_SKIP_PATHS, ...(exposeDocs ? DOC_PATHS : [])]);
 }
 
-const SKIP_AUTH_PATHS = buildSkipAuthPaths(process.env.WOPR_EXPOSE_DOCS === "true");
-
 /** Map an API key scope to its corresponding auth role. */
 function scopeToRole(scope: string): string {
   if (scope === "full") return "admin";
@@ -89,9 +87,12 @@ export function isDaemonBearerValid(authHeader: string): boolean {
  * Must be applied after CORS but before route handlers.
  */
 export function bearerAuth(): MiddlewareHandler {
+  // Compute skip paths when the middleware factory is called (not at module load)
+  // so that process.env.WOPR_EXPOSE_DOCS can be set before createApp() in scripts/tests.
+  const skipPaths = buildSkipAuthPaths(process.env.WOPR_EXPOSE_DOCS === "true");
   return async (c, next) => {
     // Skip paths that don't need daemon auth
-    if (SKIP_AUTH_PATHS.has(c.req.path) || c.req.path === "/") {
+    if (skipPaths.has(c.req.path) || c.req.path === "/") {
       return next();
     }
 

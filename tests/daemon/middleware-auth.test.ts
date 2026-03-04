@@ -73,6 +73,17 @@ describe("daemon auth middleware (WOP-1572)", () => {
       "/openapi/plugin-manifest.schema.json",
     ];
 
+    // Ensure env is unset and app is rebuilt fresh for each test in this block,
+    // regardless of what the outer environment has set.
+    beforeEach(() => {
+      delete process.env.WOPR_EXPOSE_DOCS;
+      app = buildApp();
+    });
+
+    afterEach(() => {
+      delete process.env.WOPR_EXPOSE_DOCS;
+    });
+
     for (const path of docPaths) {
       it(`requires auth for ${path} when WOPR_EXPOSE_DOCS is not set`, async () => {
         const res = await app.request(path);
@@ -82,6 +93,22 @@ describe("daemon auth middleware (WOP-1572)", () => {
 
     it("requires auth for /healthz/history always", async () => {
       const res = await app.request("/healthz/history");
+      expect(res.status).toBe(401);
+    });
+
+    it("allows unauthenticated access to doc paths when WOPR_EXPOSE_DOCS=true", async () => {
+      process.env.WOPR_EXPOSE_DOCS = "true";
+      const exposedApp = buildApp();
+      for (const path of docPaths) {
+        const res = await exposedApp.request(path);
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it("still requires auth for /healthz/history even when WOPR_EXPOSE_DOCS=true", async () => {
+      process.env.WOPR_EXPOSE_DOCS = "true";
+      const exposedApp = buildApp();
+      const res = await exposedApp.request("/healthz/history");
       expect(res.status).toBe(401);
     });
   });
