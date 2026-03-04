@@ -586,4 +586,31 @@ describe("docker image validation", () => {
     const result = await dockerImageExists("nginx; rm -rf /");
     expect(result).toBe(false);
   });
+
+  it("should reject invalid tag containing shell metacharacters", async () => {
+    const result = await dockerPull("nginx", "; rm -rf /");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker tag");
+  });
+
+  it("should reject tag containing newline", async () => {
+    const result = await dockerPull("nginx", "latest\nevil");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker tag");
+  });
+
+  it("should reject tag containing spaces", async () => {
+    const result = await dockerPull("nginx", "latest --flag");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Invalid Docker tag");
+  });
+
+  it("should accept valid tag", async () => {
+    // Valid tag format — will fail at docker level but not validation
+    const result = await dockerPull("nginx", "latest");
+    // ok may be false (no docker), but NOT due to tag validation
+    if (!result.ok) {
+      expect(result.message).not.toContain("Invalid Docker tag");
+    }
+  });
 });

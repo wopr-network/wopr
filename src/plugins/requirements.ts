@@ -114,6 +114,7 @@ export function hasDocker(): boolean {
  * Invalid examples: https://evil.com/img, nginx; rm -rf /, image$(cmd)
  */
 const DOCKER_IMAGE_PATTERN = /^[a-z0-9][a-z0-9._\-/:]*$/;
+const DOCKER_TAG_PATTERN = /^[a-z0-9._-]+$/i;
 
 function isValidDockerImage(image: string): boolean {
   if (!image || image.length > 255) return false;
@@ -122,6 +123,11 @@ function isValidDockerImage(image: string): boolean {
   // Reject shell metacharacters and control characters
   if (!DOCKER_IMAGE_PATTERN.test(image)) return false;
   return true;
+}
+
+function isValidDockerTag(tag: string): boolean {
+  if (!tag || tag.length > 128) return false;
+  return DOCKER_TAG_PATTERN.test(tag);
 }
 
 /**
@@ -158,10 +164,22 @@ export async function dockerPull(image: string, tag?: string): Promise<InstallRe
     };
   }
 
-  // Warn on non-default registries (image contains a dot before the first slash = custom registry)
+  if (tag !== undefined && !isValidDockerTag(tag)) {
+    logger.warn(`[docker] Rejected invalid Docker tag: ${String(tag).slice(0, 80)}`);
+    return {
+      ok: false,
+      method: { kind: "docker", image, tag },
+      message: `Invalid Docker tag: ${String(tag).slice(0, 80)}`,
+    };
+  }
+
+  // Warn on non-default registries: hostname with dot OR colon (port) before first slash
   const slashIdx = image.indexOf("/");
-  if (slashIdx > 0 && image.slice(0, slashIdx).includes(".")) {
-    logger.warn(`[docker] Pulling from non-default registry: ${image.slice(0, slashIdx)}`);
+  if (slashIdx > 0) {
+    const prefix = image.slice(0, slashIdx);
+    if (prefix.includes(".") || prefix.includes(":")) {
+      logger.warn(`[docker] Pulling from non-default registry: ${prefix}`);
+    }
   }
 
   const fullImage = tag ? `${image}:${tag}` : image;
