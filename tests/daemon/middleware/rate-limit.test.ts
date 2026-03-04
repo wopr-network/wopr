@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 
 // Mock getConnInfo to return a controlled socket IP
@@ -16,6 +16,10 @@ describe("rate-limit middleware (WOP-1585)", () => {
   beforeEach(() => {
     mockGetConnInfo.mockReturnValue({ remote: { address: "192.168.1.1" } });
     delete process.env.TRUSTED_PROXY;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe("requests allowed under the limit", () => {
@@ -252,7 +256,7 @@ describe("rate-limit middleware (WOP-1585)", () => {
     it("uses XFF client IP (not socket) when trustedProxies is set", async () => {
       // When TRUSTED_PROXY is set, getClientIp walks XFF right-to-left and returns
       // the first non-trusted IP. The socket IP itself is not used as the key when XFF is present.
-      process.env.TRUSTED_PROXY = "10.0.0.99";
+      vi.stubEnv("TRUSTED_PROXY", "10.0.0.99");
       const app = new Hono();
       app.use("*", rateLimit({ windowMs: 60_000, limit: 1, keyByIp: true }));
       app.all("*", (c) => c.json({ ok: true }));
@@ -279,7 +283,7 @@ describe("rate-limit middleware (WOP-1585)", () => {
     });
 
     it("trusts XFF when connecting IP matches TRUSTED_PROXY", async () => {
-      process.env.TRUSTED_PROXY = "192.168.1.1";
+      vi.stubEnv("TRUSTED_PROXY", "192.168.1.1");
       const app = new Hono();
       app.use("*", rateLimit({ windowMs: 60_000, limit: 1, keyByIp: true }));
       app.all("*", (c) => c.json({ ok: true }));
