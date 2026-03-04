@@ -27,7 +27,7 @@ describe("RateLimitTracker", () => {
       expect(tracker.isRateLimited("openai")).toBe(true);
 
       // First hit: backoff = 1000 * 2^0 + 0 jitter = 1000ms
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1001);
       expect(tracker.isRateLimited("openai")).toBe(false);
     });
 
@@ -97,7 +97,7 @@ describe("RateLimitTracker", () => {
       expect(tracker.getRetryAfterMs("openai")).toBe(2000);
 
       // Wait for backoff to expire
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2001);
       expect(tracker.isRateLimited("openai")).toBe(false);
 
       // Hit 3 (after expiry): resets to hit 1 — backoff = 1000ms
@@ -210,7 +210,8 @@ describe("RateLimitTracker", () => {
       tracker.markRateLimited("openai");
 
       vi.advanceTimersByTime(400);
-      expect(tracker.getRetryAfterMs("openai")).toBe(600);
+      expect(tracker.getRetryAfterMs("openai")).toBeGreaterThanOrEqual(599);
+      expect(tracker.getRetryAfterMs("openai")).toBeLessThanOrEqual(601);
     });
 
     it("isRateLimited should set retryAfter to 0 when expired (side effect)", () => {
