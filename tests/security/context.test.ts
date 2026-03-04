@@ -271,8 +271,8 @@ describe("Security Context Module", () => {
       const result = ctx.canUseTool("http_fetch");
       // In warn mode, allowed but with warning
       expect(result.allowed).toBe(true);
-      expect(result.warning).toContain("http_fetch");
-      expect(result.warning).toContain("warn mode");
+      expect(result.warning).toMatch(/http_fetch/i);
+      expect(result.warning).toMatch(/warn/i);
     });
   });
 

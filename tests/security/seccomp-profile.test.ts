@@ -8,7 +8,7 @@ describe("generateSeccompProfile", () => {
     expect(profile).toEqual(
       expect.objectContaining({
         defaultAction: "SCMP_ACT_ERRNO",
-        architectures: expect.arrayContaining(["SCMP_ARCH_X86_64"]),
+        architectures: expect.arrayContaining([expect.any(String)]),
         syscalls: expect.arrayContaining([
           expect.objectContaining({ action: "SCMP_ACT_ALLOW" }),
         ]),

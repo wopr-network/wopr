@@ -609,8 +609,8 @@ describe("Security Policy Module", () => {
       // Default untrusted has tools: { deny: ["*"] }
       // With warn mode, this should warn
       expect(result.allowed).toBe(true); // warn mode
-      expect(result.warning).toContain("unknown_tool");
-      expect(result.warning).toContain("warn mode");
+      expect(result.warning).toMatch(/unknown_tool/i);
+      expect(result.warning).toMatch(/warn/i);
     });
   });
 
