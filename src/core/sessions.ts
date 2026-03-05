@@ -513,14 +513,14 @@ async function executeInjectInternal(
 
         try {
           const result = await Promise.race([iterator.next(), timeoutPromise]);
-          clearTimeout(timeoutId);
           if (result.done) break;
           yield result.value;
         } catch (e) {
-          clearTimeout(timeoutId);
           // Try to clean up the iterator
           iterator.return?.();
           throw e;
+        } finally {
+          clearTimeout(timeoutId);
         }
       }
     }
