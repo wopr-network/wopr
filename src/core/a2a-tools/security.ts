@@ -73,8 +73,8 @@ export function createSecurityTools(sessionName: string): unknown[] {
       "security_check",
       "Check if a specific tool or capability is allowed before attempting to use it.",
       {
-        tool: z.string().optional().describe("Tool name to check (e.g., 'http_fetch', 'exec_command')"),
-        capability: z.string().optional().describe("Capability to check (e.g., 'inject.network', 'cross.inject')"),
+        tool: z.string().optional().describe("Tool name to check (e.g., 'tts_synthesize', 'image_generate')"),
+        capability: z.string().optional().describe("Capability to check (e.g., 'inject', 'cross.inject')"),
       },
       async (args: { tool?: string; capability?: string }) => {
         const { tool: toolName, capability } = args;

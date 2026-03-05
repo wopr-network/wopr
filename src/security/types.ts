@@ -50,8 +50,6 @@ export function meetsTrustLevel(actual: TrustLevel, required: TrustLevel): boole
 export type Capability =
   | "inject" // Send messages to sessions
   | "inject.tools" // Use A2A tools when injecting
-  | "inject.network" // HTTP requests (http_fetch)
-  | "inject.exec" // Shell commands (exec_command)
   | "session.spawn" // Create new sessions
   | "session.history" // Read own session history
   | "cross.inject" // Inject into other sessions (gateway only)
@@ -120,8 +118,6 @@ export function expandCapabilities(capabilities: Capability[]): Capability[] {
     return [
       "inject",
       "inject.tools",
-      "inject.network",
-      "inject.exec",
       "session.spawn",
       "session.history",
       "cross.inject",
@@ -532,7 +528,7 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
     "semi-trusted": {
       capabilities: CAPABILITY_PROFILES["semi-trusted"],
       sandbox: { enabled: true, network: "bridge" },
-      tools: { deny: ["config.write", "inject.exec"] },
+      tools: { deny: ["config.write"] },
     },
     untrusted: {
       capabilities: CAPABILITY_PROFILES.untrusted,
@@ -654,10 +650,6 @@ export const TOOL_CAPABILITY_MAP: Record<string, Capability> = {
   // Security introspection tools (always allowed - just show your own permissions)
   security_whoami: "inject",
   security_check: "inject",
-
-  // Dangerous tools
-  http_fetch: "inject.network",
-  exec_command: "inject.exec",
 };
 
 /**
