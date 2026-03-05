@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { z } from "zod";
 import { logger } from "../../logger.js";
+import { requireWriteScope } from "../middleware/auth.js";
 
 // ============================================================================
 // Types
@@ -126,6 +127,7 @@ instancesRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const body = await c.req.json().catch(() => null);
     if (!body) {
@@ -256,6 +258,7 @@ instancesRouter.patch(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const id = c.req.param("id");
     const instance = instances.get(id);
@@ -299,6 +302,7 @@ instancesRouter.delete(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   (c) => {
     const id = c.req.param("id");
     const instance = instances.get(id);
@@ -331,6 +335,7 @@ instancesRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   (c) => {
     const id = c.req.param("id");
     const instance = instances.get(id);
@@ -373,6 +378,7 @@ instancesRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   (c) => {
     const id = c.req.param("id");
     const instance = instances.get(id);
@@ -408,6 +414,7 @@ instancesRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   (c) => {
     const id = c.req.param("id");
     const instance = instances.get(id);

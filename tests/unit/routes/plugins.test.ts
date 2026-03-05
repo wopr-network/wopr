@@ -121,6 +121,7 @@ vi.mock("hono-rate-limiter", () => ({
 const mockRequireAdminHandler = vi.fn(async (_c: unknown, next: () => Promise<void>) => next());
 vi.mock("../../../src/daemon/middleware/auth.js", () => ({
   requireAdmin: () => mockRequireAdminHandler,
+  requireWriteScope: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
 // dependency-check — real implementation is simple enough; mock for route isolation

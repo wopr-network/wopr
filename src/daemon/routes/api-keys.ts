@@ -12,6 +12,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import type { ApiKeyScope } from "../api-keys.js";
 import { generateApiKey, KeyLimitError, listApiKeys, revokeApiKey } from "../api-keys.js";
+import { requireWriteScope } from "../middleware/auth.js";
 
 type AuthEnv = {
   Variables: {
@@ -51,6 +52,7 @@ apiKeysRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const user = c.get("user");
     if (!user?.id) {
@@ -149,6 +151,7 @@ apiKeysRouter.delete(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const user = c.get("user");
     if (!user?.id) {

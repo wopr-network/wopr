@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { contextProviders, getRegisteredProviders } from "../../core/context.js";
 import { getLoadedPlugin } from "../../plugins.js";
+import { requireWriteScope } from "../middleware/auth.js";
 
 export const hooksRouter = new Hono();
 
@@ -130,6 +131,7 @@ hooksRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   (c) => {
     const name = c.req.param("name");
     const provider = contextProviders.get(name);
@@ -154,6 +156,7 @@ hooksRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   (c) => {
     const name = c.req.param("name");
     const provider = contextProviders.get(name);
@@ -180,6 +183,7 @@ hooksRouter.put(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const name = c.req.param("name");
     const provider = contextProviders.get(name);

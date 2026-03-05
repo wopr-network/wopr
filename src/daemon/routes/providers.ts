@@ -7,6 +7,7 @@ import { describeRoute } from "hono-openapi";
 import { getCapabilityRegistry } from "../../core/capability-registry.js";
 import { providerRegistry } from "../../core/providers.js";
 import { listConfigSchemas } from "../../plugins.js";
+import { requireWriteScope } from "../middleware/auth.js";
 
 export const providersRouter = new Hono();
 
@@ -45,6 +46,7 @@ providersRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const body = await c.req.json();
     const { providerId, credential } = body;
@@ -75,6 +77,7 @@ providersRouter.delete(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const id = c.req.param("id");
 

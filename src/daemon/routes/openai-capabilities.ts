@@ -17,6 +17,7 @@ import { describeRoute } from "hono-openapi";
 import { resolveCapability } from "../../core/capability-resolver.js";
 import { logger } from "../../logger.js";
 import { getPluginExtension } from "../../plugins/extensions.js";
+import { requireWriteScope } from "../middleware/auth.js";
 
 export const openaiCapabilitiesRouter = new Hono();
 
@@ -69,6 +70,7 @@ openaiCapabilitiesRouter.post(
       500: { description: "Provider error" },
     },
   }),
+  requireWriteScope({ format: "openai" }),
   async (c) => {
     let body: { input?: string; model?: string; voice?: string; response_format?: string; speed?: number };
     try {
@@ -136,6 +138,7 @@ openaiCapabilitiesRouter.post(
       500: { description: "Provider error" },
     },
   }),
+  requireWriteScope({ format: "openai" }),
   async (c) => {
     let body: { file?: string; model?: string; language?: string; response_format?: string };
     try {
@@ -204,6 +207,7 @@ openaiCapabilitiesRouter.post(
       500: { description: "Provider error" },
     },
   }),
+  requireWriteScope({ format: "openai" }),
   async (c) => {
     let body: { prompt?: string; model?: string; n?: number; size?: string; response_format?: string };
     try {
@@ -268,6 +272,7 @@ openaiCapabilitiesRouter.post(
       500: { description: "Provider error" },
     },
   }),
+  requireWriteScope({ format: "openai" }),
   async (c) => {
     let body: { input?: string | string[]; model?: string };
     try {

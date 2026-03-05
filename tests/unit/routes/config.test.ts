@@ -15,6 +15,7 @@ vi.mock("../../../src/daemon/middleware/auth.js", () => ({
     }
     return next();
   },
+  requireWriteScope: () => async (_c: any, next: any) => next(),
 }));
 
 // Mock config
