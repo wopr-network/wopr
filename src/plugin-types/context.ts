@@ -16,6 +16,9 @@ import type { WOPREventBus, WOPRHookManager } from "./events.js";
 import type { AdapterCapability, ProviderOption } from "./manifest.js";
 import type { ModelProvider } from "./provider.js";
 
+/** Trust level for injection sources - defined here to avoid core dependency */
+export type TrustLevel = "owner" | "trusted" | "semi-trusted" | "untrusted";
+
 /**
  * Input provided to a setup context provider so it can generate
  * context-aware setup instructions.
@@ -273,7 +276,7 @@ export interface WOPRPluginContext {
 
   // Security registration — plugins register their permissions, sources, and tool mappings
   registerPermission(name: string): void;
-  registerInjectionSource(name: string, trustLevel: import("../security/types.js").TrustLevel): void;
+  registerInjectionSource(name: string, trustLevel: TrustLevel): void;
   registerToolPermission(toolName: string, permission: string): void;
   unregisterPermission(name: string): void;
   unregisterInjectionSource(name: string): void;

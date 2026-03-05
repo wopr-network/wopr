@@ -320,11 +320,16 @@ export function createPluginContext(
       getSecurityRegistry().registerPermission(name, pluginName);
     },
 
-    registerInjectionSource(name: string, trustLevel: import("../security/types.js").TrustLevel) {
+    registerInjectionSource(name: string, trustLevel: import("../types.js").TrustLevel) {
       getSecurityRegistry().registerInjectionSource(name, trustLevel, pluginName);
     },
 
     registerToolPermission(toolName: string, permission: string) {
+      if (toolName.includes(":")) {
+        throw new Error(
+          `Tool name must be a bare name (e.g., "cron_schedule"), not a namespaced name (e.g., "plugin:cron_schedule"). The security system enforces permissions on bare tool names.`,
+        );
+      }
       getSecurityRegistry().registerToolCapability(toolName, permission, pluginName);
     },
 

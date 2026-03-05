@@ -57,6 +57,21 @@ describe("SecurityRegistry", () => {
 			expect(all).toContain("inject");
 			expect(all).toContain("foo.bar");
 		});
+
+		it("same plugin can re-register its own permission", () => {
+			const reg = getSecurityRegistry();
+			reg.registerPermission("foo.bar", "my-plugin");
+			reg.registerPermission("foo.bar", "my-plugin");
+			expect(reg.hasPermission("foo.bar")).toBe(true);
+		});
+
+		it("different plugin cannot overwrite existing permission", () => {
+			const reg = getSecurityRegistry();
+			reg.registerPermission("foo.bar", "plugin-a");
+			expect(() => reg.registerPermission("foo.bar", "plugin-b")).toThrow(
+				/is already registered by plugin "plugin-a"/,
+			);
+		});
 	});
 
 	describe("injection sources", () => {
@@ -84,6 +99,21 @@ describe("SecurityRegistry", () => {
 			reg.unregisterInjectionSource("cli", "attacker");
 			expect(reg.getDefaultTrust("cli")).toBe("owner");
 		});
+
+		it("same plugin can re-register its own source", () => {
+			const reg = getSecurityRegistry();
+			reg.registerInjectionSource("webhook", "semi-trusted", "my-plugin");
+			reg.registerInjectionSource("webhook", "trusted", "my-plugin");
+			expect(reg.getDefaultTrust("webhook")).toBe("trusted");
+		});
+
+		it("different plugin cannot overwrite existing source", () => {
+			const reg = getSecurityRegistry();
+			reg.registerInjectionSource("webhook", "semi-trusted", "plugin-a");
+			expect(() =>
+				reg.registerInjectionSource("webhook", "owner", "plugin-b"),
+			).toThrow(/is already registered by plugin "plugin-a"/);
+		});
 	});
 
 	describe("tool capabilities", () => {
@@ -110,6 +140,31 @@ describe("SecurityRegistry", () => {
 			const reg = getSecurityRegistry();
 			reg.unregisterToolCapability("config_get", "attacker");
 			expect(reg.getToolCapability("config_get")).toBe("config.read");
+		});
+
+		it("rejects empty capability", () => {
+			const reg = getSecurityRegistry();
+			expect(() =>
+				reg.registerToolCapability("my_tool", "", "my-plugin"),
+			).toThrow(/Invalid capability: cannot be empty/);
+			expect(() =>
+				reg.registerToolCapability("my_tool", "   ", "my-plugin"),
+			).toThrow(/Invalid capability: cannot be empty/);
+		});
+
+		it("same plugin can re-register its own tool capability", () => {
+			const reg = getSecurityRegistry();
+			reg.registerToolCapability("my_tool", "foo.bar", "my-plugin");
+			reg.registerToolCapability("my_tool", "baz.qux", "my-plugin");
+			expect(reg.getToolCapability("my_tool")).toBe("baz.qux");
+		});
+
+		it("different plugin cannot overwrite existing tool capability", () => {
+			const reg = getSecurityRegistry();
+			reg.registerToolCapability("my_tool", "plugin-a.perm", "plugin-a");
+			expect(() =>
+				reg.registerToolCapability("my_tool", "plugin-b.perm", "plugin-b"),
+			).toThrow(/is already registered by plugin "plugin-a"/);
 		});
 	});
 

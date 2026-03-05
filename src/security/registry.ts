@@ -85,6 +85,12 @@ export class SecurityRegistry {
     if (name !== "*" && !PERMISSION_RE.test(name)) {
       throw new Error(`Invalid permission format: "${name}". Must match namespace.action (lowercase alphanumeric).`);
     }
+    const existing = this.pluginPermissions.get(name);
+    if (existing !== undefined && existing !== pluginName) {
+      throw new Error(
+        `Permission "${name}" is already registered by plugin "${existing}". Cannot re-register with "${pluginName}".`,
+      );
+    }
     this.pluginPermissions.set(name, pluginName);
   }
 
@@ -106,6 +112,12 @@ export class SecurityRegistry {
   // ---- Injection Sources ----
 
   registerInjectionSource(name: string, trustLevel: TrustLevel, pluginName: string): void {
+    const existing = this.pluginSources.get(name);
+    if (existing !== undefined && existing.pluginName !== pluginName) {
+      throw new Error(
+        `Injection source "${name}" is already registered by plugin "${existing.pluginName}". Cannot re-register with "${pluginName}".`,
+      );
+    }
     this.pluginSources.set(name, { value: trustLevel, pluginName });
   }
 
@@ -131,6 +143,15 @@ export class SecurityRegistry {
   // ---- Tool Capabilities ----
 
   registerToolCapability(toolName: string, capability: string, pluginName: string): void {
+    if (!capability || capability.trim() === "") {
+      throw new Error(`Invalid capability: cannot be empty. Tool "${toolName}" requires a valid permission.`);
+    }
+    const existing = this.pluginToolCaps.get(toolName);
+    if (existing !== undefined && existing.pluginName !== pluginName) {
+      throw new Error(
+        `Tool capability "${toolName}" is already registered by plugin "${existing.pluginName}". Cannot re-register with "${pluginName}".`,
+      );
+    }
     this.pluginToolCaps.set(toolName, { value: capability, pluginName });
   }
 
