@@ -55,6 +55,23 @@ describe("requireWriteScope", () => {
     const body = await res.json();
     expect(body.error).toContain("read-only");
   });
+
+  it("returns OpenAI-style error envelope when format is 'openai'", async () => {
+    const app2 = new Hono();
+    app2.use("*", async (c, next) => {
+      c.set("apiKeyScope", "read-only");
+      return next();
+    });
+    app2.post("/test", requireWriteScope({ format: "openai" }), (c) => c.json({ ok: true }));
+    const res = await app2.request("/test", { method: "POST" });
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toEqual({
+      message: "Forbidden: read-only API key cannot perform write operations",
+      type: "insufficient_scope",
+      code: "forbidden",
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

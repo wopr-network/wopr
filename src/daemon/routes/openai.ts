@@ -227,7 +227,7 @@ openaiRouter.post(
       500: { description: "Provider error" },
     },
   }),
-  requireWriteScope(),
+  requireWriteScope({ format: "openai" }),
   async (c) => {
     let body: ChatCompletionRequest;
     try {

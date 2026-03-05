@@ -206,10 +206,22 @@ export function requireAdmin(): MiddlewareHandler {
  * Must be used AFTER bearerAuth() in the middleware chain.
  * Allows daemon bearer tokens (no apiKeyScope) and all non-read-only scopes.
  */
-export function requireWriteScope(): MiddlewareHandler {
+export function requireWriteScope(options?: { format?: "openai" }): MiddlewareHandler {
   return async (c, next) => {
     const scope = c.get("apiKeyScope") as string | undefined;
     if (scope === "read-only") {
+      if (options?.format === "openai") {
+        return c.json(
+          {
+            error: {
+              message: "Forbidden: read-only API key cannot perform write operations",
+              type: "insufficient_scope",
+              code: "forbidden",
+            },
+          },
+          403,
+        );
+      }
       return c.json({ error: "Forbidden: read-only API key cannot perform write operations" }, 403);
     }
     return next();
