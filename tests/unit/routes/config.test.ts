@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { configRouter } from "../../../src/daemon/routes/config.js";
 
 // Mock auth middleware
 vi.mock("../../../src/daemon/middleware/auth.js", () => ({
@@ -34,6 +33,9 @@ vi.mock("../../../src/core/config.js", () => ({
 vi.mock("../../../src/security/redact.js", () => ({
   redactSensitive: vi.fn((v: any) => v),
 }));
+
+// Dynamic import after vi.mock() declarations for consistency (matches openapi.test.ts pattern)
+const { configRouter } = await import("../../../src/daemon/routes/config.js");
 
 describe("config routes authorization", () => {
   let app: Hono;
@@ -85,6 +87,18 @@ describe("config routes authorization", () => {
       });
       expect(res.status).toBe(200);
     });
+
+    it("allows owner role", async () => {
+      const res = await app.request("/config/some.key", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Test-Role": "owner",
+        },
+        body: JSON.stringify({ value: "test" }),
+      });
+      expect(res.status).toBe(200);
+    });
   });
 
   describe("DELETE /config", () => {
@@ -100,6 +114,14 @@ describe("config routes authorization", () => {
       const res = await app.request("/config", {
         method: "DELETE",
         headers: { "X-Test-Role": "admin" },
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("allows owner role", async () => {
+      const res = await app.request("/config", {
+        method: "DELETE",
+        headers: { "X-Test-Role": "owner" },
       });
       expect(res.status).toBe(200);
     });
