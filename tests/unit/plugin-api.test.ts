@@ -14,6 +14,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 
+// Mock auth middleware — make requireAdmin a passthrough
+vi.mock("../../src/daemon/middleware/auth.js", () => ({
+  requireAdmin: vi.fn(
+    () => async (_c: any, next: () => Promise<void>) => next(),
+  ),
+}));
+
 // Mock logger
 vi.mock("../../src/logger.js", () => ({
   logger: {
