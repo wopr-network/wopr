@@ -154,6 +154,12 @@ export function bearerAuth(): MiddlewareHandler {
  */
 export function requireAuth(): MiddlewareHandler {
   return async (c, next) => {
+    // If bearerAuth() already authenticated this request (API key path),
+    // skip re-validation to avoid double validateApiKey() + lastUsedAt writes.
+    if (c.get("authMethod") === "api_key") {
+      return next();
+    }
+
     const authHeader = c.req.header("Authorization");
 
     if (!authHeader?.startsWith("Bearer ")) {

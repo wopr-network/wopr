@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { config } from "../../core/config.js";
 import { redactSensitive } from "../../security/redact.js";
+import { requireAdmin, requireAuth } from "../middleware/auth.js";
 
 const FORBIDDEN_KEY_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 
@@ -70,8 +71,11 @@ configRouter.put(
       200: { description: "Updated config value" },
       400: { description: "Missing value" },
       401: { description: "Unauthorized" },
+      403: { description: "Forbidden: admin access required" },
     },
   }),
+  requireAuth(),
+  requireAdmin(),
   async (c) => {
     const key = c.req.param("key");
     if (isForbiddenKey(key)) {
@@ -100,10 +104,14 @@ configRouter.delete(
     responses: {
       200: { description: "Config reset successfully" },
       401: { description: "Unauthorized" },
+      403: { description: "Forbidden: admin access required" },
     },
   }),
+  requireAuth(),
+  requireAdmin(),
   async (c) => {
     config.reset();
+    await config.load();
     await config.save();
     return c.json({ message: "Config reset to defaults" });
   },

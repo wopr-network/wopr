@@ -81,6 +81,7 @@ vi.mock("../../src/daemon/middleware/rate-limit.js", () => ({
 vi.mock("../../src/daemon/middleware/auth.js", () => ({
   bearerAuth: () => (_c: unknown, next: () => Promise<unknown>) => next(),
   requireAuth: () => (_c: unknown, next: () => Promise<unknown>) => next(),
+  requireAdmin: () => (_c: unknown, next: () => Promise<unknown>) => next(),
 }));
 
 vi.mock("../../src/daemon/cors.js", () => ({
