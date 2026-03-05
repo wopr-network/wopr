@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CLIENT_TIMEOUT_MS,
   HEARTBEAT_INTERVAL_MS,
+  _isTopicAllowedForScope,
   _resetForTesting,
   _setTokenVerifier,
   broadcast,
@@ -746,5 +747,157 @@ describe("Multiple clients", () => {
     handleWebSocketMessage(ws1, JSON.stringify({ type: "subscribe", topics: ["*"] }));
     emitInstanceStatus("a", "ok");
     expect(ws1.allMessages().filter((m) => m.type === "instance:status")).toHaveLength(1);
+  });
+});
+
+describe("Topic scope enforcement (WOP-1712)", () => {
+  describe("isTopicAllowedForScope", () => {
+    it("should allow all topics when scope is undefined", () => {
+      expect(_isTopicAllowedForScope("instance:def:logs", undefined)).toBe(true);
+      expect(_isTopicAllowedForScope("*", undefined)).toBe(true);
+    });
+
+    it("should allow all topics for full scope", () => {
+      expect(_isTopicAllowedForScope("instance:def:logs", "full")).toBe(true);
+      expect(_isTopicAllowedForScope("*", "full")).toBe(true);
+    });
+
+    it("should allow all topics for read-only scope", () => {
+      expect(_isTopicAllowedForScope("instance:def:logs", "read-only")).toBe(true);
+      expect(_isTopicAllowedForScope("*", "read-only")).toBe(true);
+    });
+
+    it("should allow matching instance topic", () => {
+      expect(_isTopicAllowedForScope("instance:abc", "instance:abc")).toBe(true);
+      expect(_isTopicAllowedForScope("instance:abc:logs", "instance:abc")).toBe(true);
+      expect(_isTopicAllowedForScope("instance:abc:status", "instance:abc")).toBe(true);
+    });
+
+    it("should deny non-matching instance topic", () => {
+      expect(_isTopicAllowedForScope("instance:def:logs", "instance:abc")).toBe(false);
+      expect(_isTopicAllowedForScope("instance:def", "instance:abc")).toBe(false);
+    });
+
+    it("should deny wildcard for instance scope", () => {
+      expect(_isTopicAllowedForScope("*", "instance:abc")).toBe(false);
+    });
+
+    it("should deny 'instances' topic for instance scope", () => {
+      expect(_isTopicAllowedForScope("instances", "instance:abc")).toBe(false);
+    });
+
+    it("should deny unknown scope by default", () => {
+      expect(_isTopicAllowedForScope("anything", "custom-scope")).toBe(false);
+    });
+  });
+
+  it("should reject out-of-scope topic for instance-scoped key", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "instance:abc" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["instance:def:logs"] }));
+    const msgs = ws.allMessages();
+    const errorMsg = msgs.find((m) => m.type === "error" && typeof m.message === "string" && m.message.includes("scope"));
+    expect(errorMsg).toBeDefined();
+    expect(errorMsg?.code).toBe("SCOPE_DENIED");
+  });
+
+  it("should allow in-scope topic for instance-scoped key", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "instance:abc" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["instance:abc:logs"] }));
+    const msgs = ws.allMessages();
+    const subMsg = msgs.find((m) => m.type === "subscribed");
+    expect(subMsg).toBeDefined();
+    expect(subMsg?.topics).toContain("instance:abc:logs");
+  });
+
+  it("should block wildcard subscription for instance-scoped key", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "instance:abc" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["*"] }));
+    const msgs = ws.allMessages();
+    const errorMsg = msgs.find((m) => m.type === "error" && m.code === "SCOPE_DENIED");
+    expect(errorMsg).toBeDefined();
+  });
+
+  it("should block 'instances' topic for instance-scoped key", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "instance:abc" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["instances"] }));
+    const msgs = ws.allMessages();
+    const errorMsg = msgs.find((m) => m.type === "error" && m.code === "SCOPE_DENIED");
+    expect(errorMsg).toBeDefined();
+  });
+
+  it("should allow all topics for full-scope key", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "full" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["instance:def:logs", "*"] }));
+    const subMsg = ws.allMessages().find((m) => m.type === "subscribed");
+    expect(subMsg).toBeDefined();
+    expect(subMsg?.topics).toContain("*");
+  });
+
+  it("should allow all topics for read-only scope", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "read-only" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["instance:def:logs", "*"] }));
+    const subMsg = ws.allMessages().find((m) => m.type === "subscribed");
+    expect(subMsg).toBeDefined();
+    expect(subMsg?.topics).toContain("*");
+  });
+
+  it("should allow all topics when no scope (daemon bearer token)", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["instance:def:logs", "*"] }));
+    const subMsg = ws.allMessages().find((m) => m.type === "subscribed");
+    expect(subMsg).toBeDefined();
+    expect(subMsg?.topics).toContain("*");
+  });
+
+  it("should allow instance:abc base topic for instance:abc scoped key", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "instance:abc" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", topics: ["instance:abc"] }));
+    const subMsg = ws.allMessages().find((m) => m.type === "subscribed");
+    expect(subMsg).toBeDefined();
+    expect(subMsg?.topics).toContain("instance:abc");
+  });
+
+  it("should enforce scope on legacy session-based subscriptions", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "instance:abc" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", sessions: ["def"] }));
+    const msgs = ws.allMessages();
+    const errorMsg = msgs.find((m) => m.type === "error" && m.code === "SCOPE_DENIED");
+    expect(errorMsg).toBeDefined();
+  });
+
+  it("should enforce scope on legacy single session subscription", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "instance:abc" });
+    handleWebSocketMessage(ws, JSON.stringify({ type: "subscribe", session: "def" }));
+    const msgs = ws.allMessages();
+    const errorMsg = msgs.find((m) => m.type === "error" && m.code === "SCOPE_DENIED");
+    expect(errorMsg).toBeDefined();
+  });
+
+  it("should partially subscribe only allowed topics from a mixed list", () => {
+    const ws = createMockWs();
+    setupWebSocket(ws, { preAuthenticated: true, scope: "instance:abc" });
+    handleWebSocketMessage(ws, JSON.stringify({
+      type: "subscribe",
+      topics: ["instance:abc:logs", "instance:def:logs", "instance:abc:status"],
+    }));
+    const msgs = ws.allMessages();
+    const errorMsg = msgs.find((m) => m.type === "error" && m.code === "SCOPE_DENIED");
+    expect(errorMsg).toBeDefined();
+    expect(errorMsg?.rejected).toContain("instance:def:logs");
+    const subMsg = msgs.find((m) => m.type === "subscribed");
+    expect(subMsg).toBeDefined();
+    expect(subMsg?.topics).toContain("instance:abc:logs");
+    expect(subMsg?.topics).toContain("instance:abc:status");
+    expect(subMsg?.topics).not.toContain("instance:def:logs");
   });
 });

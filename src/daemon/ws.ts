@@ -55,6 +55,8 @@ interface ClientState {
   topics: Set<string>;
   /** Whether this client has authenticated (ticket-based auth) */
   authenticated: boolean;
+  /** API key scope — undefined means unrestricted (daemon bearer token) */
+  scope?: string;
   /** Messages sent since last heartbeat tick (for backpressure detection) */
   messagesSinceHeartbeat: number;
   /** Whether this client is experiencing backpressure */
@@ -62,6 +64,26 @@ interface ClientState {
   /** Last time we received a pong or message from this client */
   lastActivity: number;
 }
+
+/**
+ * Check whether a topic is allowed for the given API key scope.
+ * - undefined/full/read-only scope: all topics allowed
+ * - instance:<id> scope: only instance:<id> and instance:<id>:* topics allowed
+ */
+function isTopicAllowedForScope(topic: string, scope: string | undefined): boolean {
+  if (!scope || scope === "full" || scope === "read-only") return true;
+
+  if (scope.startsWith("instance:")) {
+    if (topic === scope) return true;
+    if (topic.startsWith(`${scope}:`)) return true;
+    return false;
+  }
+
+  return false;
+}
+
+/** @internal Exported for testing only */
+export { isTopicAllowedForScope as _isTopicAllowedForScope };
 
 /** Auth timeout: close unauthenticated connections after 2 seconds (WOP-1407) */
 const AUTH_TIMEOUT_MS = 2_000;
@@ -73,6 +95,8 @@ const authTimeouts = new Map<WS, ReturnType<typeof setTimeout>>();
 export interface SetupWebSocketOptions {
   /** When true, skip the auth timeout — the HTTP upgrade already validated the token */
   preAuthenticated?: boolean;
+  /** API key scope from auth middleware — undefined = unrestricted */
+  scope?: string;
 }
 
 /** Maximum messages per heartbeat interval before disconnecting as slow consumer */
@@ -98,6 +122,7 @@ export function setupWebSocket(ws: WS, options?: SetupWebSocketOptions): void {
     ws,
     topics: new Set(),
     authenticated: preAuth,
+    scope: options?.scope,
     messagesSinceHeartbeat: 0,
     backpressured: false,
     lastActivity: Date.now(),
@@ -189,28 +214,73 @@ function handleMessage(state: ClientState, msg: Record<string, unknown>): void {
         break;
       }
 
-      // Topic-based subscriptions (WOP-204)
+      // Topic-based subscriptions (WOP-204, scope enforcement WOP-1712)
       const topics = msg.topics as string[] | undefined;
       if (topics && Array.isArray(topics)) {
+        const allowed: string[] = [];
+        const rejected: string[] = [];
         for (const t of topics) {
           if (typeof t === "string" && t.length > 0) {
-            state.topics.add(t);
+            if (isTopicAllowedForScope(t, state.scope)) {
+              state.topics.add(t);
+              allowed.push(t);
+            } else {
+              rejected.push(t);
+            }
           }
         }
-        safeSend(state, { type: "subscribed", topics: Array.from(state.topics) });
+        if (rejected.length > 0) {
+          safeSend(state, {
+            type: "error",
+            message: `Topic subscription denied: scope "${state.scope}" does not permit: ${rejected.join(", ")}`,
+            code: "SCOPE_DENIED",
+            rejected,
+          });
+        }
+        if (allowed.length > 0) {
+          safeSend(state, { type: "subscribed", topics: Array.from(state.topics) });
+        }
         break;
       }
 
       // Legacy: session-based subscriptions (map to topic pattern)
       const sessions = msg.sessions as string[] | undefined;
       if (sessions && Array.isArray(sessions)) {
+        const allowed: string[] = [];
+        const rejected: string[] = [];
         for (const s of sessions) {
-          if (typeof s === "string") state.topics.add(s);
+          if (typeof s === "string") {
+            if (isTopicAllowedForScope(s, state.scope)) {
+              state.topics.add(s);
+              allowed.push(s);
+            } else {
+              rejected.push(s);
+            }
+          }
         }
-        safeSend(state, { type: "subscribed", sessions, topics: Array.from(state.topics) });
+        if (rejected.length > 0) {
+          safeSend(state, {
+            type: "error",
+            message: `Topic subscription denied: scope "${state.scope}" does not permit: ${rejected.join(", ")}`,
+            code: "SCOPE_DENIED",
+            rejected,
+          });
+        }
+        if (allowed.length > 0) {
+          safeSend(state, { type: "subscribed", sessions: allowed, topics: Array.from(state.topics) });
+        }
       } else if (typeof msg.session === "string") {
-        state.topics.add(msg.session);
-        safeSend(state, { type: "subscribed", sessions: [msg.session], topics: Array.from(state.topics) });
+        if (isTopicAllowedForScope(msg.session, state.scope)) {
+          state.topics.add(msg.session);
+          safeSend(state, { type: "subscribed", sessions: [msg.session], topics: Array.from(state.topics) });
+        } else {
+          safeSend(state, {
+            type: "error",
+            message: `Topic subscription denied: scope "${state.scope}" does not permit: ${msg.session}`,
+            code: "SCOPE_DENIED",
+            rejected: [msg.session],
+          });
+        }
       }
       break;
     }
