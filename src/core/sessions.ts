@@ -66,6 +66,40 @@ if (!existsSync(SESSIONS_DIR)) {
   mkdirSync(SESSIONS_DIR, { recursive: true });
 }
 
+// Helper to iterate an async iterable with an idle timeout per iteration
+export async function* withIdleTimeout<T>(
+  iter: AsyncIterable<T>,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): AsyncGenerator<T> {
+  const iterator = iter[Symbol.asyncIterator]();
+  while (true) {
+    if (signal?.aborted) {
+      throw new Error("Inject cancelled");
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error(`Idle timeout: no message received for ${timeoutMs / 1000}s`)),
+        timeoutMs,
+      );
+    });
+
+    try {
+      const result = await Promise.race([iterator.next(), timeoutPromise]);
+      if (result.done) break;
+      yield result.value;
+    } catch (e) {
+      // Try to clean up the iterator
+      iterator.return?.();
+      throw e;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 // ============================================================================
 // Session Queue - FIFO Promise Chain (no timeout-cancel!)
 // ============================================================================
@@ -490,34 +524,6 @@ async function executeInjectInternal(
 
     // Idle timeout - if no message received for 10 minutes, abort
     const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
-
-    // Helper to iterate with idle timeout
-    async function* withIdleTimeout<T>(
-      iter: AsyncIterable<T>,
-      timeoutMs: number,
-      signal?: AbortSignal,
-    ): AsyncGenerator<T> {
-      const iterator = iter[Symbol.asyncIterator]();
-      while (true) {
-        if (signal?.aborted) {
-          throw new Error("Inject cancelled");
-        }
-
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error(`Idle timeout: no message received for ${timeoutMs / 1000}s`)), timeoutMs);
-        });
-
-        try {
-          const result = await Promise.race([iterator.next(), timeoutPromise]);
-          if (result.done) break;
-          yield result.value;
-        } catch (e) {
-          // Try to clean up the iterator
-          iterator.return?.();
-          throw e;
-        }
-      }
-    }
 
     try {
       for await (const msgUnknown of withIdleTimeout(q, IDLE_TIMEOUT_MS, abortSignal)) {
