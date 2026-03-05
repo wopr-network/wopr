@@ -20,6 +20,9 @@ vi.mock("../../src/daemon/middleware/auth.js", () => ({
   requireAdmin: vi.fn(
     () => async (_c: any, next: () => Promise<void>) => next(),
   ),
+  requireWriteScope: vi.fn(
+    () => async (_c: any, next: () => Promise<void>) => next(),
+  ),
 }));
 
 // Mock logger
