@@ -103,5 +103,26 @@ describe("config routes authorization", () => {
       });
       expect(res.status).toBe(200);
     });
+
+    it("calls config.load() after config.reset() to restore env overrides", async () => {
+      const { config } = await import("../../../src/core/config.js");
+      vi.mocked(config.reset).mockClear();
+      vi.mocked(config.load).mockClear();
+
+      const callOrder: string[] = [];
+      vi.mocked(config.reset).mockImplementation(() => {
+        callOrder.push("reset");
+      });
+      vi.mocked(config.load).mockImplementation(async () => {
+        callOrder.push("load");
+      });
+
+      await app.request("/config", {
+        method: "DELETE",
+        headers: { "X-Test-Role": "admin" },
+      });
+
+      expect(callOrder).toEqual(["reset", "load"]);
+    });
   });
 });

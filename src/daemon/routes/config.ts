@@ -111,6 +111,7 @@ configRouter.delete(
   requireAdmin(),
   async (c) => {
     config.reset();
+    await config.load();
     await config.save();
     return c.json({ message: "Config reset to defaults" });
   },
