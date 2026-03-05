@@ -913,6 +913,14 @@ export interface WOPRPluginContext {
   // Logging
   log: PluginLogger;
 
+  // Security registration — plugins register their permissions, sources, and tool mappings
+  registerPermission(name: string): void;
+  registerInjectionSource(name: string, trustLevel: import("./security/types.js").TrustLevel): void;
+  registerToolPermission(toolName: string, permission: string): void;
+  unregisterPermission(name: string): void;
+  unregisterInjectionSource(name: string): void;
+  unregisterToolPermission(toolName: string): void;
+
   // Storage API - plugin-extensible database
   storage: StorageApi;
 

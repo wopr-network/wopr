@@ -92,6 +92,8 @@ export {
 } from "./policy.js";
 // Export redaction
 export { redactSensitive } from "./redact.js";
+// Export registry
+export { getSecurityRegistry, resetSecurityRegistry, SecurityRegistry } from "./registry.js";
 // Export sandbox functions
 export {
   buildSandboxImage,

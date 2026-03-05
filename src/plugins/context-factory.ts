@@ -29,6 +29,7 @@ import { cancelInject as cancelSessionInject, logMessage as logMessageToSession 
 import { resolveIdentity, resolveUserProfile } from "../core/workspace.js";
 import { logger } from "../logger.js";
 import type { AdapterCapability, ProviderOption } from "../plugin-types/manifest.js";
+import { getSecurityRegistry } from "../security/registry.js";
 import { getStorage } from "../storage/index.js";
 import type { ModelProvider } from "../types/provider.js";
 import type {
@@ -312,6 +313,31 @@ export function createPluginContext(
 
     unregisterSetupContextProvider(): void {
       setupContextProviders.delete(pluginName);
+    },
+
+    // Security registration
+    registerPermission(name: string) {
+      getSecurityRegistry().registerPermission(name, pluginName);
+    },
+
+    registerInjectionSource(name: string, trustLevel: import("../security/types.js").TrustLevel) {
+      getSecurityRegistry().registerInjectionSource(name, trustLevel, pluginName);
+    },
+
+    registerToolPermission(toolName: string, permission: string) {
+      getSecurityRegistry().registerToolCapability(toolName, permission, pluginName);
+    },
+
+    unregisterPermission(name: string) {
+      getSecurityRegistry().unregisterPermission(name, pluginName);
+    },
+
+    unregisterInjectionSource(name: string) {
+      getSecurityRegistry().unregisterInjectionSource(name, pluginName);
+    },
+
+    unregisterToolPermission(toolName: string) {
+      getSecurityRegistry().unregisterToolCapability(toolName, pluginName);
     },
 
     // Storage API - plugin-extensible database storage

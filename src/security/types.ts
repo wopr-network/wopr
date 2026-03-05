@@ -7,6 +7,8 @@
  * - Layer 3: Sandbox (Where) - Docker isolation
  */
 
+import { getSecurityRegistry } from "./registry.js";
+
 // ============================================================================
 // Trust Levels - Who is making the request
 // ============================================================================
@@ -45,23 +47,11 @@ export function meetsTrustLevel(actual: TrustLevel, required: TrustLevel): boole
 // ============================================================================
 
 /**
- * Granular capability permissions
+ * Granular capability permissions.
+ * Widened to `string` to support dynamic plugin-registered permissions.
+ * Core permissions are seeded in SecurityRegistry; plugins register additional ones at init.
  */
-export type Capability =
-  | "inject" // Send messages to sessions
-  | "inject.tools" // Use A2A tools when injecting
-  | "session.spawn" // Create new sessions
-  | "session.history" // Read own session history
-  | "cross.inject" // Inject into other sessions (gateway only)
-  | "cross.read" // Read other sessions' history (gateway only)
-  | "config.read" // Read configuration
-  | "config.write" // Modify configuration
-  | "memory.read" // Read memory files
-  | "memory.write" // Write memory files
-  | "cron.manage" // Create/delete cron jobs
-  | "event.emit" // Emit events
-  | "a2a.call" // Call A2A tools in general
-  | "*"; // Wildcard - all capabilities
+export type Capability = string;
 
 /**
  * Capability sets for common profiles
@@ -115,22 +105,7 @@ export function hasCapability(capabilities: Capability[], required: Capability):
  */
 export function expandCapabilities(capabilities: Capability[]): Capability[] {
   if (capabilities.includes("*")) {
-    return [
-      "inject",
-      "inject.tools",
-      "session.spawn",
-      "session.history",
-      "cross.inject",
-      "cross.read",
-      "config.read",
-      "config.write",
-      "memory.read",
-      "memory.write",
-      "cron.manage",
-      "event.emit",
-      "a2a.call",
-      "*",
-    ];
+    return [...new Set(getSecurityRegistry().getAllPermissions())];
   }
   return [...new Set(capabilities)];
 }
@@ -140,18 +115,11 @@ export function expandCapabilities(capabilities: Capability[]): Capability[] {
 // ============================================================================
 
 /**
- * Source type of an injection
+ * Source type of an injection.
+ * Widened to `string` to support dynamic plugin-registered sources.
+ * Core sources are seeded in SecurityRegistry; plugins register additional ones at init.
  */
-export type InjectionSourceType =
-  | "cli" // Local CLI command
-  | "daemon" // Daemon API call
-  | "p2p" // P2P peer
-  | "p2p.discovery" // P2P discovered peer (auto-connected)
-  | "plugin" // Plugin-initiated
-  | "cron" // Scheduled cron job
-  | "api" // HTTP API
-  | "gateway" // Forwarded from gateway session
-  | "internal"; // Internal system call
+export type InjectionSourceType = string;
 
 /**
  * Full injection source with metadata
@@ -195,19 +163,25 @@ export interface InjectionSource {
 }
 
 /**
- * Default trust levels by source type
+ * Default trust levels by source type.
+ * Delegates to SecurityRegistry so plugin-registered sources are included.
+ * @deprecated Use getSecurityRegistry().getDefaultTrust() instead
  */
-export const DEFAULT_TRUST_BY_SOURCE: Record<InjectionSourceType, TrustLevel> = {
-  cli: "owner",
-  daemon: "owner",
-  p2p: "untrusted", // P2P defaults to untrusted until granted
-  "p2p.discovery": "untrusted", // Discovered peers are always untrusted
-  plugin: "semi-trusted", // Plugins are semi-trusted by default; elevated permissions via manifest
-  cron: "owner", // Cron jobs run as owner
-  api: "semi-trusted", // API requires auth but limited scope
-  gateway: "semi-trusted", // Gateway forwarded requests
-  internal: "owner", // Internal calls are owner
-};
+export const DEFAULT_TRUST_BY_SOURCE: Record<string, TrustLevel> = new Proxy({} as Record<string, TrustLevel>, {
+  get(_target, prop: string) {
+    return getSecurityRegistry().getDefaultTrust(prop);
+  },
+  ownKeys() {
+    return [...getSecurityRegistry().getAllDefaultTrusts().keys()];
+  },
+  getOwnPropertyDescriptor(_target, prop: string) {
+    const val = getSecurityRegistry().getDefaultTrust(prop as string);
+    if (val !== undefined) {
+      return { configurable: true, enumerable: true, value: val };
+    }
+    return undefined;
+  },
+});
 
 /**
  * Create an injection source with defaults
@@ -218,7 +192,7 @@ export function createInjectionSource(
 ): InjectionSource {
   return {
     type,
-    trustLevel: DEFAULT_TRUST_BY_SOURCE[type],
+    trustLevel: getSecurityRegistry().getDefaultTrust(type) ?? "untrusted",
     timestamp: Date.now(),
     ...overrides,
   };
@@ -614,54 +588,21 @@ export interface SecurityEvent {
 // ============================================================================
 
 /**
- * Map A2A tools to required capabilities
+ * Map A2A tools to required capabilities.
+ * Delegates to SecurityRegistry so plugin-registered tools are included.
+ * @deprecated Use getSecurityRegistry().getToolCapability() instead
  */
-export const TOOL_CAPABILITY_MAP: Record<string, Capability> = {
-  // Session tools
-  sessions_list: "session.history",
-  sessions_send: "cross.inject",
-  sessions_history: "session.history",
-  sessions_spawn: "session.spawn",
-
-  // Config tools
-  config_get: "config.read",
-  config_set: "config.write",
-  config_provider_defaults: "config.write",
-
-  // Memory tools
-  memory_read: "memory.read",
-  memory_write: "memory.write",
-  memory_search: "memory.read",
-  memory_get: "memory.read",
-  self_reflect: "memory.write",
-  identity_get: "memory.read",
-  identity_update: "memory.write",
-
-  // Cron tools
-  cron_schedule: "cron.manage",
-  cron_once: "cron.manage",
-  cron_list: "cron.manage",
-  cron_cancel: "cron.manage",
-
-  // Event tools
-  event_emit: "event.emit",
-  event_list: "event.emit",
-
-  // Plugin-provided tools that require capability gating
-  // These were extracted from core but still need security enforcement
-  http_fetch: "inject",
-  exec_command: "inject",
-
-  // Security introspection tools (always allowed - just show your own permissions)
-  security_whoami: "inject",
-  security_check: "inject",
-};
+export const TOOL_CAPABILITY_MAP: Record<string, Capability> = new Proxy({} as Record<string, Capability>, {
+  get(_target, prop: string) {
+    return getSecurityRegistry().getToolCapability(prop);
+  },
+});
 
 /**
  * Get required capability for a tool
  */
 export function getToolCapability(toolName: string): Capability | undefined {
-  return TOOL_CAPABILITY_MAP[toolName];
+  return getSecurityRegistry().getToolCapability(toolName);
 }
 
 // ============================================================================
