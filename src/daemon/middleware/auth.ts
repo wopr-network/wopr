@@ -141,6 +141,8 @@ export function bearerAuth(): MiddlewareHandler {
       return c.json({ error: "Internal server error" }, 500);
     }
 
+    // Daemon bearer tokens are effectively admin (WOP-1710)
+    c.set("role", "admin");
     return next();
   };
 }

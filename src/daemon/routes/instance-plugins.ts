@@ -29,6 +29,7 @@ import {
   unloadPlugin,
 } from "../../plugins.js";
 import type { ConfigSchema } from "../../types.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 // ============================================================================
 // Zod Schemas
@@ -186,6 +187,7 @@ instancePluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   async (c) => {
     const parsed = installBodySchema.safeParse(await c.req.json());
     if (!parsed.success) {
@@ -254,6 +256,7 @@ instancePluginsRouter.delete(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   async (c) => {
     const name = c.req.param("name");
     const nameErr = validatePluginName(name);
@@ -286,6 +289,7 @@ instancePluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   async (c) => {
     const name = c.req.param("name");
     const nameErr = validatePluginName(name);
@@ -325,6 +329,7 @@ instancePluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   async (c) => {
     const name = c.req.param("name");
     const nameErr = validatePluginName(name);
@@ -396,6 +401,7 @@ instancePluginsRouter.put(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   async (c) => {
     const name = c.req.param("name");
 
