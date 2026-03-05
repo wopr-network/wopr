@@ -299,41 +299,44 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   // WebSocket handler factory (shared by /ws and /api/ws)
   // bearerAuth() middleware has already validated the token during the HTTP upgrade
   // request, so all connections reaching here are pre-authenticated (WOP-1407)
-  const wsHandler = upgradeWebSocket(() => ({
-    onOpen(_event, ws) {
-      setupWebSocket(ws as unknown as { send(data: string): void }, { preAuthenticated: true });
-    },
-    onMessage(event, ws) {
-      const data = event.data;
-      if (data == null) return;
-      let message: string;
-      if (typeof data === "string") {
-        message = data;
-      } else if (Buffer.isBuffer(data)) {
-        message = data.toString("utf-8");
-      } else if (data instanceof ArrayBuffer) {
-        message = Buffer.from(data).toString("utf-8");
-      } else if (Array.isArray(data)) {
-        message = Buffer.concat(data).toString("utf-8");
-      } else {
-        message = String(data);
-      }
-      try {
-        handleWebSocketMessage(ws as unknown as { send(data: string): void }, message);
-      } catch (err) {
-        winstonLogger.error(
-          `[daemon] WebSocket message handler error: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    },
-    onClose(_event, ws) {
-      handleWebSocketClose(ws as unknown as { send(data: string): void });
-    },
-  }));
+  // Scope is threaded from the auth middleware for topic subscription enforcement (WOP-1712)
+  const createWsHandler = () =>
+    upgradeWebSocket((c) => ({
+      onOpen(_event, ws) {
+        const scope = c.get("apiKeyScope") as string | undefined;
+        setupWebSocket(ws as unknown as { send(data: string): void }, { preAuthenticated: true, scope });
+      },
+      onMessage(event, ws) {
+        const data = event.data;
+        if (data == null) return;
+        let message: string;
+        if (typeof data === "string") {
+          message = data;
+        } else if (Buffer.isBuffer(data)) {
+          message = data.toString("utf-8");
+        } else if (data instanceof ArrayBuffer) {
+          message = Buffer.from(data).toString("utf-8");
+        } else if (Array.isArray(data)) {
+          message = Buffer.concat(data).toString("utf-8");
+        } else {
+          message = String(data);
+        }
+        try {
+          handleWebSocketMessage(ws as unknown as { send(data: string): void }, message);
+        } catch (err) {
+          winstonLogger.error(
+            `[daemon] WebSocket message handler error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      },
+      onClose(_event, ws) {
+        handleWebSocketClose(ws as unknown as { send(data: string): void });
+      },
+    }));
 
   // WebSocket endpoints (WOP-204: /api/ws is the canonical path; /ws kept for backward compat)
-  app.get("/ws", wsHandler);
-  app.get("/api/ws", wsHandler);
+  app.get("/ws", createWsHandler());
+  app.get("/api/ws", createWsHandler());
 
   // Create injectors for plugins
   const injectors = {
