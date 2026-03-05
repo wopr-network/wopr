@@ -503,15 +503,21 @@ async function executeInjectInternal(
           throw new Error("Inject cancelled");
         }
 
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error(`Idle timeout: no message received for ${timeoutMs / 1000}s`)), timeoutMs);
+          timeoutId = setTimeout(
+            () => reject(new Error(`Idle timeout: no message received for ${timeoutMs / 1000}s`)),
+            timeoutMs,
+          );
         });
 
         try {
           const result = await Promise.race([iterator.next(), timeoutPromise]);
+          clearTimeout(timeoutId);
           if (result.done) break;
           yield result.value;
         } catch (e) {
+          clearTimeout(timeoutId);
           // Try to clean up the iterator
           iterator.return?.();
           throw e;
