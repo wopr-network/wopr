@@ -8,7 +8,7 @@ import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
 import { z } from "zod";
 import { logger } from "../../logger.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireWriteScope } from "../middleware/auth.js";
 import { restartOnIdleManager } from "../restart-on-idle.js";
 
 const RestartRequestSchema = z.object({
@@ -37,6 +37,7 @@ restartRouter.post(
     },
   }),
   requireAuth(),
+  requireWriteScope(),
   async (c) => {
     try {
       const body = await c.req.json().catch(() => ({}));
@@ -117,6 +118,7 @@ restartRouter.delete(
     },
   }),
   requireAuth(),
+  requireWriteScope(),
   (c) => {
     restartOnIdleManager.cancel();
     logger.info("[restart-api] Restart cancelled via API");

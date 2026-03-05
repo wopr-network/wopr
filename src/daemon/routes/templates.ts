@@ -10,6 +10,7 @@
 
 import { Hono } from "hono";
 import { describeRoute } from "hono-openapi";
+import { requireWriteScope } from "../middleware/auth.js";
 import {
   applyTemplate,
   createCustomTemplate,
@@ -87,6 +88,7 @@ templatesRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     let body: unknown;
     try {
@@ -148,6 +150,7 @@ templatesRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const name = c.req.param("name");
     let body: Record<string, unknown>;
@@ -186,6 +189,7 @@ templatesRouter.delete(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   (c) => {
     const name = c.req.param("name");
 

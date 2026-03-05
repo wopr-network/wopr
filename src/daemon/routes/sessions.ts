@@ -16,6 +16,7 @@ import {
   setSessionContext,
 } from "../../core/sessions.js";
 import { createInjectionSource } from "../../security/index.js";
+import { requireWriteScope } from "../middleware/auth.js";
 import { validateSessionName } from "../validation.js";
 import { broadcastInjection, broadcastStream } from "../ws.js";
 
@@ -117,6 +118,7 @@ sessionsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const body = await c.req.json();
     const { name, context } = body;
@@ -153,6 +155,7 @@ sessionsRouter.put(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const name = c.req.param("name");
     validateSessionName(name);
@@ -184,6 +187,7 @@ sessionsRouter.delete(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const name = c.req.param("name");
     validateSessionName(name);
@@ -206,15 +210,10 @@ sessionsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const name = c.req.param("name");
     validateSessionName(name);
-
-    // WOP-1422: Enforce API key scope — read-only keys cannot inject
-    const apiKeyScope = c.get("apiKeyScope") as string | undefined;
-    if (apiKeyScope === "read-only") {
-      return c.json({ error: "Forbidden: insufficient scope for inject" }, 403);
-    }
 
     const body = await c.req.json();
     const { message, from = "api" } = body;
@@ -222,6 +221,8 @@ sessionsRouter.post(
     if (!message) {
       return c.json({ error: "Message is required" }, 400);
     }
+
+    const apiKeyScope = c.get("apiKeyScope") as string | undefined;
 
     // Check if client wants streaming
     const acceptSSE = c.req.header("Accept")?.includes("text/event-stream");
@@ -305,6 +306,7 @@ sessionsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const name = c.req.param("name");
     validateSessionName(name);
@@ -338,6 +340,7 @@ sessionsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     const name = c.req.param("name");
     validateSessionName(name);

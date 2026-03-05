@@ -15,6 +15,7 @@ import { providerRegistry } from "../../core/providers.js";
 import { deleteSession, inject, setSessionContext, setSessionProvider } from "../../core/sessions.js";
 import { createInjectionSource } from "../../security/index.js";
 import type { ProviderConfig } from "../../types/provider.js";
+import { requireWriteScope } from "../middleware/auth.js";
 import { type RoutableProvider, type RoutingStrategy, selectProvider } from "./openai-routing.js";
 
 type AuthEnv = {
@@ -226,6 +227,7 @@ openaiRouter.post(
       500: { description: "Provider error" },
     },
   }),
+  requireWriteScope(),
   async (c) => {
     let body: ChatCompletionRequest;
     try {
@@ -288,6 +290,7 @@ openaiRouter.post(
       );
     }
 
+    const apiKeyScope = c.get("apiKeyScope") as string | undefined;
     const sessionName = makeSessionName();
     const { systemPrompt, userPrompt } = buildPrompts(validation.messages);
     const requestId = `chatcmpl-${randomUUID().replace(/-/g, "").slice(0, 24)}`;
@@ -298,22 +301,6 @@ openaiRouter.post(
       await setSessionContext(sessionName, systemPrompt);
     }
     await setSessionProvider(sessionName, providerConfig);
-
-    // WOP-1422: Enforce API key scope — read-only keys cannot inject
-    const apiKeyScope = c.get("apiKeyScope") as string | undefined;
-    if (apiKeyScope === "read-only") {
-      await deleteSession(sessionName, "scope-rejected").catch(() => {});
-      return c.json(
-        {
-          error: {
-            message: "Forbidden: insufficient scope for inject",
-            type: "invalid_request_error",
-            code: "insufficient_scope",
-          },
-        },
-        403,
-      );
-    }
 
     if (body.stream) {
       // ---- Streaming response (SSE) ----
