@@ -28,6 +28,7 @@ import {
   unloadPlugin,
 } from "../../plugins.js";
 import type { InstalledPlugin, PluginInjectOptions } from "../../types.js";
+import { requireAdmin } from "../middleware/auth.js";
 import { getClientIp, parseTrustedProxies } from "../middleware/client-ip.js";
 
 // ============================================================================
@@ -145,6 +146,7 @@ capabilitiesRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   mutateRateLimit,
   async (c) => {
     const parsed = ActivateSchema.safeParse(await c.req.json());
@@ -276,6 +278,7 @@ capabilitiesRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   mutateRateLimit,
   async (c) => {
     const parsed = DeactivateSchema.safeParse(await c.req.json());

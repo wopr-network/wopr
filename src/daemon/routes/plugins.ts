@@ -35,6 +35,7 @@ import {
   unloadPlugin,
 } from "../../plugins.js";
 import type { ConfigSchema } from "../../types.js";
+import { requireAdmin } from "../middleware/auth.js";
 import { getClientIp, parseTrustedProxies } from "../middleware/client-ip.js";
 
 // ============================================================================
@@ -348,6 +349,7 @@ pluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   installRateLimit,
   handleInstall,
 );
@@ -364,6 +366,7 @@ pluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   installRateLimit,
   handleInstall,
 );
@@ -381,6 +384,7 @@ pluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   installRateLimit,
   async (c) => {
     const body = await c.req.json();
@@ -427,6 +431,7 @@ pluginsRouter.delete(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   installRateLimit,
   async (c) => {
     const name = c.req.param("name") as string;
@@ -476,6 +481,7 @@ pluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   mutateRateLimit,
   async (c) => {
     const name = c.req.param("name") as string;
@@ -530,6 +536,7 @@ pluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   mutateRateLimit,
   async (c) => {
     const name = c.req.param("name") as string;
@@ -579,6 +586,7 @@ pluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   mutateRateLimit,
   async (c) => {
     const name = c.req.param("name") as string;
@@ -702,6 +710,7 @@ pluginsRouter.put(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   mutateRateLimit,
   async (c) => {
     const name = c.req.param("name") as string;
@@ -848,6 +857,7 @@ pluginsRouter.post(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   async (c) => {
     const body = await c.req.json();
     const { name, url } = body;
@@ -872,6 +882,7 @@ pluginsRouter.delete(
       401: { description: "Unauthorized" },
     },
   }),
+  requireAdmin(),
   async (c) => {
     const name = c.req.param("name") as string;
     const registries = await listRegistries();

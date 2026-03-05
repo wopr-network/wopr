@@ -117,6 +117,12 @@ vi.mock("hono-rate-limiter", () => ({
   rateLimiter: () => async (_c: unknown, next: () => Promise<void>) => next(),
 }));
 
+// middleware/auth.js — make requireAdmin a passthrough by default
+const mockRequireAdminHandler = vi.fn(async (_c: unknown, next: () => Promise<void>) => next());
+vi.mock("../../../src/daemon/middleware/auth.js", () => ({
+  requireAdmin: () => mockRequireAdminHandler,
+}));
+
 // dependency-check — real implementation is simple enough; mock for route isolation
 const mockCheckPluginDependencies = vi.fn();
 vi.mock("../../../src/plugins/dependency-check.js", () => ({
@@ -983,4 +989,67 @@ describe("GET /:name/check-deps (WOP-1461)", () => {
     const json = await res.json();
     expect(json.ok).toBe(true);
   });
+});
+
+// ── Admin authorization tests (WOP-1710) ─────────────────────────────────
+describe("admin authorization (WOP-1710)", () => {
+  const mutatingRoutes = [
+    { method: "POST", path: "/", body: { source: "test-plugin" } },
+    { method: "POST", path: "/install", body: { source: "test-plugin" } },
+    { method: "POST", path: "/uninstall", body: { name: "test-plugin" } },
+    { method: "DELETE", path: "/test-plugin" },
+    { method: "POST", path: "/test-plugin/enable" },
+    { method: "POST", path: "/test-plugin/disable" },
+    { method: "POST", path: "/test-plugin/reload" },
+    { method: "PUT", path: "/test-plugin/config", body: { config: {} } },
+    { method: "POST", path: "/registries", body: { name: "r", url: "http://example.com" } },
+    { method: "DELETE", path: "/registries/test" },
+  ];
+
+  for (const route of mutatingRoutes) {
+    it(`calls requireAdmin() for ${route.method} ${route.path}`, async () => {
+      // Configure the mock to reject with 403
+      mockRequireAdminHandler.mockImplementationOnce(async (c: any) => {
+        return c.json({ error: "Forbidden: admin access required" }, 403);
+      });
+
+      const res = await req(route.method, route.path, route.body);
+      expect(res.status).toBe(403);
+      const json = await res.json();
+      expect(json.error).toContain("admin");
+    });
+  }
+
+  const readOnlyRoutes = [
+    { method: "GET", path: "/" },
+    { method: "GET", path: "/available" },
+    { method: "GET", path: "/ui" },
+    { method: "GET", path: "/components" },
+    { method: "GET", path: "/search?q=test" },
+    { method: "GET", path: "/registries" },
+    { method: "GET", path: "/test-plugin/state" },
+    { method: "GET", path: "/test-plugin/health" },
+  ];
+
+  for (const route of readOnlyRoutes) {
+    it(`does NOT require admin for ${route.method} ${route.path}`, async () => {
+      // Reset to passthrough
+      mockRequireAdminHandler.mockImplementation(async (_c: unknown, next: () => Promise<void>) => next());
+
+      // Set up minimal mocks so the routes don't error
+      mockListPlugins.mockResolvedValue([SAMPLE_PLUGIN]);
+      mockGetAllPluginManifests.mockReturnValue(new Map());
+      mockSearchPlugins.mockResolvedValue([]);
+      mockGetWebUiExtensions.mockReturnValue([]);
+      mockGetUiComponents.mockReturnValue([]);
+      mockListRegistries.mockResolvedValue([]);
+      mockGetPluginState.mockReturnValue("loaded");
+      mockGetLoadedPlugin.mockReturnValue({});
+      mockReadPluginManifest.mockReturnValue(null);
+
+      const res = await req(route.method, route.path);
+      // Should NOT be 403
+      expect(res.status).not.toBe(403);
+    });
+  }
 });
