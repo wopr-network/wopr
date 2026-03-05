@@ -1,46 +1,16 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { withIdleTimeout } from "../../src/core/sessions.js";
 
 describe("withIdleTimeout timer cleanup", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
+  beforeEach(() => {
+    vi.useFakeTimers();
   });
 
-  // Replicate withIdleTimeout to validate the fixed pattern clears timers
-  async function* withIdleTimeout<T>(
-    iter: AsyncIterable<T>,
-    timeoutMs: number,
-    signal?: AbortSignal,
-  ): AsyncGenerator<T> {
-    const iterator = iter[Symbol.asyncIterator]();
-    while (true) {
-      if (signal?.aborted) {
-        throw new Error("Inject cancelled");
-      }
-
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error(`Idle timeout: no message received for ${timeoutMs / 1000}s`)),
-          timeoutMs,
-        );
-      });
-
-      try {
-        const result = await Promise.race([iterator.next(), timeoutPromise]);
-        clearTimeout(timeoutId);
-        if (result.done) break;
-        yield result.value;
-      } catch (e) {
-        clearTimeout(timeoutId);
-        iterator.return?.();
-        throw e;
-      }
-    }
-  }
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("should clear setTimeout after each successful iteration", async () => {
-    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
-
     async function* threeValues() {
       yield 1;
       yield 2;
@@ -53,13 +23,10 @@ describe("withIdleTimeout timer cleanup", () => {
     }
 
     expect(results).toEqual([1, 2, 3]);
-    // 4 calls: 3 iterations + 1 for the final done=true iteration
-    expect(clearTimeoutSpy).toHaveBeenCalledTimes(4);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("should clear timeout on error path", async () => {
-    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
-
     async function* errorAfterOne() {
       yield 1;
       throw new Error("stream error");
@@ -73,7 +40,6 @@ describe("withIdleTimeout timer cleanup", () => {
     }).rejects.toThrow("stream error");
 
     expect(results).toEqual([1]);
-    // 2 calls: 1 successful iteration + 1 in catch block
-    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
