@@ -21,17 +21,6 @@ Usage:
   wopr session set-provider <name> <id> [--model name] [--fallback chain]  Update session provider
   wopr session init-docs <name>          Initialize SOUL.md, AGENTS.md, USER.md for session
 
-  wopr skill list                        List installed skills           (requires wopr-plugin-skills)
-  wopr skill install <url|slug> [name]   Install skill from URL or registry (requires wopr-plugin-skills)
-  wopr skill create <name> [desc]        Create a new skill               (requires wopr-plugin-skills)
-  wopr skill remove <name>               Remove a skill                   (requires wopr-plugin-skills)
-  wopr skill search <query>              Search registries for skills     (requires wopr-plugin-skills)
-  wopr skill cache clear                 Clear registry cache             (requires wopr-plugin-skills)
-
-  wopr skill registry list               List configured registries       (requires wopr-plugin-skills)
-  wopr skill registry add <name> <url>   Add a skill registry             (requires wopr-plugin-skills)
-  wopr skill registry remove <name>      Remove a registry                (requires wopr-plugin-skills)
-
   wopr config get [key]                      Show config (all or specific key)
   wopr config set <key> <value>              Set config value (e.g., daemon.port)
   wopr config reset                          Reset to defaults

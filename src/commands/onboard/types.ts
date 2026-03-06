@@ -28,7 +28,6 @@ export interface OnboardConfig {
     ollamaBaseUrl?: string;
   };
   channels?: string[];
-  skills?: string[];
   plugins?: string[];
   voicePlugins?: string[];
   external?: {
@@ -57,7 +56,6 @@ export interface OnboardOptions {
   skipChannels?: boolean;
   skipExternal?: boolean;
   skipGithub?: boolean;
-  skipSkills?: boolean;
   skipPlugins?: boolean;
   skipDaemon?: boolean;
   skipUi?: boolean;
@@ -120,14 +118,6 @@ export const AVAILABLE_CHANNELS = [
     npm: "wopr-plugin-imessage",
   },
   { id: "p2p", name: "P2P Network", description: "Peer-to-peer messaging via Hyperswarm", npm: "wopr-plugin-p2p" },
-] as const;
-
-// Available skills (from our skills system)
-export const AVAILABLE_SKILLS = [
-  { id: "web-search", name: "Web Search", description: "Search the web (requires wopr-plugin-websearch)" },
-  { id: "file-ops", name: "File Operations", description: "Read/write files in workspace" },
-  { id: "shell", name: "Shell Commands", description: "Execute shell commands" },
-  { id: "memory", name: "Memory", description: "Persistent memory and recall" },
 ] as const;
 
 // Available plugins

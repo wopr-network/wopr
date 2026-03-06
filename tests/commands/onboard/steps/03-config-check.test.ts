@@ -70,7 +70,6 @@ describe("03-config-check step", () => {
       workspace: "/home/test/.wopr/workspace",
       gateway: { port: 3000 },
       channels: ["discord"],
-      skills: [],
       plugins: [],
     });
     selectMock.mockResolvedValue("keep");
@@ -93,7 +92,6 @@ describe("03-config-check step", () => {
       provider: { primary: "anthropic" },
       gateway: { port: 3000 },
       channels: ["discord"],
-      skills: [],
       plugins: [],
     });
   });
@@ -121,7 +119,6 @@ describe("03-config-check step", () => {
       provider: undefined,
       gateway: undefined,
       channels: [],
-      skills: [],
       plugins: [],
     });
   });
@@ -148,7 +145,6 @@ describe("03-config-check step", () => {
       provider: { primary: "openai" },
       gateway: undefined,
       channels: [],
-      skills: [],
       plugins: [],
     });
   });

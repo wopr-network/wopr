@@ -58,9 +58,6 @@ export const finalizeStep: OnboardStep = async (ctx: OnboardContext) => {
       finalConfig.channels?.length
         ? `${pc.green("✓")} Channels: ${finalConfig.channels.join(", ")}`
         : pc.dim("○ Channels: None"),
-      finalConfig.skills?.length
-        ? `${pc.green("✓")} Skills: ${finalConfig.skills.join(", ")}`
-        : pc.dim("○ Skills: None"),
       `${pc.green("✓")} Gateway configured`,
       "",
       `Web UI: ${webUiUrl}`,

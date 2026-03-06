@@ -18,7 +18,6 @@ export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
     currentConfig.workspace ||
     currentConfig.gateway?.port ||
     (currentConfig.channels && currentConfig.channels.length > 0) ||
-    (currentConfig.skills && currentConfig.skills.length > 0) ||
     (currentConfig.plugins && currentConfig.plugins.length > 0);
 
   if (!hasExisting) {
@@ -57,7 +56,6 @@ export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
       provider: undefined,
       gateway: undefined,
       channels: [],
-      skills: [],
       plugins: [],
     };
   }
@@ -69,7 +67,6 @@ export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
       provider: currentConfig.provider,
       gateway: currentConfig.gateway,
       channels: currentConfig.channels || [],
-      skills: currentConfig.skills || [],
       plugins: currentConfig.plugins || [],
     };
   }
@@ -80,7 +77,6 @@ export const configCheckStep: OnboardStep = async (ctx: OnboardContext) => {
     provider: currentConfig.provider,
     gateway: currentConfig.gateway,
     channels: currentConfig.channels || [],
-    skills: currentConfig.skills || [],
     plugins: currentConfig.plugins || [],
   };
 };

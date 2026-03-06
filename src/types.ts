@@ -207,13 +207,6 @@ export interface ReplayState {
 }
 
 // Registry types
-export interface SkillPointer {
-  name: string;
-  description: string;
-  source: string;
-  version?: string;
-}
-
 export interface Registry {
   name: string;
   url: string;

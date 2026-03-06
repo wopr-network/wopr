@@ -15,7 +15,6 @@ export const welcomeStep: OnboardStep = async (_ctx: OnboardContext) => {
       "  • Configure your AI model provider",
       "  • Set up workspace (AGENTS.md, SOUL.md, etc.)",
       "  • Install channel plugins (Discord, P2P)",
-      "  • Install useful skills",
       "  • Configure the gateway daemon",
       "",
       pc.dim("You can re-run this anytime with: wopr onboard"),

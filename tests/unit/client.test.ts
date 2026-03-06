@@ -433,54 +433,6 @@ describe("WoprClient", () => {
     });
   });
 
-  // --- Skills ---
-  describe("skills", () => {
-    it("getSkills() should return skills array", async () => {
-      vi.stubGlobal("fetch", mockFetchResponse({ skills: [{ name: "s1" }] }));
-      expect(await client.getSkills()).toEqual([{ name: "s1" }]);
-    });
-
-    it("installSkill() should POST source and name", async () => {
-      const fetchMock = mockFetchResponse({});
-      vi.stubGlobal("fetch", fetchMock);
-      await client.installSkill("http://example.com/skill", "mySkill");
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-        source: "http://example.com/skill",
-        name: "mySkill",
-      });
-    });
-
-    it("removeSkill() should DELETE", async () => {
-      const fetchMock = mockFetchResponse({});
-      vi.stubGlobal("fetch", fetchMock);
-      await client.removeSkill("s");
-      expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
-    });
-
-    it("createSkill() should POST name and description", async () => {
-      const fetchMock = mockFetchResponse({});
-      vi.stubGlobal("fetch", fetchMock);
-      await client.createSkill("newSkill", "A skill");
-      expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:9999/skills/create");
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ name: "newSkill", description: "A skill" });
-    });
-
-    it("searchSkills() should GET with encoded query", async () => {
-      const fetchMock = mockFetchResponse({ results: [] });
-      vi.stubGlobal("fetch", fetchMock);
-      await client.searchSkills("test");
-      expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:9999/skills/search?q=test");
-    });
-
-    it("clearSkillCache() should DELETE /skills/cache", async () => {
-      const fetchMock = mockFetchResponse({});
-      vi.stubGlobal("fetch", fetchMock);
-      await client.clearSkillCache();
-      expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:9999/skills/cache");
-      expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
-    });
-  });
-
   // --- Config ---
   describe("config", () => {
     it("getConfig() should return config object", async () => {
@@ -786,25 +738,4 @@ describe("WoprClient", () => {
     });
   });
 
-  // --- Skill Registries ---
-  describe("skill registries", () => {
-    it("getSkillRegistries() should return registries", async () => {
-      vi.stubGlobal("fetch", mockFetchResponse({ registries: [{ name: "r", url: "http://r" }] }));
-      expect(await client.getSkillRegistries()).toEqual([{ name: "r", url: "http://r" }]);
-    });
-
-    it("addSkillRegistry() should POST", async () => {
-      const fetchMock = mockFetchResponse({});
-      vi.stubGlobal("fetch", fetchMock);
-      await client.addSkillRegistry("r", "http://r");
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ name: "r", url: "http://r" });
-    });
-
-    it("removeSkillRegistry() should DELETE", async () => {
-      const fetchMock = mockFetchResponse({});
-      vi.stubGlobal("fetch", fetchMock);
-      await client.removeSkillRegistry("r");
-      expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
-    });
-  });
 }); // end WoprClient describe
