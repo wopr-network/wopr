@@ -169,7 +169,7 @@ describe("Security Context Module", () => {
 
       expect(ctx.hasCapability("config.write")).toBe(false);
       expect(ctx.hasCapability("session.spawn")).toBe(false);
-      expect(ctx.hasCapability("memory.write")).toBe(false);
+      expect(ctx.hasCapability("cron.manage")).toBe(false);
     });
 
     it("should record capability check events", () => {

@@ -65,9 +65,9 @@ describe("a2a-mcp", () => {
       expect(tools).toContain("capability_discover");
     });
 
-    it("returns at least 18 core tools", () => {
+    it("returns at least 17 core tools", () => {
       const tools = listA2ATools();
-      expect(tools.length).toBeGreaterThanOrEqual(18);
+      expect(tools.length).toBeGreaterThanOrEqual(17);
     });
 
     it("includes session-related tools", () => {

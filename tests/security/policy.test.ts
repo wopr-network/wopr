@@ -1101,12 +1101,12 @@ describe("Security Policy Module", () => {
       const configWrite = checkCapability(source, "config.write");
       const crossInject = checkCapability(source, "cross.inject");
       const sessionSpawn = checkCapability(source, "session.spawn");
-      const memoryWrite = checkCapability(source, "memory.write");
+      const cronManage = checkCapability(source, "cron.manage");
 
       expect(configWrite.allowed).toBe(false);
       expect(crossInject.allowed).toBe(false);
       expect(sessionSpawn.allowed).toBe(false);
-      expect(memoryWrite.allowed).toBe(false);
+      expect(cronManage.allowed).toBe(false);
 
       // Note: inject.tools IS allowed because "inject" parent grants inject.*
       // This is by design - the parent capability model means "inject" grants all inject sub-caps
