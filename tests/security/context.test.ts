@@ -47,7 +47,11 @@ const {
   DEFAULT_SECURITY_CONFIG,
 } = await import("../../src/security/types.js");
 
+const { getSecurityRegistry, resetSecurityRegistry } = await import("../../src/security/registry.js");
+
 import type { SecurityConfig } from "../../src/security/types.js";
+
+import { registerHttpAndExec } from "./helpers.js";
 
 // ============================================================================
 // Helpers
@@ -73,14 +77,17 @@ describe("Security Context Module", () => {
     if (!existsSync(testDir)) {
       mkdirSync(testDir, { recursive: true });
     }
+    resetSecurityRegistry();
     resetStorage();
     getStorage(":memory:");
     await initSecurity(testDir);
+    registerHttpAndExec();
   });
 
   afterEach(() => {
     resetSecurityStore();
     resetSessionStorageInit();
+    resetSecurityRegistry();
     resetStorage();
     vi.restoreAllMocks();
   });

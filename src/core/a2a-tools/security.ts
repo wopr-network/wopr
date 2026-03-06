@@ -75,24 +75,9 @@ export function createSecurityTools(sessionName: string): unknown[] {
       {
         tool: z.string().optional().describe("Tool name to check (e.g., 'tts_synthesize', 'image_generate')"),
         capability: z
-          .enum([
-            "inject",
-            "inject.tools",
-            "session.spawn",
-            "session.history",
-            "cross.inject",
-            "cross.read",
-            "config.read",
-            "config.write",
-            "memory.read",
-            "memory.write",
-            "cron.manage",
-            "event.emit",
-            "a2a.call",
-            "*",
-          ])
+          .string()
           .optional()
-          .describe("Capability to check (e.g., 'inject', 'cross.inject')"),
+          .describe("Capability to check (e.g., 'inject', 'cross.inject', 'inject.network')"),
       },
       async (args: { tool?: string; capability?: Capability }) => {
         const { tool: toolName, capability } = args;

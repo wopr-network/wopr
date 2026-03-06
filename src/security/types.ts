@@ -89,10 +89,12 @@ export function hasCapability(capabilities: Capability[], required: Capability):
   }
 
   // Check parent capabilities (e.g., "inject" grants "inject.tools")
+  // Only if the required capability is a registered permission — unregistered
+  // sub-capabilities cannot be granted via hierarchy alone.
   const parts = required.split(".");
   if (parts.length > 1) {
     const parent = parts[0] as Capability;
-    if (capabilities.includes(parent)) {
+    if (capabilities.includes(parent) && getSecurityRegistry().hasPermission(required)) {
       return true;
     }
   }

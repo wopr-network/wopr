@@ -12,8 +12,6 @@ const PERMISSION_RE = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)*$/;
 const CORE_PERMISSIONS = new Set([
   "inject",
   "inject.tools",
-  "inject.network",
-  "inject.exec",
   "session.spawn",
   "session.history",
   "cross.inject",
@@ -65,8 +63,6 @@ const CORE_TOOL_CAPS = new Map<string, string>([
   ["event_list", "event.emit"],
   ["security_whoami", "inject"],
   ["security_check", "inject"],
-  ["http_fetch", "inject.network"],
-  ["exec_command", "inject.exec"],
 ]);
 
 interface PluginRegistration<T> {

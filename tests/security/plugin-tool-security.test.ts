@@ -33,6 +33,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 
 const { getStorage, resetStorage } = await import("../../src/storage/index.js");
 const { initSecurity, saveSecurityConfig } = await import("../../src/security/policy.js");
+const { getSecurityRegistry, resetSecurityRegistry } = await import("../../src/security/registry.js");
 const { storeContext, clearContext, SecurityContext } = await import("../../src/security/context.js");
 const { createInjectionSource, DEFAULT_SECURITY_CONFIG } = await import("../../src/security/types.js");
 const { registerA2ATool, unregisterA2ATool, pluginTools, markDirty } = await import(
@@ -57,9 +58,16 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     if (!existsSync(testDir)) {
       mkdirSync(testDir, { recursive: true });
     }
+    resetSecurityRegistry();
     resetStorage();
     getStorage(":memory:");
     await initSecurity(testDir);
+    // Register http_fetch/exec_command as plugin-provided tools (no longer in core)
+    const reg = getSecurityRegistry();
+    reg.registerPermission("inject.network", "__test__");
+    reg.registerPermission("inject.exec", "__test__");
+    reg.registerToolCapability("http_fetch", "inject.network", "__test__");
+    reg.registerToolCapability("exec_command", "inject.exec", "__test__");
     // Clear any leftover plugin tools
     pluginTools.clear();
     // Force server rebuild each test
@@ -72,6 +80,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     pluginTools.clear();
     clearContext("test-session");
     clearContext("no-context-session");
+    resetSecurityRegistry();
   });
 
   it("should deny plugin tool when session lacks required capability", async () => {
@@ -152,10 +161,10 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     expect(handler).toHaveBeenCalled();
   });
 
-  it("should allow plugin tool with no TOOL_CAPABILITY_MAP entry (backward-compat)", async () => {
+  it("should deny plugin tool with no TOOL_CAPABILITY_MAP entry (fail closed)", async () => {
     await setSecurityConfig({ enforcement: "enforce" });
 
-    // semi-trusted can use general tools (no capability mapping = no requirement)
+    // semi-trusted cannot use tools without a capability mapping — fail closed
     const source = createInjectionSource("api", { trustLevel: "semi-trusted" });
     const ctx = new SecurityContext(source, "test-session");
     storeContext(ctx);
@@ -179,11 +188,12 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const wrappedHandler = customCall![3] as (args: Record<string, unknown>) => Promise<unknown>;
     const result = await wrappedHandler({ input: "hello" });
 
-    // Should pass — no capability requirement for unknown tools
+    // Should fail — no capability mapping means access denied (fail closed)
     expect(result).toEqual({
-      content: [{ type: "text", text: JSON.stringify({ status: "ok" }, null, 2) }],
+      content: [{ type: "text", text: expect.stringContaining("no registered capability mapping") }],
+      isError: true,
     });
-    expect(handler).toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("should deny exec_command for untrusted sessions", async () => {
