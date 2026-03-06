@@ -27,7 +27,7 @@ afterEach(() => {
 describe("event_list tool", () => {
   it("should include core event types", async () => {
     const tools = createEventTools("test-session");
-    const eventListTool = tools[1] as any;
+    const eventListTool = tools.find((t: any) => t.name === "event_list") as any;
     const result = await eventListTool.handler({});
     const text = result.content[0].text;
     expect(text).toContain("session:create");
@@ -38,7 +38,7 @@ describe("event_list tool", () => {
   it("should include plugin-registered event types", async () => {
     getEventTypeRegistry().registerEventType("cron.fired", { description: "Cron job fired" }, "wopr-plugin-cron");
     const tools = createEventTools("test-session");
-    const eventListTool = tools[1] as any;
+    const eventListTool = tools.find((t: any) => t.name === "event_list") as any;
     const result = await eventListTool.handler({});
     const text = result.content[0].text;
     expect(text).toContain("cron.fired");
@@ -51,7 +51,7 @@ describe("event_list tool", () => {
     registry.registerEventType("cron.fired", {}, "wopr-plugin-cron");
     registry.unregisterAllForPlugin("wopr-plugin-cron");
     const tools = createEventTools("test-session");
-    const eventListTool = tools[1] as any;
+    const eventListTool = tools.find((t: any) => t.name === "event_list") as any;
     const result = await eventListTool.handler({});
     const text = result.content[0].text;
     expect(text).not.toContain("cron.fired");
@@ -60,7 +60,7 @@ describe("event_list tool", () => {
   it("should show description in plugin event listing", async () => {
     getEventTypeRegistry().registerEventType("webhook.received", { description: "Webhook received" }, "wopr-plugin-webhook");
     const tools = createEventTools("test-session");
-    const eventListTool = tools[1] as any;
+    const eventListTool = tools.find((t: any) => t.name === "event_list") as any;
     const result = await eventListTool.handler({});
     const text = result.content[0].text;
     expect(text).toContain("Webhook received");

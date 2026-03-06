@@ -27,31 +27,33 @@ export function createEventTools(sessionName: string): unknown[] {
   );
 
   tools.push(
-    tool("event_list", "List available event types (core + plugin-registered).", {}, async () => {
-      const registry = getEventTypeRegistry();
-      const allTypes = registry.getAllEventTypes();
-      const pluginTypes = registry.getPluginEventTypes();
+    tool("event_list", "List available event types (core + plugin-registered).", {}, async () =>
+      withSecurityCheck("event_list", sessionName, async () => {
+        const registry = getEventTypeRegistry();
+        const allTypes = registry.getAllEventTypes();
+        const pluginTypes = registry.getPluginEventTypes();
 
-      const coreLines: string[] = [];
-      const pluginLines: string[] = [];
+        const coreLines: string[] = [];
+        const pluginLines: string[] = [];
 
-      for (const t of allTypes) {
-        const pluginReg = pluginTypes.get(t);
-        if (pluginReg) {
-          const desc = pluginReg.registration.description ? ` — ${pluginReg.registration.description}` : "";
-          pluginLines.push(`- ${t} (${pluginReg.pluginName})${desc}`);
-        } else {
-          coreLines.push(`- ${t}`);
+        for (const t of allTypes) {
+          const pluginReg = pluginTypes.get(t);
+          if (pluginReg) {
+            const desc = pluginReg.registration.description ? ` — ${pluginReg.registration.description}` : "";
+            pluginLines.push(`- ${t} (${pluginReg.pluginName})${desc}`);
+          } else {
+            coreLines.push(`- ${t}`);
+          }
         }
-      }
 
-      let text = `Core events:\n${coreLines.join("\n")}`;
-      if (pluginLines.length > 0) {
-        text += `\n\nPlugin events:\n${pluginLines.join("\n")}`;
-      }
+        let text = `Core events:\n${coreLines.join("\n")}`;
+        if (pluginLines.length > 0) {
+          text += `\n\nPlugin events:\n${pluginLines.join("\n")}`;
+        }
 
-      return { content: [{ type: "text", text }] };
-    }),
+        return { content: [{ type: "text", text }] };
+      }),
+    ),
   );
 
   return tools;

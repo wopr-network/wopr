@@ -12,8 +12,8 @@ export interface EventTypeRegistration {
 }
 
 interface PluginEventType {
-  registration: EventTypeRegistration;
-  pluginName: string;
+  readonly registration: Readonly<EventTypeRegistration>;
+  readonly pluginName: string;
 }
 
 /** Core event types — always present, cannot be unregistered */
@@ -58,7 +58,7 @@ export class EventTypeRegistry {
         `Event type "${name}" is already registered by plugin "${existing.pluginName}". Cannot re-register with "${pluginName}".`,
       );
     }
-    this.pluginEventTypes.set(name, { registration, pluginName });
+    this.pluginEventTypes.set(name, { registration: { ...registration }, pluginName });
   }
 
   unregisterEventType(name: string, pluginName: string): void {
@@ -81,15 +81,21 @@ export class EventTypeRegistry {
   }
 
   getRegistration(name: string): EventTypeRegistration | undefined {
-    return this.pluginEventTypes.get(name)?.registration;
+    const reg = this.pluginEventTypes.get(name)?.registration;
+    return reg ? { ...reg } : undefined;
   }
 
   getAllEventTypes(): string[] {
     return [...CORE_EVENT_TYPES, ...this.pluginEventTypes.keys()];
   }
 
-  getPluginEventTypes(): Map<string, PluginEventType> {
-    return new Map(this.pluginEventTypes);
+  getPluginEventTypes(): ReadonlyMap<string, PluginEventType> {
+    return new Map(
+      [...this.pluginEventTypes].map(([name, value]) => [
+        name,
+        { pluginName: value.pluginName, registration: { ...value.registration } },
+      ]),
+    );
   }
 }
 
