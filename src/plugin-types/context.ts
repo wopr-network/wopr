@@ -5,7 +5,6 @@
  * this object during init() and use it to interact with the WOPR daemon.
  */
 
-import type { InjectionSource } from "../security/types.js";
 import type { StorageApi } from "../storage/api/plugin-storage.js";
 import type { ConversationEntry } from "../types.js";
 import type { A2AServerConfig, A2AToolResult } from "./a2a.js";
@@ -15,6 +14,26 @@ import type { ContextProvider } from "./context-provider.js";
 import type { WOPREventBus, WOPRHookManager } from "./events.js";
 import type { AdapterCapability, ProviderOption } from "./manifest.js";
 import type { ModelProvider } from "./provider.js";
+
+/** Trust level for injection sources - defined here to avoid core dependency */
+export type TrustLevel = "owner" | "trusted" | "semi-trusted" | "untrusted";
+
+/** Injection source — defined here to avoid importing from core security module */
+export interface InjectionSource {
+  type: string;
+  trustLevel: TrustLevel;
+  identity?: {
+    publicKey?: string;
+    pluginName?: string;
+    apiKeyId?: string;
+    gatewaySession?: string;
+    userId?: string;
+  };
+  grantedCapabilities?: string[];
+  grantId?: string;
+  timestamp?: number;
+  targetSession?: string;
+}
 
 /**
  * Input provided to a setup context provider so it can generate
@@ -270,6 +289,14 @@ export interface WOPRPluginContext {
   // Setup context providers - plugins provide AI instructions for their own setup flow
   registerSetupContextProvider(fn: SetupContextProvider): void;
   unregisterSetupContextProvider(): void;
+
+  // Security registration — plugins register their permissions, sources, and tool mappings
+  registerPermission(name: string): void;
+  registerInjectionSource(name: string, trustLevel: TrustLevel): void;
+  registerToolPermission(toolName: string, permission: string): void;
+  unregisterPermission(name: string): void;
+  unregisterInjectionSource(name: string): void;
+  unregisterToolPermission(toolName: string): void;
 
   // Storage API - plugin-extensible database storage
   storage: StorageApi;

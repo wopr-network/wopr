@@ -22,6 +22,7 @@ import {
   ensureRequirements,
   formatMissingRequirements,
 } from "../plugins/requirements.js";
+import { getSecurityRegistry } from "../security/registry.js";
 import type { InstalledPlugin, PluginInjectOptions, WOPRPlugin, WOPRPluginContext } from "../types.js";
 import { resolveA2AToolDependencies } from "./a2a-tool-resolver.js";
 import { pluginCircuitBreaker } from "./circuit-breaker.js";
@@ -595,6 +596,9 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
 
   // Unregister from capability dependency graph
   getCapabilityDependencyGraph().unregisterPlugin(name);
+
+  // Cleanup security registrations (permissions, injection sources, tool mappings)
+  getSecurityRegistry().unregisterAllForPlugin(name);
 
   // ── Step 5: Emit deactivated, clean up state ──
   const version = loaded.plugin.version || manifest?.version || "unknown";
