@@ -422,6 +422,19 @@ export function checkToolAccess(source: InjectionSource, toolName: string, sessi
         reason: `Tool ${toolName} requires capability ${requiredCap}`,
       };
     }
+  } else {
+    // No capability mapping registered for this tool — fail closed.
+    // Tools must have an explicit capability mapping to be accessible.
+    if (isWarnMode) {
+      return {
+        allowed: true,
+        warning: `Tool ${toolName} has no capability mapping (warn mode)`,
+      };
+    }
+    return {
+      allowed: false,
+      reason: `Tool ${toolName} has no registered capability mapping`,
+    };
   }
 
   return { allowed: true };

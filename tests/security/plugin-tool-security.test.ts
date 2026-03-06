@@ -161,10 +161,10 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     expect(handler).toHaveBeenCalled();
   });
 
-  it("should allow plugin tool with no TOOL_CAPABILITY_MAP entry (backward-compat)", async () => {
+  it("should deny plugin tool with no TOOL_CAPABILITY_MAP entry (fail closed)", async () => {
     await setSecurityConfig({ enforcement: "enforce" });
 
-    // semi-trusted can use general tools (no capability mapping = no requirement)
+    // semi-trusted cannot use tools without a capability mapping — fail closed
     const source = createInjectionSource("api", { trustLevel: "semi-trusted" });
     const ctx = new SecurityContext(source, "test-session");
     storeContext(ctx);
@@ -188,11 +188,12 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const wrappedHandler = customCall![3] as (args: Record<string, unknown>) => Promise<unknown>;
     const result = await wrappedHandler({ input: "hello" });
 
-    // Should pass — no capability requirement for unknown tools
+    // Should fail — no capability mapping means access denied (fail closed)
     expect(result).toEqual({
-      content: [{ type: "text", text: JSON.stringify({ status: "ok" }, null, 2) }],
+      content: [{ type: "text", text: expect.stringContaining("no registered capability mapping") }],
+      isError: true,
     });
-    expect(handler).toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("should deny exec_command for untrusted sessions", async () => {
