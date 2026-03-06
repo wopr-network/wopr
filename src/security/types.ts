@@ -58,20 +58,10 @@ export type Capability = string;
  */
 export const CAPABILITY_PROFILES: Record<string, Capability[]> = {
   owner: ["*"],
-  trusted: [
-    "inject",
-    "inject.tools",
-    "session.spawn",
-    "session.history",
-    "memory.read",
-    "memory.write",
-    "config.read",
-    "event.emit",
-    "a2a.call",
-  ],
-  "semi-trusted": ["inject", "inject.tools", "session.history", "memory.read", "config.read"],
+  trusted: ["inject", "inject.tools", "session.spawn", "session.history", "config.read", "event.emit", "a2a.call"],
+  "semi-trusted": ["inject", "inject.tools", "session.history", "config.read"],
   untrusted: ["inject"], // Can only send messages, no tools
-  gateway: ["inject", "inject.tools", "cross.inject", "cross.read", "session.history", "memory.read", "a2a.call"],
+  gateway: ["inject", "inject.tools", "cross.inject", "cross.read", "session.history", "a2a.call"],
 };
 
 /**

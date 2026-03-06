@@ -191,7 +191,7 @@ describe("Security Policy Module", () => {
       expect(policy.trustLevel).toBe("semi-trusted");
       expect(policy.capabilities).toContain("inject");
       expect(policy.capabilities).not.toContain("config.write");
-      expect(policy.capabilities).not.toContain("memory.write");
+      expect(policy.capabilities).not.toContain("session.spawn");
     });
 
     it("should resolve untrusted with minimal capabilities", async () => {
@@ -204,12 +204,12 @@ describe("Security Policy Module", () => {
 
     it("should merge granted capabilities with base capabilities", async () => {
       const source = makeSource("p2p", {
-        grantedCapabilities: ["memory.read", "session.history"],
+        grantedCapabilities: ["config.read", "session.history"],
       });
       const policy = resolvePolicy(source);
 
       expect(policy.capabilities).toContain("inject");
-      expect(policy.capabilities).toContain("memory.read");
+      expect(policy.capabilities).toContain("config.read");
       expect(policy.capabilities).toContain("session.history");
     });
 
@@ -498,9 +498,9 @@ describe("Security Policy Module", () => {
 
     it("should allow explicitly granted capabilities to override base", async () => {
       const source = makeSource("p2p", {
-        grantedCapabilities: ["memory.read"],
+        grantedCapabilities: ["config.read"],
       });
-      const result = checkCapability(source, "memory.read");
+      const result = checkCapability(source, "config.read");
 
       expect(result.allowed).toBe(true);
     });
@@ -1101,7 +1101,7 @@ describe("Security Policy Module", () => {
       const configWrite = checkCapability(source, "config.write");
       const crossInject = checkCapability(source, "cross.inject");
       const sessionSpawn = checkCapability(source, "session.spawn");
-      const memoryWrite = checkCapability(source, "memory.write");
+      const memoryWrite = checkCapability(source, "config.write");
 
       expect(configWrite.allowed).toBe(false);
       expect(crossInject.allowed).toBe(false);
@@ -1123,11 +1123,11 @@ describe("Security Policy Module", () => {
 
     it("should handle multiple granted capabilities correctly", async () => {
       const source = makeSource("p2p", {
-        grantedCapabilities: ["memory.read", "session.history", "config.read"],
+        grantedCapabilities: ["event.emit", "session.history", "config.read"],
       });
 
       const policy = resolvePolicy(source);
-      expect(policy.capabilities).toContain("memory.read");
+      expect(policy.capabilities).toContain("event.emit");
       expect(policy.capabilities).toContain("session.history");
       expect(policy.capabilities).toContain("config.read");
       expect(policy.capabilities).toContain("inject"); // base
