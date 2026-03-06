@@ -98,7 +98,7 @@ export function getA2AMcpServer(sessionName: string): ReturnType<typeof createSd
   for (const [namespacedKey, pluginTool] of pluginTools) {
     tools.push(
       tool(namespacedKey, pluginTool.description, pluginTool.schema.shape, async (args) => {
-        return withSecurityCheck(namespacedKey, sessionName, async () => {
+        return withSecurityCheck(pluginTool.name, sessionName, async () => {
           const rawResult = pluginTool.handler(args, makeContext());
           // Check streaming BEFORE awaiting: if the handler returned an AsyncIterable
           // directly (not wrapped in a Promise), handle it now.
