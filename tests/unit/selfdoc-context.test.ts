@@ -6,7 +6,7 @@ vi.mock("../../src/core/session-context-repository.js", () => ({
   resetSessionContextStorageInit: vi.fn(),
   getSessionContext: vi.fn().mockResolvedValue(null),
   setSessionContext: vi.fn().mockResolvedValue(undefined),
-  listSessionContextFiles: vi.fn().mockResolvedValue([]),
+  listSessionContextFiles: vi.fn(),
 }));
 
 // Mock logger to suppress output
@@ -22,21 +22,18 @@ vi.mock("../../src/logger.js", () => ({
 import {
   getSessionContext,
   initSessionContextStorage,
-  listSessionContextFiles,
   setSessionContext,
 } from "../../src/core/session-context-repository.js";
 import { createDefaultSelfDoc, selfDocContextProvider } from "../../src/core/selfdoc-context.js";
 
 const mockGetSessionContext = vi.mocked(getSessionContext);
 const mockSetSessionContext = vi.mocked(setSessionContext);
-const mockListFiles = vi.mocked(listSessionContextFiles);
 const mockInitStorage = vi.mocked(initSessionContextStorage);
 
 describe("selfDocContextProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetSessionContext.mockResolvedValue(null);
-    mockListFiles.mockResolvedValue([]);
     mockInitStorage.mockResolvedValue(undefined);
   });
 
@@ -103,64 +100,18 @@ describe("selfDocContextProvider", () => {
     expect(result!.content).toContain("global agents");
   });
 
-  it("loads SELF.md from global identity", async () => {
-    mockGetSessionContext.mockImplementation(async (session: string, filename: string) => {
-      if (session === "__global__" && filename === "memory/SELF.md") {
-        return "I remember everything";
-      }
-      return null;
-    });
-
-    const result = await selfDocContextProvider.getContext("my-session");
-    expect(result).not.toBeNull();
-    expect(result!.content).toContain("SELF (Long-term Memory)");
-    expect(result!.content).toContain("I remember everything");
-    expect(result!.metadata?.loadedFiles).toContain("memory/SELF.md");
-  });
-
-  it("loads recent memory files and limits to last 7 days", async () => {
-    const dates = [
-      "2026-02-20",
-      "2026-02-21",
-      "2026-02-22",
-      "2026-02-23",
-      "2026-02-24",
-      "2026-02-25",
-      "2026-02-26",
-      "2026-02-27",
-      "2026-02-28",
-    ];
-    const filenames = dates.map((d) => `memory/${d}.md`);
-
-    mockListFiles.mockResolvedValue(filenames);
+  it("does not load memory files (memory is handled by plugin)", async () => {
     mockGetSessionContext.mockImplementation(async (_session: string, filename: string) => {
-      if (filename.startsWith("memory/") && filename.match(/\d{4}-\d{2}-\d{2}\.md$/)) {
-        return `Notes for ${filename}`;
-      }
+      if (filename === "IDENTITY.md") return "identity content";
       return null;
     });
 
     const result = await selfDocContextProvider.getContext("my-session");
     expect(result).not.toBeNull();
-    expect(result!.content).toContain("Recent Memory (last 7 days)");
-    // Should only have 7, not 9
-    expect(result!.content).not.toContain("2026-02-20");
-    expect(result!.content).not.toContain("2026-02-21");
-    expect(result!.content).toContain("2026-02-22");
-    expect(result!.content).toContain("2026-02-28");
-  });
-
-  it("handles error in listSessionContextFiles gracefully", async () => {
-    mockListFiles.mockRejectedValue(new Error("storage unavailable"));
-    mockGetSessionContext.mockImplementation(async (session: string, filename: string) => {
-      if (filename === "IDENTITY.md") return "still works";
-      return null;
-    });
-
-    // Should not throw — readRecentMemoryFiles catches errors
-    const result = await selfDocContextProvider.getContext("my-session");
-    expect(result).not.toBeNull();
-    expect(result!.content).toContain("still works");
+    // Should NOT contain any memory-related content
+    expect(result!.content).not.toContain("SELF");
+    expect(result!.content).not.toContain("Recent Memory");
+    expect(result!.content).not.toContain("MEMORY");
   });
 });
 

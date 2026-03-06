@@ -8,7 +8,6 @@ import { logger } from "../logger.js";
  * - IDENTITY.md: Agent name, vibe, emoji, avatar
  * - AGENTS.md: Session instructions, safety rules
  * - USER.md: Facts about the human user
- * - MEMORY.md: Long-term curated memories
  * - HEARTBEAT.md: Periodic monitoring checklist
  *
  * These files are automatically read and injected into context
@@ -28,7 +27,6 @@ const SELFDOC_FILES = [
   "IDENTITY.md", // Agent name, vibe, emoji, avatar
   "AGENTS.md", // Session instructions, safety rules
   "USER.md", // Facts about the human user
-  "MEMORY.md", // Long-term curated memories
   "HEARTBEAT.md", // Proactive monitoring checklist
   "BOOTSTRAP.md", // Initial system setup
 ] as const;
@@ -87,7 +85,7 @@ export const selfDocContextProvider: ContextProvider = {
       return null;
     }
 
-    logger.info(`[selfdoc-context] Loaded ${loadedFiles.length} memory sources: ${loadedFiles.join(", ")}`);
+    logger.info(`[selfdoc-context] Loaded ${loadedFiles.length} self-doc files: ${loadedFiles.join(", ")}`);
 
     return {
       content: parts.join("\n\n---\n\n"),
@@ -150,9 +148,6 @@ remembers context across conversations, and can be extended through plugins.
 Before doing anything else:
 1. **Read SOUL.md** — this is who you are
 2. **Read USER.md** — this is who you're helping
-3. **Read MEMORY.md** — long-term important memories
-4. **Check memory/YYYY-MM-DD.md** — recent daily notes
-
 Do not ask permission to read these files. Just do it.
 
 ## Safety Rules
