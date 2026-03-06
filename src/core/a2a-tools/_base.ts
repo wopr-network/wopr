@@ -58,6 +58,119 @@ export {
 export const execAsync = promisify(exec);
 
 // ---------------------------------------------------------------------------
+// Temporal filter helpers (used by a2a tools and tests)
+// ---------------------------------------------------------------------------
+
+export type TemporalFilter = {
+  /** Start timestamp (inclusive) - ms since epoch */
+  after?: number;
+  /** End timestamp (inclusive) - ms since epoch */
+  before?: number;
+};
+
+export function parseTemporalFilter(expr: string): TemporalFilter | null {
+  if (!expr || typeof expr !== "string") {
+    return null;
+  }
+
+  const trimmed = expr.trim();
+  const trimmedLower = trimmed.toLowerCase();
+
+  const relativeMatch = trimmedLower.match(/^(\d+)(h|d|w|m)$/);
+  if (relativeMatch) {
+    const amount = parseInt(relativeMatch[1], 10);
+    const unit = relativeMatch[2];
+    const now = Date.now();
+
+    let msAgo: number;
+    switch (unit) {
+      case "h":
+        msAgo = amount * 60 * 60 * 1000;
+        break;
+      case "d":
+        msAgo = amount * 24 * 60 * 60 * 1000;
+        break;
+      case "w":
+        msAgo = amount * 7 * 24 * 60 * 60 * 1000;
+        break;
+      case "m":
+        msAgo = amount * 30 * 24 * 60 * 60 * 1000;
+        break;
+      default:
+        return null;
+    }
+
+    return { after: now - msAgo };
+  }
+
+  const lastMatch = trimmedLower.match(/^last\s+(\d+)\s+(hours?|days?|weeks?|months?)$/);
+  if (lastMatch) {
+    const amount = parseInt(lastMatch[1], 10);
+    const unit = lastMatch[2];
+    const now = Date.now();
+
+    let msAgo: number;
+    if (unit.startsWith("hour")) {
+      msAgo = amount * 60 * 60 * 1000;
+    } else if (unit.startsWith("day")) {
+      msAgo = amount * 24 * 60 * 60 * 1000;
+    } else if (unit.startsWith("week")) {
+      msAgo = amount * 7 * 24 * 60 * 60 * 1000;
+    } else if (unit.startsWith("month")) {
+      msAgo = amount * 30 * 24 * 60 * 60 * 1000;
+    } else {
+      return null;
+    }
+
+    return { after: now - msAgo };
+  }
+
+  const rangeMatch = trimmed.match(
+    /^(\d{4}-\d{2}-\d{2})(?:[tT]([\d:]+))?(?:\s*(?:-|to)\s*)(\d{4}-\d{2}-\d{2})(?:[tT]([\d:]+))?$/i,
+  );
+  if (rangeMatch) {
+    const startIso = `${rangeMatch[1]}T${rangeMatch[2] ?? "00:00:00"}`;
+    const endIso = `${rangeMatch[3]}T${rangeMatch[4] ?? "23:59:59.999"}`;
+
+    const startDate = new Date(startIso);
+    const endDate = new Date(endIso);
+
+    if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+      return {
+        after: startDate.getTime(),
+        before: endDate.getTime(),
+      };
+    }
+  }
+
+  const singleDateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (singleDateMatch) {
+    const year = Number.parseInt(singleDateMatch[1], 10);
+    const month = Number.parseInt(singleDateMatch[2], 10) - 1;
+    const day = Number.parseInt(singleDateMatch[3], 10);
+    const startDate = new Date(year, month, day, 0, 0, 0, 0);
+    const endDate = new Date(year, month, day, 23, 59, 59, 999);
+
+    if (!Number.isNaN(startDate.getTime())) {
+      return {
+        after: startDate.getTime(),
+        before: endDate.getTime(),
+      };
+    }
+  }
+
+  const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})[tT]([\d:]+)$/);
+  if (isoMatch) {
+    const date = new Date(`${isoMatch[1]}T${isoMatch[2]}`);
+    if (!Number.isNaN(date.getTime())) {
+      return { after: date.getTime() };
+    }
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
