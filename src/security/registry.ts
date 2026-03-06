@@ -83,7 +83,9 @@ export class SecurityRegistry {
 
   registerPermission(name: string, pluginName: string): void {
     if (name !== "*" && !PERMISSION_RE.test(name)) {
-      throw new Error(`Invalid permission format: "${name}". Must match namespace.action (lowercase alphanumeric).`);
+      throw new Error(
+        `Invalid permission format: "${name}". Must match namespace.action[.sub...] (lowercase alphanumeric, dot-separated).`,
+      );
     }
     const existing = this.pluginPermissions.get(name);
     if (existing !== undefined && existing !== pluginName) {
@@ -135,7 +137,9 @@ export class SecurityRegistry {
   getAllDefaultTrusts(): Map<string, TrustLevel> {
     const result = new Map(CORE_SOURCES);
     for (const [name, reg] of this.pluginSources) {
-      result.set(name, reg.value);
+      if (!CORE_SOURCES.has(name)) {
+        result.set(name, reg.value);
+      }
     }
     return result;
   }
@@ -164,6 +168,16 @@ export class SecurityRegistry {
 
   getToolCapability(toolName: string): string | undefined {
     return CORE_TOOL_CAPS.get(toolName) ?? this.pluginToolCaps.get(toolName)?.value;
+  }
+
+  getAllToolCapabilities(): Map<string, string> {
+    const result = new Map(CORE_TOOL_CAPS);
+    for (const [name, reg] of this.pluginToolCaps) {
+      if (!CORE_TOOL_CAPS.has(name)) {
+        result.set(name, reg.value);
+      }
+    }
+    return result;
   }
 
   // ---- Bulk cleanup ----

@@ -168,6 +168,29 @@ describe("SecurityRegistry", () => {
 		});
 	});
 
+	describe("unregister with wrong plugin owner", () => {
+		it("does not remove permission registered by another plugin", () => {
+			const reg = getSecurityRegistry();
+			reg.registerPermission("webhook.send", "plugin-a");
+			reg.unregisterPermission("webhook.send", "plugin-b");
+			expect(reg.hasPermission("webhook.send")).toBe(true);
+		});
+
+		it("does not remove injection source registered by another plugin", () => {
+			const reg = getSecurityRegistry();
+			reg.registerInjectionSource("webhook", "semi-trusted", "plugin-a");
+			reg.unregisterInjectionSource("webhook", "plugin-b");
+			expect(reg.getDefaultTrust("webhook")).toBe("semi-trusted");
+		});
+
+		it("does not remove tool capability registered by another plugin", () => {
+			const reg = getSecurityRegistry();
+			reg.registerToolCapability("my_tool", "my.perm", "plugin-a");
+			reg.unregisterToolCapability("my_tool", "plugin-b");
+			expect(reg.getToolCapability("my_tool")).toBe("my.perm");
+		});
+	});
+
 	describe("unregisterAllForPlugin", () => {
 		it("removes all registrations for a plugin", () => {
 			const reg = getSecurityRegistry();
@@ -180,6 +203,36 @@ describe("SecurityRegistry", () => {
 			expect(reg.hasPermission("foo.bar")).toBe(false);
 			expect(reg.getDefaultTrust("webhook")).toBeUndefined();
 			expect(reg.getToolCapability("foo_tool")).toBeUndefined();
+		});
+	});
+
+	describe("getAllDefaultTrusts core precedence", () => {
+		it("core sources cannot be overwritten by plugin sources", () => {
+			const reg = getSecurityRegistry();
+			reg.registerInjectionSource("cli", "untrusted", "evil-plugin");
+			const trusts = reg.getAllDefaultTrusts();
+			expect(trusts.get("cli")).toBe("owner");
+		});
+	});
+
+	describe("TOOL_CAPABILITY_MAP Proxy traps", () => {
+		it("Object.keys returns all tool names", async () => {
+			const { TOOL_CAPABILITY_MAP } = await import("../../../src/security/types.js");
+			const keys = Object.keys(TOOL_CAPABILITY_MAP);
+			expect(keys).toContain("config_get");
+			expect(keys).toContain("exec_command");
+		});
+
+		it("in operator works", async () => {
+			const { TOOL_CAPABILITY_MAP } = await import("../../../src/security/types.js");
+			expect("sessions_list" in TOOL_CAPABILITY_MAP).toBe(true);
+			expect("nonexistent_tool" in TOOL_CAPABILITY_MAP).toBe(false);
+		});
+
+		it("spread includes all entries", async () => {
+			const { TOOL_CAPABILITY_MAP } = await import("../../../src/security/types.js");
+			const spread = { ...TOOL_CAPABILITY_MAP };
+			expect(spread.config_get).toBe("config.read");
 		});
 	});
 

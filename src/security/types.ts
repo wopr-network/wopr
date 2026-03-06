@@ -596,6 +596,19 @@ export const TOOL_CAPABILITY_MAP: Record<string, Capability> = new Proxy({} as R
   get(_target, prop: string) {
     return getSecurityRegistry().getToolCapability(prop);
   },
+  has(_target, prop: string) {
+    return getSecurityRegistry().getToolCapability(prop) !== undefined;
+  },
+  ownKeys() {
+    return [...getSecurityRegistry().getAllToolCapabilities().keys()];
+  },
+  getOwnPropertyDescriptor(_target, prop: string) {
+    const val = getSecurityRegistry().getToolCapability(prop);
+    if (val !== undefined) {
+      return { configurable: true, enumerable: true, value: val };
+    }
+    return undefined;
+  },
 });
 
 /**
