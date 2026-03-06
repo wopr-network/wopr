@@ -647,6 +647,11 @@ export const TOOL_CAPABILITY_MAP: Record<string, Capability> = {
   event_emit: "event.emit",
   event_list: "event.emit",
 
+  // Plugin-provided tools that require capability gating
+  // These were extracted from core but still need security enforcement
+  http_fetch: "inject",
+  exec_command: "inject",
+
   // Security introspection tools (always allowed - just show your own permissions)
   security_whoami: "inject",
   security_check: "inject",

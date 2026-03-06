@@ -152,7 +152,7 @@ describe("Security Context Module", () => {
       const ctx = createCliContext("main");
 
       expect(ctx.hasCapability("config.write")).toBe(true);
-      expect(ctx.hasCapability("inject.exec")).toBe(true);
+      expect(ctx.hasCapability("config.read")).toBe(true);
       expect(ctx.hasCapability("*")).toBe(true);
     });
 

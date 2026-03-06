@@ -74,9 +74,27 @@ export function createSecurityTools(sessionName: string): unknown[] {
       "Check if a specific tool or capability is allowed before attempting to use it.",
       {
         tool: z.string().optional().describe("Tool name to check (e.g., 'tts_synthesize', 'image_generate')"),
-        capability: z.string().optional().describe("Capability to check (e.g., 'inject', 'cross.inject')"),
+        capability: z
+          .enum([
+            "inject",
+            "inject.tools",
+            "session.spawn",
+            "session.history",
+            "cross.inject",
+            "cross.read",
+            "config.read",
+            "config.write",
+            "memory.read",
+            "memory.write",
+            "cron.manage",
+            "event.emit",
+            "a2a.call",
+            "*",
+          ])
+          .optional()
+          .describe("Capability to check (e.g., 'inject', 'cross.inject')"),
       },
-      async (args: { tool?: string; capability?: string }) => {
+      async (args: { tool?: string; capability?: Capability }) => {
         const { tool: toolName, capability } = args;
         const context = getContext(sessionName);
         if (!context) {

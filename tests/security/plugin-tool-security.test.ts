@@ -78,12 +78,12 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     // Set up enforcement
     await setSecurityConfig({ enforcement: "enforce" });
 
-    // Create a security context for an untrusted source (no inject.network capability)
+    // Create a security context for an untrusted source (tools deny: ["*"])
     const source = createInjectionSource("p2p", { trustLevel: "untrusted" });
     const ctx = new SecurityContext(source, "test-session");
     storeContext(ctx);
 
-    // Register a fake plugin tool named http_fetch (maps to inject.network in TOOL_CAPABILITY_MAP)
+    // Register a fake plugin tool named http_fetch (maps to inject in TOOL_CAPABILITY_MAP)
     const handler = vi.fn().mockResolvedValue("fetched");
     registerA2ATool({
       name: "http_fetch",
@@ -108,7 +108,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const wrappedHandler = httpFetchCall![3] as (args: Record<string, unknown>) => Promise<unknown>;
     const result = await wrappedHandler({ url: "https://example.com" });
 
-    // Should be denied — untrusted has no inject.network capability
+    // Should be denied — untrusted has tools deny: ["*"]
     expect(result).toEqual({
       content: [{ type: "text", text: expect.stringContaining("Access denied") }],
       isError: true,
@@ -121,7 +121,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
   it("should allow plugin tool when session has required capability", async () => {
     await setSecurityConfig({ enforcement: "enforce" });
 
-    // Owner has all capabilities including inject.network
+    // Owner has all capabilities including inject
     const source = createInjectionSource("cli", { trustLevel: "owner" });
     const ctx = new SecurityContext(source, "test-session");
     storeContext(ctx);
@@ -145,7 +145,7 @@ describe("Plugin A2A Tool Security (WOP-919)", () => {
     const wrappedHandler = httpFetchCall![3] as (args: Record<string, unknown>) => Promise<unknown>;
     const result = await wrappedHandler({ url: "https://example.com" });
 
-    // Should pass through — owner has inject.network
+    // Should pass through — owner has inject capability
     expect(result).toEqual({
       content: [{ type: "text", text: "fetched OK" }],
     });
