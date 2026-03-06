@@ -57,10 +57,8 @@ export {
 
 export const execAsync = promisify(exec);
 
-export const GLOBAL_MEMORY_DIR = join(GLOBAL_IDENTITY_DIR, "memory");
-
 // ---------------------------------------------------------------------------
-// Temporal filter (moved from src/memory/ — memory is a plugin concern)
+// Temporal filter helpers (used by a2a tools and tests)
 // ---------------------------------------------------------------------------
 
 export type TemporalFilter = {
@@ -310,52 +308,6 @@ export async function withSecurityCheck<T>(
 // ---------------------------------------------------------------------------
 // Path resolvers
 // ---------------------------------------------------------------------------
-
-export function resolveRootFile(
-  sessionDir: string,
-  filename: string,
-): { path: string; exists: boolean; isGlobal: boolean } {
-  const globalPath = join(GLOBAL_IDENTITY_DIR, filename);
-  if (existsSync(globalPath)) {
-    return { path: globalPath, exists: true, isGlobal: true };
-  }
-  const sessionPath = join(sessionDir, filename);
-  if (existsSync(sessionPath)) {
-    return { path: sessionPath, exists: true, isGlobal: false };
-  }
-  return { path: sessionPath, exists: false, isGlobal: false };
-}
-
-export function resolveMemoryFile(
-  sessionDir: string,
-  filename: string,
-): { path: string; exists: boolean; isGlobal: boolean } {
-  const globalPath = join(GLOBAL_MEMORY_DIR, filename);
-  if (existsSync(globalPath)) {
-    return { path: globalPath, exists: true, isGlobal: true };
-  }
-  const sessionPath = join(sessionDir, "memory", filename);
-  if (existsSync(sessionPath)) {
-    return { path: sessionPath, exists: true, isGlobal: false };
-  }
-  return { path: sessionPath, exists: false, isGlobal: false };
-}
-
-export function listAllMemoryFiles(sessionDir: string): string[] {
-  const files = new Set<string>();
-  if (existsSync(GLOBAL_MEMORY_DIR)) {
-    for (const f of readdirSync(GLOBAL_MEMORY_DIR)) {
-      if (f.endsWith(".md")) files.add(f);
-    }
-  }
-  const sessionMemoryDir = join(sessionDir, "memory");
-  if (existsSync(sessionMemoryDir)) {
-    for (const f of readdirSync(sessionMemoryDir)) {
-      if (f.endsWith(".md")) files.add(f);
-    }
-  }
-  return [...files];
-}
 
 // ---------------------------------------------------------------------------
 // Tool registration API (for plugins)

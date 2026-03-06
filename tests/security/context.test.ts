@@ -169,7 +169,7 @@ describe("Security Context Module", () => {
 
       expect(ctx.hasCapability("config.write")).toBe(false);
       expect(ctx.hasCapability("session.spawn")).toBe(false);
-      expect(ctx.hasCapability("memory.write")).toBe(false);
+      expect(ctx.hasCapability("cron.manage")).toBe(false);
     });
 
     it("should record capability check events", () => {
@@ -187,11 +187,11 @@ describe("Security Context Module", () => {
 
     it("should return true for granted capabilities", () => {
       const source = createInjectionSource("p2p", {
-        grantedCapabilities: ["memory.read"],
+        grantedCapabilities: ["config.read"],
       });
       const ctx = new SecurityContext(source, "test");
 
-      expect(ctx.hasCapability("memory.read")).toBe(true);
+      expect(ctx.hasCapability("config.read")).toBe(true);
     });
   });
 
@@ -564,12 +564,12 @@ describe("Security Context Module", () => {
     });
 
     it("createP2PContext should create context with configurable trust", () => {
-      const ctx = createP2PContext("p2p-session", "peer-key-abc", "trusted", ["memory.read"], "grant-1");
+      const ctx = createP2PContext("p2p-session", "peer-key-abc", "trusted", ["config.read"], "grant-1");
 
       expect(ctx.source.type).toBe("p2p");
       expect(ctx.trustLevel).toBe("trusted");
       expect(ctx.source.identity?.publicKey).toBe("peer-key-abc");
-      expect(ctx.source.grantedCapabilities).toContain("memory.read");
+      expect(ctx.source.grantedCapabilities).toContain("config.read");
       expect(ctx.source.grantId).toBe("grant-1");
     });
 
@@ -784,14 +784,14 @@ describe("Security Context Module", () => {
 
     it("should handle P2P context with elevated trust correctly", () => {
       const ctx = createP2PContext("p2p-elevated", "key", "trusted", [
-        "memory.read",
-        "memory.write",
+        "config.read",
+        "event.emit",
         "session.history",
       ]);
 
       expect(ctx.trustLevel).toBe("trusted");
-      expect(ctx.hasCapability("memory.read")).toBe(true);
-      expect(ctx.hasCapability("memory.write")).toBe(true);
+      expect(ctx.hasCapability("config.read")).toBe(true);
+      expect(ctx.hasCapability("event.emit")).toBe(true);
       // Should not have owner-level capabilities
       expect(ctx.hasCapability("config.write")).toBe(false);
     });

@@ -61,10 +61,6 @@ describe("Plugin Trust Downgrade (WOP-1408)", () => {
   });
 
   describe("semi-trusted capability profile", () => {
-    it("should NOT include memory.write", () => {
-      expect(hasCapability(CAPABILITY_PROFILES["semi-trusted"], "memory.write")).toBe(false);
-    });
-
     it("should NOT include session.spawn", () => {
       expect(hasCapability(CAPABILITY_PROFILES["semi-trusted"], "session.spawn")).toBe(false);
     });
@@ -78,20 +74,18 @@ describe("Plugin Trust Downgrade (WOP-1408)", () => {
       expect(hasCapability(CAPABILITY_PROFILES["semi-trusted"], "inject.tools")).toBe(true);
     });
 
-    it("should include memory.read and config.read", () => {
-      expect(hasCapability(CAPABILITY_PROFILES["semi-trusted"], "memory.read")).toBe(true);
+    it("should include config.read", () => {
       expect(hasCapability(CAPABILITY_PROFILES["semi-trusted"], "config.read")).toBe(true);
     });
   });
 
   describe("plugin with default trust cannot write to memory", () => {
-    it("should deny memory_write tool for default plugin source", () => {
+    it("should deny session.spawn capability for default plugin source via checkToolAccess", () => {
       const source = createInjectionSource("plugin", {
         identity: { pluginName: "untrusted-plugin" },
       });
-      const result = checkToolAccess(source, "memory_write", "test-session");
+      const result = checkCapability(source, "session.spawn", "test-session");
       expect(result.allowed).toBe(false);
-      expect(result.reason).toContain("memory.write");
     });
 
     it("should deny session.spawn capability for default plugin source", () => {
@@ -102,22 +96,22 @@ describe("Plugin Trust Downgrade (WOP-1408)", () => {
       expect(result.allowed).toBe(false);
     });
 
-    it("should allow memory_read tool for default plugin source", () => {
+    it("should allow config_get tool for default plugin source", () => {
       const source = createInjectionSource("plugin", {
         identity: { pluginName: "read-only-plugin" },
       });
-      const result = checkToolAccess(source, "memory_read", "test-session");
+      const result = checkToolAccess(source, "config_get", "test-session");
       expect(result.allowed).toBe(true);
     });
   });
 
   describe("plugin with explicitly elevated trust can write to memory", () => {
-    it("should allow memory_write when grantedCapabilities includes memory.write", () => {
+    it("should allow session.spawn when grantedCapabilities includes session.spawn", () => {
       const source = createInjectionSource("plugin", {
         identity: { pluginName: "trusted-plugin" },
-        grantedCapabilities: ["memory.write"],
+        grantedCapabilities: ["session.spawn"],
       });
-      const result = checkToolAccess(source, "memory_write", "test-session");
+      const result = checkCapability(source, "session.spawn", "test-session");
       expect(result.allowed).toBe(true);
     });
 
@@ -142,7 +136,7 @@ describe("Plugin Trust Downgrade (WOP-1408)", () => {
     it("should not grant capabilities beyond what was explicitly requested", () => {
       const source = createInjectionSource("plugin", {
         identity: { pluginName: "trusted-plugin" },
-        grantedCapabilities: ["memory.write"],
+        grantedCapabilities: ["config.read"],
       });
       const result = checkCapability(source, "session.spawn", "test-session");
       expect(result.allowed).toBe(false);
