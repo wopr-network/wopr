@@ -24,15 +24,20 @@ vi.mock("../../src/logger.js", () => ({
 }));
 
 let eventBus: any;
+let resetEventTypeRegistry: any;
 
 beforeEach(async () => {
   vi.resetModules();
   const eventsModule = await import("../../src/core/events.js");
   eventBus = eventsModule.eventBus;
+  const registryModule = await import("../../src/core/event-type-registry.js");
+  resetEventTypeRegistry = registryModule.resetEventTypeRegistry;
+  resetEventTypeRegistry();
 });
 
 afterEach(() => {
   eventBus?.removeAllListeners();
+  resetEventTypeRegistry?.();
   vi.restoreAllMocks();
 });
 
@@ -251,6 +256,9 @@ describe("Event Bus", () => {
   // ========================================================================
   describe("emitCustom", () => {
     it("should emit custom events with plugin prefix", async () => {
+      const { getEventTypeRegistry } = await import("../../src/core/event-type-registry.js");
+      getEventTypeRegistry().registerEventType("myplugin:custom", {}, "test");
+
       const handler = vi.fn();
       eventBus.on("myplugin:custom" as any, handler);
 

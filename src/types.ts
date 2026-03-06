@@ -639,6 +639,10 @@ export interface WOPREventBus {
    * Get number of listeners for an event
    */
   listenerCount(event: string): number;
+  /** Register a plugin event type for dynamic discovery and emit validation */
+  registerEventType(name: string, options?: { schema?: unknown; description?: string }): void;
+  /** Unregister a previously registered plugin event type */
+  unregisterEventType(name: string): void;
 }
 
 /**

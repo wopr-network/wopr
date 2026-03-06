@@ -2,6 +2,7 @@
  * Event tools: event_emit, event_list
  */
 
+import { getEventTypeRegistry } from "../event-type-registry.js";
 import { eventBus, tool, withSecurityCheck, z } from "./_base.js";
 
 export function createEventTools(sessionName: string): unknown[] {
@@ -10,9 +11,9 @@ export function createEventTools(sessionName: string): unknown[] {
   tools.push(
     tool(
       "event_emit",
-      "Emit a custom event that other sessions/plugins can listen for.",
+      "Emit a custom event that other sessions/plugins can listen for. The event type must be registered (core events are always available; plugin events must be registered via ctx.events.registerEventType).",
       {
-        event: z.string().describe("Event name (e.g., 'plugin:myagent:task_complete')"),
+        event: z.string().describe("Event name (e.g., 'cron.fired', 'plugin:myagent:task_complete')"),
         payload: z.record(z.string(), z.unknown()).optional().describe("Event payload data"),
       },
       async (args: { event: string; payload?: Record<string, unknown> }) => {
@@ -26,29 +27,30 @@ export function createEventTools(sessionName: string): unknown[] {
   );
 
   tools.push(
-    tool("event_list", "List available event types.", {}, async () => {
-      const coreEvents = [
-        "session:create",
-        "session:beforeInject",
-        "session:afterInject",
-        "session:responseChunk",
-        "session:destroy",
-        "channel:message",
-        "channel:send",
-        "plugin:beforeInit",
-        "plugin:afterInit",
-        "plugin:error",
-        "config:change",
-        "system:shutdown",
-      ];
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Core events:\n${coreEvents.map((e) => `- ${e}`).join("\n")}\n\nCustom: Use 'plugin:yourname:event' format.`,
-          },
-        ],
-      };
+    tool("event_list", "List available event types (core + plugin-registered).", {}, async () => {
+      const registry = getEventTypeRegistry();
+      const allTypes = registry.getAllEventTypes();
+      const pluginTypes = registry.getPluginEventTypes();
+
+      const coreLines: string[] = [];
+      const pluginLines: string[] = [];
+
+      for (const t of allTypes) {
+        const pluginReg = pluginTypes.get(t);
+        if (pluginReg) {
+          const desc = pluginReg.registration.description ? ` — ${pluginReg.registration.description}` : "";
+          pluginLines.push(`- ${t} (${pluginReg.pluginName})${desc}`);
+        } else {
+          coreLines.push(`- ${t}`);
+        }
+      }
+
+      let text = `Core events:\n${coreLines.join("\n")}`;
+      if (pluginLines.length > 0) {
+        text += `\n\nPlugin events:\n${pluginLines.join("\n")}`;
+      }
+
+      return { content: [{ type: "text", text }] };
     }),
   );
 
