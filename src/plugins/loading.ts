@@ -135,6 +135,15 @@ async function initAndActivatePlugin(
         );
       }
 
+      // Unregister any event types registered during failed init
+      try {
+        getEventTypeRegistry().unregisterAllForPlugin(installed.name);
+      } catch (evtErr: unknown) {
+        logger.warn(
+          `[plugins] ${installed.name}: failed to unregister event types during init cleanup: ${evtErr instanceof Error ? evtErr.message : String(evtErr)}`,
+        );
+      }
+
       // Remove from all state maps
       loadedPlugins.delete(installed.name);
       pluginManifests.delete(installed.name);
