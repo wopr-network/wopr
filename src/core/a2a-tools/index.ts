@@ -22,6 +22,5 @@ export { createCapabilityDiscoveryTools } from "./capability-discovery.js";
 export { createConfigTools } from "./config.js";
 export { createEventTools } from "./events.js";
 export { createIdentityTools } from "./identity.js";
-export { createMemoryTools } from "./memory.js";
 export { createSecurityTools } from "./security.js";
 export { createSessionTools } from "./sessions.js";

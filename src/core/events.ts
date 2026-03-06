@@ -116,15 +116,6 @@ export interface SystemRestartScheduledEvent {
   batchedRequests: number;
 }
 
-// Memory events
-export interface MemorySearchEvent {
-  query: string;
-  maxResults: number;
-  minScore: number;
-  sessionName: string;
-  results: unknown[] | null;
-}
-
 export interface MemoryFileChange {
   action: "upsert" | "delete";
   path: string;
@@ -205,7 +196,6 @@ export interface WOPREventMap {
   "system:restartScheduled": SystemRestartScheduledEvent;
 
   // Memory events (for plugin enhancement)
-  "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
 
   // Capability health events
@@ -389,7 +379,6 @@ class WOPREventBusImpl implements WOPREventBus {
   private static SEQUENTIAL_EVENTS: ReadonlySet<string> = new Set([
     "session:beforeInject",
     "session:afterInject",
-    "memory:search",
     "memory:filesChanged",
   ]);
 

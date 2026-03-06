@@ -131,14 +131,6 @@ export interface MemoryFilesChangedEvent {
   changes: MemoryFileChange[];
 }
 
-export interface MemorySearchEvent {
-  query: string;
-  maxResults: number;
-  minScore: number;
-  sessionName: string;
-  results: unknown[] | null;
-}
-
 // Capability registry events
 export interface CapabilityProviderRegisteredEvent {
   capability: string;
@@ -171,7 +163,6 @@ export interface WOPREventMap {
   "plugin:deactivated": PluginDeactivatedEvent;
   "config:change": ConfigChangeEvent;
   "system:shutdown": SystemShutdownEvent;
-  "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
   "capability:providerRegistered": CapabilityProviderRegisteredEvent;
   "capability:providerUnregistered": CapabilityProviderUnregisteredEvent;

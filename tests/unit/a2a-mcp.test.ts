@@ -21,7 +21,6 @@ vi.mock("../../src/core/a2a-tools/index.js", () => ({
   pluginTools: new Map(),
   createSessionTools: vi.fn().mockReturnValue([]),
   createConfigTools: vi.fn().mockReturnValue([]),
-  createMemoryTools: vi.fn().mockReturnValue([]),
   createIdentityTools: vi.fn().mockReturnValue([]),
   createEventTools: vi.fn().mockReturnValue([]),
   createSecurityTools: vi.fn().mockReturnValue([]),
@@ -39,7 +38,6 @@ import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import {
   createSessionTools,
   createConfigTools,
-  createMemoryTools,
   createIdentityTools,
   createEventTools,
   createSecurityTools,
@@ -54,7 +52,6 @@ describe("a2a-mcp", () => {
     vi.mocked(config.get).mockReturnValue({ agents: { a2a: { enabled: true } } } as any);
     vi.mocked(createSessionTools).mockReturnValue([]);
     vi.mocked(createConfigTools).mockReturnValue([]);
-    vi.mocked(createMemoryTools).mockReturnValue([]);
     vi.mocked(createIdentityTools).mockReturnValue([]);
     vi.mocked(createEventTools).mockReturnValue([]);
     vi.mocked(createSecurityTools).mockReturnValue([]);
@@ -67,27 +64,19 @@ describe("a2a-mcp", () => {
       expect(tools).toContain("sessions_list");
       expect(tools).toContain("sessions_send");
       expect(tools).toContain("config_get");
-      expect(tools).toContain("memory_read");
       expect(tools).toContain("security_whoami");
       expect(tools).toContain("capability_discover");
     });
 
     it("returns at least 24 core tools", () => {
       const tools = listA2ATools();
-      expect(tools.length).toBeGreaterThanOrEqual(24);
+      expect(tools.length).toBeGreaterThanOrEqual(19);
     });
 
     it("includes session-related tools", () => {
       const tools = listA2ATools();
       expect(tools).toContain("sessions_history");
       expect(tools).toContain("sessions_spawn");
-    });
-
-    it("includes memory tools", () => {
-      const tools = listA2ATools();
-      expect(tools).toContain("memory_write");
-      expect(tools).toContain("memory_search");
-      expect(tools).toContain("memory_get");
     });
 
     it("includes cron tools", () => {
@@ -101,7 +90,6 @@ describe("a2a-mcp", () => {
 
     it("includes identity, event, and security tools", () => {
       const tools = listA2ATools();
-      expect(tools).toContain("self_reflect");
       expect(tools).toContain("identity_get");
       expect(tools).toContain("identity_update");
       expect(tools).toContain("security_check");
@@ -122,7 +110,6 @@ describe("a2a-mcp", () => {
       getA2AMcpServer("my-session");
       expect(createSessionTools).toHaveBeenCalledWith("my-session");
       expect(createConfigTools).toHaveBeenCalledWith("my-session");
-      expect(createMemoryTools).toHaveBeenCalledWith("my-session");
       expect(createIdentityTools).toHaveBeenCalledWith("my-session");
       expect(createEventTools).toHaveBeenCalledWith("my-session");
       expect(createSecurityTools).toHaveBeenCalledWith("my-session");

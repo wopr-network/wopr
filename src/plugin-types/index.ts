@@ -68,7 +68,6 @@ export type {
   HookOptions,
   MemoryFileChange,
   MemoryFilesChangedEvent,
-  MemorySearchEvent,
   MessageIncomingHandler,
   MessageOutgoingHandler,
   MutableHookEvent,

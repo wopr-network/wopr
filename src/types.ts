@@ -598,14 +598,6 @@ export interface MemoryFilesChangedEvent {
   changes: MemoryFileChange[];
 }
 
-export interface MemorySearchEvent {
-  query: string;
-  maxResults: number;
-  minScore: number;
-  sessionName: string;
-  results: unknown[] | null;
-}
-
 export interface WOPREvent {
   type: string;
   payload: unknown;
@@ -629,7 +621,6 @@ export interface WOPREventMap {
   "plugin:error": PluginErrorEvent;
   "config:change": ConfigChangeEvent;
   "system:shutdown": SystemShutdownEvent;
-  "memory:search": MemorySearchEvent;
   "memory:filesChanged": MemoryFilesChangedEvent;
   "*": WOPREvent;
 }
