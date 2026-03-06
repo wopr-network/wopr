@@ -53,74 +53,6 @@ async function readSelfDocFile(session: string, filename: string): Promise<strin
 }
 
 /**
- * Read SELF.md - the main memory/identity file.
- * Checks global identity first, then session directory.
- */
-async function readSelfFile(session: string): Promise<string | null> {
-  // Try global first
-  const globalContent = await getSessionContext("__global__", "memory/SELF.md");
-  if (globalContent !== null) {
-    logger.debug(`[selfdoc-context] Loaded SELF.md from global SQL`);
-    return globalContent;
-  }
-
-  // Fall back to session directory
-  const sessionContent = await getSessionContext(session, "memory/SELF.md");
-  if (sessionContent !== null) {
-    return sessionContent;
-  }
-
-  return null;
-}
-
-/**
- * Read memory/YYYY-MM-DD.md files (last 7 days).
- * Checks global identity first, then session directory.
- */
-async function readRecentMemoryFiles(session: string): Promise<Array<{ date: string; content: string }>> {
-  const entries: Array<{ date: string; content: string }> = [];
-  const seenDates = new Set<string>();
-
-  // Helper to add an entry if not already seen
-  const addEntry = (date: string, content: string, source: string) => {
-    if (seenDates.has(date)) return;
-    entries.push({ date, content });
-    seenDates.add(date);
-    logger.debug(`[selfdoc-context] Loaded memory/${date}.md from ${source}`);
-  };
-
-  // Load all session_context records for global identity memory
-  try {
-    const { listSessionContextFiles } = await import("./session-context-repository.js");
-
-    const globalFiles = await listSessionContextFiles("__global__");
-    for (const filename of globalFiles) {
-      if (!filename.startsWith("memory/") || !filename.match(/memory\/\d{4}-\d{2}-\d{2}\.md$/)) continue;
-      const date = filename.slice("memory/".length).replace(".md", "");
-      const content = await getSessionContext("__global__", filename);
-      if (content !== null) {
-        addEntry(date, content, "global");
-      }
-    }
-
-    const sessionFiles = await listSessionContextFiles(session);
-    for (const filename of sessionFiles) {
-      if (!filename.startsWith("memory/") || !filename.match(/memory\/\d{4}-\d{2}-\d{2}\.md$/)) continue;
-      const date = filename.slice("memory/".length).replace(".md", "");
-      const content = await getSessionContext(session, filename);
-      if (content !== null) {
-        addEntry(date, content, "session");
-      }
-    }
-  } catch (err) {
-    logger.error(`[selfdoc-context] Failed to read memory files from SQL:`, err);
-  }
-
-  // Sort by date and return last 7 days
-  return entries.sort((a, b) => a.date.localeCompare(b.date)).slice(-7);
-}
-
-/**
  * Context provider for self-documentation files
  *
  * This is loaded with high priority (after system context, before conversation)
@@ -148,22 +80,8 @@ export const selfDocContextProvider: ContextProvider = {
       }
     }
 
-    // Load SELF.md - the main memory/identity file (from global or session)
-    const selfContent = await readSelfFile(session);
-    if (selfContent) {
-      parts.push(`## SELF (Long-term Memory)\n\n${selfContent}`);
-      loadedFiles.push("memory/SELF.md");
-    }
-
-    // Load recent memory files (daily notes from global and session)
-    const memoryFiles = await readRecentMemoryFiles(session);
-    if (memoryFiles.length > 0) {
-      parts.push("## Recent Memory (last 7 days)\n");
-      for (const { date, content } of memoryFiles) {
-        parts.push(`### ${date}\n${content}`);
-      }
-      loadedFiles.push(`${memoryFiles.length} memory/*.md files`);
-    }
+    // Memory files (SELF.md, daily notes) are NOT loaded here.
+    // Memory injection is handled by the memory plugin, not core.
 
     if (parts.length === 0) {
       return null;
