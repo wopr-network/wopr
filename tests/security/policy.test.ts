@@ -1101,7 +1101,7 @@ describe("Security Policy Module", () => {
       const configWrite = checkCapability(source, "config.write");
       const crossInject = checkCapability(source, "cross.inject");
       const sessionSpawn = checkCapability(source, "session.spawn");
-      const memoryWrite = checkCapability(source, "config.write");
+      const memoryWrite = checkCapability(source, "memory.write");
 
       expect(configWrite.allowed).toBe(false);
       expect(crossInject.allowed).toBe(false);
