@@ -6,7 +6,7 @@ export const openApiDocumentation = {
     title: "WOPR Daemon API",
     version: "1.2.0",
     description:
-      "REST API for WOPR daemon — manage sessions, plugins, providers, instances, capabilities, and more. Supports WebSocket for real-time streaming. Note: plugin-provided routes (skills, crons, canvas) are mounted dynamically and do not appear in this spec.",
+      "REST API for WOPR daemon — manage sessions, plugins, providers, instances, capabilities, and more. Supports WebSocket for real-time streaming. Note: plugin-provided routes (skills, canvas) are mounted dynamically and do not appear in this spec.",
     contact: {
       name: "WOPR",
       url: "https://wopr.bot",

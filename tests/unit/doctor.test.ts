@@ -74,14 +74,14 @@ describe("doctor command", () => {
       );
       vi.mocked(access).mockResolvedValue(undefined);
       vi.mocked(config.load).mockResolvedValue({
-        daemon: { port: 7437, host: "127.0.0.1", autoStart: false, cronScriptsEnabled: false },
+        daemon: { port: 7437, host: "127.0.0.1", autoStart: false},
         anthropic: { apiKey: "sk-test" },
         oauth: {},
         discovery: { topics: [], autoJoin: false },
         plugins: { autoLoad: true, directories: ["/tmp/test-wopr/plugins"] },
       } as any);
       vi.mocked(config.get).mockReturnValue({
-        daemon: { port: 7437, host: "127.0.0.1", autoStart: false, cronScriptsEnabled: false },
+        daemon: { port: 7437, host: "127.0.0.1", autoStart: false},
         anthropic: { apiKey: "sk-test" },
         oauth: {},
         discovery: { topics: [], autoJoin: false },
@@ -132,7 +132,7 @@ describe("doctor command", () => {
       delete process.env.ANTHROPIC_API_KEY;
       delete process.env.OPENAI_API_KEY;
       vi.mocked(config.get).mockReturnValue({
-        daemon: { port: 7437, host: "127.0.0.1", autoStart: false, cronScriptsEnabled: false },
+        daemon: { port: 7437, host: "127.0.0.1", autoStart: false},
         anthropic: {},
         oauth: {},
         discovery: { topics: [], autoJoin: false },

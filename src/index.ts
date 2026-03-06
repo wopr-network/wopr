@@ -16,8 +16,6 @@ export type {
   AccessGrant,
   ConversationEntry,
   ConversationEntryType,
-  CronJob,
-  CronScript,
   DiscoveryMessage,
   DiscoveryMessageType,
   Identity,

@@ -327,7 +327,7 @@ export function createPluginContext(
     registerToolPermission(toolName: string, permission: string) {
       if (toolName.includes(":")) {
         throw new Error(
-          `Tool name must be a bare name (e.g., "cron_schedule"), not a namespaced name (e.g., "plugin:cron_schedule"). The security system enforces permissions on bare tool names.`,
+          `Tool name must be a bare name (e.g., "sessions_send"), not a namespaced name (e.g., "plugin:sessions_send"). The security system enforces permissions on bare tool names.`,
         );
       }
       getSecurityRegistry().registerToolCapability(toolName, permission, pluginName);

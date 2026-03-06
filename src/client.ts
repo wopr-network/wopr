@@ -6,7 +6,7 @@
 
 import type { WoprConfig } from "./core/config.js";
 import { getToken } from "./daemon/auth-token.js";
-import type { ConversationEntry, CronJob, StreamCallback, StreamMessage } from "./types.js";
+import type { ConversationEntry, StreamCallback, StreamMessage } from "./types.js";
 
 const DEFAULT_URL = "http://127.0.0.1:7437";
 
@@ -170,25 +170,6 @@ export class WoprClient {
     return this.request(`/sessions/${encodeURIComponent(session)}/inject`, {
       method: "POST",
       body: JSON.stringify(bodyPayload),
-    });
-  }
-
-  // Crons
-  async getCrons(): Promise<CronJob[]> {
-    const data = await this.request<{ crons: CronJob[] }>("/crons");
-    return data.crons;
-  }
-
-  async addCron(cron: Omit<CronJob, "runAt"> & { runAt?: number }): Promise<void> {
-    await this.request("/crons", {
-      method: "POST",
-      body: JSON.stringify(cron),
-    });
-  }
-
-  async removeCron(name: string): Promise<void> {
-    await this.request(`/crons/${encodeURIComponent(name)}`, {
-      method: "DELETE",
     });
   }
 

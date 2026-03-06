@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Migration Notes
 
+### Cron Scheduling Extracted to Plugin (WOP-1771)
+
+The built-in cron scheduling support has been **removed from the WOPR core** and
+extracted to the standalone `wopr-plugin-cron` package.
+
+**What was removed:**
+
+- `CronJob` and `CronScript` types from core
+- `getCrons()`, `addCron()`, `removeCron()` from core API
+- `cronScriptsEnabled` config field (now ignored)
+
+**Upgrade steps:**
+
+```bash
+npm install wopr-plugin-cron
+```
+
+Then register the plugin in your WOPR config:
+
+```json
+{
+  "plugins": ["wopr-plugin-cron"]
+}
+```
+
+If you do not install `wopr-plugin-cron`, any cron-related API calls will fail.
+
+---
+
 ### `http_fetch` and `exec_command` Extracted to Plugin (WOP-567)
 
 The built-in `http_fetch` and `exec_command` tools have been **removed from the WOPR core** and

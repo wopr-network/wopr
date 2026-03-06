@@ -360,8 +360,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
             identity: { publicKey: peerKey },
           });
           daemonLog(`[security] Created P2P source (untrusted) for peer ${peerKey.slice(0, 8)}...`);
-        } else if (from === "cron") {
-          source = createInjectionSource("cron");
         } else if (from === "api") {
           source = createInjectionSource("api", { trustLevel: "semi-trusted" });
         } else if (from.startsWith("plugin:")) {

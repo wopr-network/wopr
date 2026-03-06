@@ -27,9 +27,7 @@ export const BUILTIN_TEMPLATES: readonly InstanceTemplate[] = [
     description: "Discord AI assistant with semantic memory",
     plugins: ["@wopr-network/plugin-discord", "@wopr-network/plugin-memory-semantic"],
     providers: ["@wopr-network/provider-anthropic"],
-    config: {
-      daemon: { cronScriptsEnabled: false },
-    },
+    config: {},
     tags: ["discord", "chat", "memory"],
   },
   {
@@ -37,9 +35,7 @@ export const BUILTIN_TEMPLATES: readonly InstanceTemplate[] = [
     description: "Slack AI assistant with semantic memory",
     plugins: ["@wopr-network/plugin-slack", "@wopr-network/plugin-memory-semantic"],
     providers: ["@wopr-network/provider-anthropic"],
-    config: {
-      daemon: { cronScriptsEnabled: false },
-    },
+    config: {},
     tags: ["slack", "chat", "memory"],
   },
   {
@@ -52,9 +48,7 @@ export const BUILTIN_TEMPLATES: readonly InstanceTemplate[] = [
       "@wopr-network/plugin-memory-semantic",
     ],
     providers: ["@wopr-network/provider-anthropic"],
-    config: {
-      daemon: { cronScriptsEnabled: false },
-    },
+    config: {},
     tags: ["discord", "slack", "whatsapp", "multi-channel", "memory"],
   },
   {
@@ -68,9 +62,7 @@ export const BUILTIN_TEMPLATES: readonly InstanceTemplate[] = [
       "@wopr-network/plugin-web-search",
     ],
     providers: ["@wopr-network/provider-anthropic"],
-    config: {
-      daemon: { cronScriptsEnabled: false },
-    },
+    config: {},
     tags: ["developer", "github", "browser", "search", "discord"],
   },
   {

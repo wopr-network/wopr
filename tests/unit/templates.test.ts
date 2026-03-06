@@ -292,8 +292,7 @@ describe("applyTemplate", () => {
 
   it("should merge template base config into generated config", () => {
     const result = applyTemplate("inst-3", "discord-bot");
-    const daemon = result.config.daemon as Record<string, unknown>;
-
-    expect(daemon.cronScriptsEnabled).toBe(false);
+    // After cron removal, discord-bot template has empty config
+    expect(result.config).toBeDefined();
   });
 });

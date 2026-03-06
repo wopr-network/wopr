@@ -32,7 +32,7 @@ const {
   createCliContext,
   createDaemonContext,
   createPluginContext,
-  createCronContext,
+
   createP2PContext,
   createP2PDiscoveryContext,
   createApiContext,
@@ -561,13 +561,6 @@ describe("Security Context Module", () => {
       expect(ctx.source.type).toBe("plugin");
       expect(ctx.trustLevel).toBe("semi-trusted");
       expect(ctx.source.identity?.pluginName).toBe("my-plugin");
-    });
-
-    it("createCronContext should create owner-trust context", () => {
-      const ctx = createCronContext("cron-session");
-
-      expect(ctx.source.type).toBe("cron");
-      expect(ctx.trustLevel).toBe("owner");
     });
 
     it("createP2PContext should create context with configurable trust", () => {
