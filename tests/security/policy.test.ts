@@ -55,13 +55,7 @@ const { getSecurityRegistry, resetSecurityRegistry } = await import("../../src/s
 
 import type { InjectionSource, SecurityConfig } from "../../src/security/types.js";
 
-function registerHttpAndExec() {
-  const reg = getSecurityRegistry();
-  reg.registerPermission("inject.network", "__test__");
-  reg.registerPermission("inject.exec", "__test__");
-  reg.registerToolCapability("http_fetch", "inject.network", "__test__");
-  reg.registerToolCapability("exec_command", "inject.exec", "__test__");
-}
+import { registerHttpAndExec } from "./helpers.js";
 
 // ============================================================================
 // Helpers
