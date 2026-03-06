@@ -4,10 +4,10 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { WoprClient } from "../client.js";
 import { logger } from "../logger.js";
-import { PID_FILE, SESSIONS_DIR, SKILLS_DIR, WOPR_HOME } from "../paths.js";
+import { PID_FILE, SESSIONS_DIR, WOPR_HOME } from "../paths.js";
 
 // Ensure directories exist
-[WOPR_HOME, SESSIONS_DIR, SKILLS_DIR].forEach((dir) => {
+[WOPR_HOME, SESSIONS_DIR].forEach((dir) => {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }

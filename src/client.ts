@@ -286,61 +286,6 @@ export class WoprClient {
     });
   }
 
-  // Skills
-  async getSkills(): Promise<unknown[]> {
-    const data = await this.request<{ skills: unknown[] }>("/skills");
-    return data.skills;
-  }
-
-  async installSkill(source: string, name?: string): Promise<void> {
-    await this.request("/skills/install", {
-      method: "POST",
-      body: JSON.stringify({ source, name }),
-    });
-  }
-
-  async removeSkill(name: string): Promise<void> {
-    await this.request(`/skills/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    });
-  }
-
-  async createSkill(name: string, description?: string): Promise<void> {
-    await this.request("/skills/create", {
-      method: "POST",
-      body: JSON.stringify({ name, description }),
-    });
-  }
-
-  async searchSkills(query: string): Promise<unknown[]> {
-    const data = await this.request<{ results: unknown[] }>(`/skills/search?q=${encodeURIComponent(query)}`);
-    return data.results;
-  }
-
-  async getSkillRegistries(): Promise<{ name: string; url: string }[]> {
-    const data = await this.request<{ registries: { name: string; url: string }[] }>("/skills/registries");
-    return data.registries;
-  }
-
-  async addSkillRegistry(name: string, url: string): Promise<void> {
-    await this.request("/skills/registries", {
-      method: "POST",
-      body: JSON.stringify({ name, url }),
-    });
-  }
-
-  async removeSkillRegistry(name: string): Promise<void> {
-    await this.request(`/skills/registries/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    });
-  }
-
-  async clearSkillCache(): Promise<void> {
-    await this.request("/skills/cache", {
-      method: "DELETE",
-    });
-  }
-
   // Config
   async getConfig(): Promise<WoprConfig> {
     return this.request("/config");

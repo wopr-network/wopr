@@ -18,7 +18,6 @@ import { channelsStep } from "./steps/07-channels.js";
 import { voiceStep } from "./steps/07b-voice.js";
 import { externalStep } from "./steps/07c-external.js";
 import { githubStep } from "./steps/07d-github.js";
-import { skillsStep } from "./steps/08-skills.js";
 import { daemonStep } from "./steps/09-daemon.js";
 import { finalizeStep } from "./steps/10-finalize.js";
 import type { OnboardContext, OnboardOptions, OnboardRuntime } from "./types.js";
@@ -36,7 +35,6 @@ const steps = [
   voiceStep, // Voice setup after channels
   externalStep, // External access (Tailscale Funnel)
   githubStep, // GitHub webhook integration
-  skillsStep,
   daemonStep,
   finalizeStep,
 ];
@@ -112,9 +110,6 @@ export async function onboardCommand(args: string[]): Promise<void> {
       case "--skip-channels":
         opts.skipChannels = true;
         break;
-      case "--skip-skills":
-        opts.skipSkills = true;
-        break;
       case "--skip-plugins":
         opts.skipPlugins = true;
         break;
@@ -162,7 +157,6 @@ Options:
   -r, --reset           Reset existing configuration first
   -w, --workspace PATH  Set workspace directory
       --skip-channels   Skip channel/plugin setup
-      --skip-skills     Skip skills setup
       --skip-plugins    Skip plugin installation
       --skip-external   Skip external access setup
       --skip-github     Skip GitHub integration
