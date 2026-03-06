@@ -582,7 +582,7 @@ describe("Security Policy Module", () => {
       await setSecurityConfig({ enforcement: "enforce" });
 
       const source = makeSource("p2p"); // untrusted, only has "inject"
-      // http_fetch requires inject.network, but untrusted has deny: ["*"]
+      // http_fetch requires inject capability, but untrusted has deny: ["*"]
       // so it gets denied by tool policy first
       const result = checkToolAccess(source, "http_fetch");
 
@@ -1072,7 +1072,7 @@ describe("Security Policy Module", () => {
         enforcement: "enforce",
         trustLevels: {
           "semi-trusted": {
-            capabilities: ["inject", "inject.network"],
+            capabilities: ["inject"],
             tools: {
               deny: ["http_fetch"],
               allow: ["http_fetch"], // Explicitly allowed overrides deny
@@ -1101,10 +1101,10 @@ describe("Security Policy Module", () => {
       expect(sessionSpawn.allowed).toBe(false);
       expect(memoryWrite.allowed).toBe(false);
 
-      // Note: inject.exec IS allowed because "inject" parent grants inject.*
+      // Note: inject.tools IS allowed because "inject" parent grants inject.*
       // This is by design - the parent capability model means "inject" grants all inject sub-caps
-      const execCmd = checkCapability(source, "inject.exec");
-      expect(execCmd.allowed).toBe(true);
+      const injectTools = checkCapability(source, "inject.tools");
+      expect(injectTools.allowed).toBe(true);
     });
 
     it("should prevent untrusted from spawning sessions", async () => {
