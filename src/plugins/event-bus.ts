@@ -5,6 +5,7 @@
  * event bus with plugin source metadata.
  */
 
+import { getEventTypeRegistry } from "../core/event-type-registry.js";
 import { eventBus } from "../core/events.js";
 import type { EventHandler, WOPREventBus } from "../types.js";
 
@@ -68,6 +69,14 @@ export function createPluginEventBus(pluginName: string): WOPREventBus {
 
     listenerCount(event: string): number {
       return eventBus.listenerCount(event);
+    },
+
+    registerEventType(name: string, options?: { schema?: unknown; description?: string }): void {
+      getEventTypeRegistry().registerEventType(name, options ?? {}, pluginName);
+    },
+
+    unregisterEventType(name: string): void {
+      getEventTypeRegistry().unregisterEventType(name, pluginName);
     },
   };
 }

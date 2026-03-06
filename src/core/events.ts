@@ -10,6 +10,7 @@
 
 import { EventEmitter } from "node:events";
 import { logger, shouldLogStack } from "../logger.js";
+import { getEventTypeRegistry } from "./event-type-registry.js";
 
 // ============================================================================
 // Core Event Types
@@ -486,9 +487,18 @@ class WOPREventBusImpl implements WOPREventBus {
   }
 
   async emitCustom(event: string, payload: unknown, source: string = "unknown"): Promise<void> {
-    // Validate custom event name (suggest plugin: prefix)
-    if (!event.includes(":")) {
-      logger.warn(`[events] Custom event '${event}' should use 'plugin:' prefix (e.g., 'myplugin:customEvent')`);
+    // Validate custom event name (suggest namespace prefix)
+    if (!event.includes(":") && !event.includes(".")) {
+      logger.warn(
+        `[events] Custom event '${event}' should use namespace prefix (e.g., 'myplugin:customEvent' or 'myplugin.customEvent')`,
+      );
+    }
+
+    // Reject unregistered event types
+    if (!getEventTypeRegistry().isRegistered(event)) {
+      throw new Error(
+        `"${event}" is not a registered event type. Plugins must call ctx.events.registerEventType("${event}", { ... }) during init.`,
+      );
     }
 
     await this.emit(event as keyof WOPREventMap, payload as WOPREventMap[keyof WOPREventMap], source);

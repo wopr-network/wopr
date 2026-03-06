@@ -11,6 +11,7 @@ import { getCapabilityDependencyGraph } from "../core/capability-deps.js";
 import { getCapabilityHealthProber } from "../core/capability-health.js";
 import { getCapabilityRegistry } from "../core/capability-registry.js";
 import { config as centralConfig } from "../core/config.js";
+import { getEventTypeRegistry } from "../core/event-type-registry.js";
 import { emitPluginActivated, emitPluginDeactivated, emitPluginDrained, emitPluginDraining } from "../core/events.js";
 import { PluginManifestSchema } from "../daemon/openapi/manifest-schema.js";
 import { logger, shouldLogStack } from "../logger.js";
@@ -131,6 +132,15 @@ async function initAndActivatePlugin(
       } catch (depErr: unknown) {
         logger.warn(
           `[plugins] ${installed.name}: failed to unregister capability deps during init cleanup: ${depErr instanceof Error ? depErr.message : String(depErr)}`,
+        );
+      }
+
+      // Unregister any event types registered during failed init
+      try {
+        getEventTypeRegistry().unregisterAllForPlugin(installed.name);
+      } catch (evtErr: unknown) {
+        logger.warn(
+          `[plugins] ${installed.name}: failed to unregister event types during init cleanup: ${evtErr instanceof Error ? evtErr.message : String(evtErr)}`,
         );
       }
 
@@ -599,6 +609,9 @@ export async function unloadPlugin(name: string, options: UnloadPluginOptions = 
 
   // Cleanup security registrations (permissions, injection sources, tool mappings)
   getSecurityRegistry().unregisterAllForPlugin(name);
+
+  // Cleanup dynamic event type registrations
+  getEventTypeRegistry().unregisterAllForPlugin(name);
 
   // ── Step 5: Emit deactivated, clean up state ──
   const version = loaded.plugin.version || manifest?.version || "unknown";
