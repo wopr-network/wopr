@@ -12,7 +12,6 @@ export {
   clearContext,
   createApiContext,
   createCliContext,
-  createCronContext,
   createDaemonContext,
   createP2PContext,
   createP2PDiscoveryContext,

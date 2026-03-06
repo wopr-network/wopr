@@ -152,7 +152,7 @@ export function bearerAuth(): MiddlewareHandler {
  * Sets user context and role based on the auth method.
  *
  * Daemon bearer token holders are treated as "admin" role.
- * API key holders get role based on their scope (full=admin, read/write/cron=viewer).
+ * API key holders get role based on their scope (full=admin, read/write=viewer).
  */
 export function requireAuth(): MiddlewareHandler {
   return async (c, next) => {

@@ -236,7 +236,6 @@ describe("ConfigManager", () => {
         port: 7437,
         host: "127.0.0.1",
         autoStart: false,
-        cronScriptsEnabled: false,
       });
     });
   });

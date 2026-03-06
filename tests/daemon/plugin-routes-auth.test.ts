@@ -9,9 +9,6 @@ vi.mock("../../src/plugins/extensions.js", () => {
   const skillsRouter = new Hono();
   skillsRouter.get("/list", (c) => c.json({ skills: [] }));
 
-  const cronsRouter = new Hono();
-  cronsRouter.get("/list", (c) => c.json({ crons: [] }));
-
   const canvasRouter = new Hono();
   canvasRouter.get("/state", (c) => c.json({ canvas: {} }));
 
@@ -22,7 +19,6 @@ vi.mock("../../src/plugins/extensions.js", () => {
     getPluginExtension: vi.fn((key: string) => {
       const map: Record<string, Hono> = {
         "skills:router": skillsRouter,
-        "crons:router": cronsRouter,
         "canvas:router": canvasRouter,
         "metrics:router": metricsRouter,
       };
@@ -40,15 +36,11 @@ function buildTestApp() {
 
   // Apply requireAuth before mounting, same as production
   app.use("/skills/*", requireAuth());
-  app.use("/crons/*", requireAuth());
   app.use("/canvas/*", requireAuth());
   app.use("/observability/*", requireAuth());
 
   const skills = getPluginExtension("skills:router");
   if (skills) app.route("/skills", skills as Hono);
-
-  const crons = getPluginExtension("crons:router");
-  if (crons) app.route("/crons", crons as Hono);
 
   const canvas = getPluginExtension("canvas:router");
   if (canvas) app.route("/canvas", canvas as Hono);
@@ -68,7 +60,6 @@ describe("plugin-mounted routes require auth (WOP-1546)", () => {
 
   const routes = [
     { path: "/skills/list", name: "skills" },
-    { path: "/crons/list", name: "crons" },
     { path: "/canvas/state", name: "canvas" },
     { path: "/observability/health", name: "observability" },
   ];

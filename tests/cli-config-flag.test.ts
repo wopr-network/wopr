@@ -36,7 +36,7 @@ describe("ConfigManager with custom config path", () => {
     writeFileSync(
       tmpConfig,
       JSON.stringify({
-        daemon: { port: 9999, host: "0.0.0.0", autoStart: false, cronScriptsEnabled: false },
+        daemon: { port: 9999, host: "0.0.0.0", autoStart: false },
         anthropic: {},
         oauth: {},
         discovery: { topics: [], autoJoin: false },

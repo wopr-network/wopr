@@ -360,8 +360,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
             identity: { publicKey: peerKey },
           });
           daemonLog(`[security] Created P2P source (untrusted) for peer ${peerKey.slice(0, 8)}...`);
-        } else if (from === "cron") {
-          source = createInjectionSource("cron");
         } else if (from === "api") {
           source = createInjectionSource("api", { trustLevel: "semi-trusted" });
         } else if (from.startsWith("plugin:")) {
@@ -415,7 +413,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   // Require auth context for plugin-mounted routes (WOP-1546)
   app.use("/skills/*", requireAuth());
-  app.use("/crons/*", requireAuth());
   app.use("/canvas/*", requireAuth());
   app.use("/observability/*", requireAuth());
 
@@ -425,12 +422,6 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   if (maybeSkillsRouter) {
     app.route("/skills", maybeSkillsRouter as Hono);
     daemonLog("Skills REST routes mounted from plugin");
-  }
-
-  const maybeCronsRouter = getPluginExtension("crons:router");
-  if (maybeCronsRouter) {
-    app.route("/crons", maybeCronsRouter as Hono);
-    daemonLog("Crons REST routes mounted from plugin");
   }
 
   const maybeCanvasRouter = getPluginExtension("canvas:router");

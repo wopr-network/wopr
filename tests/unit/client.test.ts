@@ -352,31 +352,6 @@ describe("WoprClient", () => {
     });
   });
 
-  // --- Crons ---
-  describe("crons", () => {
-    it("getCrons() should return crons array", async () => {
-      const crons = [{ name: "c1", schedule: "* * * * *", session: "s", message: "hi" }];
-      vi.stubGlobal("fetch", mockFetchResponse({ crons }));
-      expect(await client.getCrons()).toEqual(crons);
-    });
-
-    it("addCron() should POST cron data", async () => {
-      const fetchMock = mockFetchResponse({});
-      vi.stubGlobal("fetch", fetchMock);
-      await client.addCron({ name: "c1", schedule: "0 * * * *", session: "s", message: "go" });
-      expect(fetchMock.mock.calls[0][1].method).toBe("POST");
-      expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:9999/crons");
-    });
-
-    it("removeCron() should DELETE with encoded name", async () => {
-      const fetchMock = mockFetchResponse({});
-      vi.stubGlobal("fetch", fetchMock);
-      await client.removeCron("my cron");
-      expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:9999/crons/my%20cron");
-      expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
-    });
-  });
-
   // --- Auth ---
   describe("getAuthStatus()", () => {
     it("should return auth status", async () => {

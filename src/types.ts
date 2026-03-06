@@ -68,44 +68,6 @@ export interface ConversationEntry {
   channel?: ChannelRef; // Optional channel metadata for traceability
 }
 
-// Cron types
-export interface CronScript {
-  name: string; // Template key, referenced as {{name}} in message
-  command: string; // Shell command to execute
-  timeout?: number; // Per-script timeout in ms (default: 30000)
-  cwd?: string; // Working directory (optional)
-}
-
-export interface CronJob {
-  name: string;
-  schedule: string;
-  session: string;
-  message: string;
-  scripts?: CronScript[];
-  once?: boolean;
-  runAt?: number;
-}
-
-export interface CronScriptResult {
-  name: string;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  durationMs: number;
-  error?: string;
-}
-
-export interface CronHistoryEntry {
-  name: string;
-  session: string;
-  timestamp: number;
-  success: boolean;
-  durationMs: number;
-  error?: string;
-  message: string; // Full resolved message
-  scriptResults?: CronScriptResult[];
-}
-
 // Identity types
 export interface Identity {
   publicKey: string; // Ed25519 for signing

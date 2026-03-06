@@ -172,7 +172,7 @@ export const sandboxStep: OnboardStep = async (ctx: OnboardContext) => {
       {
         value: "non-main",
         label: "Non-main sessions (recommended)",
-        hint: "P2P, API, cron - but not CLI main session",
+        hint: "P2P, API - but not CLI main session",
       },
       {
         value: "all",

@@ -300,13 +300,6 @@ export function createPluginContext(
 }
 
 /**
- * Create a security context for cron jobs (owner trust)
- */
-export function createCronContext(session: string): SecurityContext {
-  return new SecurityContext(createInjectionSource("cron"), session);
-}
-
-/**
  * Create a security context for P2P injections
  */
 export function createP2PContext(

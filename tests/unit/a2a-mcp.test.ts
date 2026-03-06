@@ -72,9 +72,9 @@ describe("a2a-mcp", () => {
       expect(tools).toContain("capability_discover");
     });
 
-    it("returns at least 24 core tools", () => {
+    it("returns at least 19 core tools", () => {
       const tools = listA2ATools();
-      expect(tools.length).toBeGreaterThanOrEqual(24);
+      expect(tools.length).toBeGreaterThanOrEqual(19);
     });
 
     it("includes session-related tools", () => {
@@ -88,15 +88,6 @@ describe("a2a-mcp", () => {
       expect(tools).toContain("memory_write");
       expect(tools).toContain("memory_search");
       expect(tools).toContain("memory_get");
-    });
-
-    it("includes cron tools", () => {
-      const tools = listA2ATools();
-      expect(tools).toContain("cron_schedule");
-      expect(tools).toContain("cron_once");
-      expect(tools).toContain("cron_list");
-      expect(tools).toContain("cron_cancel");
-      expect(tools).toContain("cron_history");
     });
 
     it("includes identity, event, and security tools", () => {
