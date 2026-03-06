@@ -21,6 +21,15 @@ describe("SecurityRegistry", () => {
 			expect(reg.hasPermission("*")).toBe(true);
 		});
 
+		it("should NOT include inject.network or inject.exec in core permissions", () => {
+			const reg = getSecurityRegistry();
+			const all = reg.getAllPermissions();
+			expect(all).not.toContain("inject.network");
+			expect(all).not.toContain("inject.exec");
+			expect(reg.hasPermission("inject.network")).toBe(false);
+			expect(reg.hasPermission("inject.exec")).toBe(false);
+		});
+
 		it("registers a new permission", () => {
 			const reg = getSecurityRegistry();
 			reg.registerPermission("webhook.send", "my-plugin");
@@ -133,7 +142,15 @@ describe("SecurityRegistry", () => {
 		it("has core tool mappings by default", () => {
 			const reg = getSecurityRegistry();
 			expect(reg.getToolCapability("config_get")).toBe("config.read");
-			expect(reg.getToolCapability("exec_command")).toBe("inject.exec");
+		});
+
+		it("should NOT include http_fetch or exec_command in core tool capabilities", () => {
+			const reg = getSecurityRegistry();
+			expect(reg.getToolCapability("http_fetch")).toBeUndefined();
+			expect(reg.getToolCapability("exec_command")).toBeUndefined();
+			const allTools = reg.getAllToolCapabilities();
+			expect(allTools.has("http_fetch")).toBe(false);
+			expect(allTools.has("exec_command")).toBe(false);
 		});
 
 		it("registers a new tool mapping", () => {
@@ -233,7 +250,7 @@ describe("SecurityRegistry", () => {
 			const { TOOL_CAPABILITY_MAP } = await import("../../../src/security/types.js");
 			const keys = Object.keys(TOOL_CAPABILITY_MAP);
 			expect(keys).toContain("config_get");
-			expect(keys).toContain("exec_command");
+			expect(keys).not.toContain("exec_command");
 		});
 
 		it("in operator works", async () => {

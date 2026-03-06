@@ -51,7 +51,17 @@ const { createInjectionSource, DEFAULT_SECURITY_CONFIG } = await import(
   "../../src/security/types.js"
 );
 
+const { getSecurityRegistry, resetSecurityRegistry } = await import("../../src/security/registry.js");
+
 import type { InjectionSource, SecurityConfig } from "../../src/security/types.js";
+
+function registerHttpAndExec() {
+  const reg = getSecurityRegistry();
+  reg.registerPermission("inject.network", "__test__");
+  reg.registerPermission("inject.exec", "__test__");
+  reg.registerToolCapability("http_fetch", "inject.network", "__test__");
+  reg.registerToolCapability("exec_command", "inject.exec", "__test__");
+}
 
 // ============================================================================
 // Helpers
@@ -87,14 +97,17 @@ describe("Security Policy Module", () => {
     }
 
     // Reset storage and initialize security
+    resetSecurityRegistry();
     resetStorage();
     getStorage(":memory:");
     await initSecurity(testDir);
+    registerHttpAndExec();
   });
 
   afterEach(() => {
     resetSecurityStore();
     resetSessionStorageInit();
+    resetSecurityRegistry();
     resetStorage();
     vi.restoreAllMocks();
   });
