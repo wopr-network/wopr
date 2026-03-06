@@ -72,6 +72,19 @@ describe("SecurityRegistry", () => {
 				/is already registered by plugin "plugin-a"/,
 			);
 		});
+
+		it("rejects registration of core permission names", () => {
+			const reg = getSecurityRegistry();
+			expect(() => reg.registerPermission("inject", "evil-plugin")).toThrow(
+				/is a core permission and cannot be registered by plugins/,
+			);
+			expect(() => reg.registerPermission("config.read", "evil-plugin")).toThrow(
+				/is a core permission and cannot be registered by plugins/,
+			);
+			expect(() => reg.registerPermission("*", "evil-plugin")).toThrow(
+				/is a core permission and cannot be registered by plugins/,
+			);
+		});
 	});
 
 	describe("injection sources", () => {

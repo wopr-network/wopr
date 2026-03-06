@@ -87,6 +87,9 @@ export class SecurityRegistry {
         `Invalid permission format: "${name}". Must match namespace.action[.sub...] (lowercase alphanumeric, dot-separated).`,
       );
     }
+    if (CORE_PERMISSIONS.has(name)) {
+      throw new Error(`Permission "${name}" is a core permission and cannot be registered by plugins.`);
+    }
     const existing = this.pluginPermissions.get(name);
     if (existing !== undefined && existing !== pluginName) {
       throw new Error(
