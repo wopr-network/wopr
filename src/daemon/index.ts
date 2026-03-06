@@ -413,6 +413,7 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
 
   // Require auth context for plugin-mounted routes (WOP-1546)
   app.use("/skills/*", requireAuth());
+  app.use("/crons/*", requireAuth());
   app.use("/canvas/*", requireAuth());
   app.use("/observability/*", requireAuth());
 
@@ -422,6 +423,12 @@ export async function startDaemon(config: DaemonConfig = {}): Promise<void> {
   if (maybeSkillsRouter) {
     app.route("/skills", maybeSkillsRouter as Hono);
     daemonLog("Skills REST routes mounted from plugin");
+  }
+
+  const maybeCronsRouter = getPluginExtension("crons:router");
+  if (maybeCronsRouter) {
+    app.route("/crons", maybeCronsRouter as Hono);
+    daemonLog("Crons REST routes mounted from plugin");
   }
 
   const maybeCanvasRouter = getPluginExtension("canvas:router");
