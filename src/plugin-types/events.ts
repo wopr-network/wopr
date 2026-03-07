@@ -112,33 +112,6 @@ export interface SystemShutdownEvent {
   code?: number;
 }
 
-// Memory events
-export interface MemoryFileChange {
-  action: "upsert" | "delete";
-  path: string;
-  absPath?: string;
-  source: "global" | "session" | "sessions";
-  chunks?: Array<{
-    id: string;
-    text: string;
-    hash: string;
-    startLine: number;
-    endLine: number;
-  }>;
-}
-
-export interface MemoryFilesChangedEvent {
-  changes: MemoryFileChange[];
-}
-
-export interface MemorySearchEvent {
-  query: string;
-  maxResults: number;
-  minScore: number;
-  sessionName: string;
-  results: unknown[] | null;
-}
-
 // Capability registry events
 export interface CapabilityProviderRegisteredEvent {
   capability: string;
@@ -171,8 +144,6 @@ export interface WOPREventMap {
   "plugin:deactivated": PluginDeactivatedEvent;
   "config:change": ConfigChangeEvent;
   "system:shutdown": SystemShutdownEvent;
-  "memory:search": MemorySearchEvent;
-  "memory:filesChanged": MemoryFilesChangedEvent;
   "capability:providerRegistered": CapabilityProviderRegisteredEvent;
   "capability:providerUnregistered": CapabilityProviderUnregisteredEvent;
   "*": WOPREvent;
