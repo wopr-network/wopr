@@ -5,10 +5,11 @@ export default defineConfig({
     environment: "node",
     testTimeout: 10_000,
     coverage: {
-      provider: "istanbul",
-      reporter: ["text", "lcov"],
+      provider: "v8",
       include: ["src/**/*.ts"],
       exclude: ["src/cli.ts", "src/daemon/**", "src/commands/**"],
+      reporter: ["text", "json-summary"],
+      reportOnFailure: true,
     },
     include: ["tests/**/*.test.ts"],
   },
