@@ -117,33 +117,6 @@ export interface SystemRestartScheduledEvent {
   batchedRequests: number;
 }
 
-// Memory events
-export interface MemorySearchEvent {
-  query: string;
-  maxResults: number;
-  minScore: number;
-  sessionName: string;
-  results: unknown[] | null;
-}
-
-export interface MemoryFileChange {
-  action: "upsert" | "delete";
-  path: string;
-  absPath?: string;
-  source: "global" | "session" | "sessions";
-  chunks?: Array<{
-    id: string;
-    text: string;
-    hash: string;
-    startLine: number;
-    endLine: number;
-  }>;
-}
-
-export interface MemoryFilesChangedEvent {
-  changes: MemoryFileChange[];
-}
-
 // Capability health events
 export interface CapabilityProviderHealthChangeEvent {
   capability: string;
@@ -204,10 +177,6 @@ export interface WOPREventMap {
   // System events
   "system:shutdown": SystemShutdownEvent;
   "system:restartScheduled": SystemRestartScheduledEvent;
-
-  // Memory events (for plugin enhancement)
-  "memory:search": MemorySearchEvent;
-  "memory:filesChanged": MemoryFilesChangedEvent;
 
   // Capability health events
   "capability:providerHealthChange": CapabilityProviderHealthChangeEvent;
@@ -387,34 +356,19 @@ class WOPREventBusImpl implements WOPREventBus {
 
   // Events where payload mutation order matters — handlers run sequentially.
   // All other events run handlers concurrently for throughput.
-  private static SEQUENTIAL_EVENTS: ReadonlySet<string> = new Set([
-    "session:beforeInject",
-    "session:afterInject",
-    "memory:search",
-    "memory:filesChanged",
-  ]);
+  private static SEQUENTIAL_EVENTS: ReadonlySet<string> = new Set(["session:beforeInject", "session:afterInject"]);
 
   async emit<T extends keyof WOPREventMap>(event: T, payload: WOPREventMap[T], source: string = "core"): Promise<void> {
     const meta = { timestamp: Date.now(), source };
     const eventName = event as string;
     const listeners = this.emitter.listeners(eventName);
     const sequential = WOPREventBusImpl.SEQUENTIAL_EVENTS.has(eventName);
-    const isFilesChanged = eventName === "memory:filesChanged";
-
-    if (isFilesChanged) {
-      const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-      logger.debug(`[events] memory:filesChanged: ${listeners.length} handlers, heap=${heapMB}MB`);
-    }
 
     if (sequential) {
       // Sequential: await each handler before starting the next so payload
       // mutations (e.g. beforeInject adding <relevant-memories>) are visible
       // to subsequent handlers.
       for (let i = 0; i < listeners.length; i++) {
-        if (isFilesChanged) {
-          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-          logger.debug(`[events] memory:filesChanged handler ${i}/${listeners.length} starting (heap=${heapMB}MB)`);
-        }
         try {
           const result = (listeners[i] as AnyFunction)(payload, meta);
           if (result && typeof result.then === "function") {
@@ -422,10 +376,6 @@ class WOPREventBusImpl implements WOPREventBus {
           }
         } catch (err) {
           logger.error(`[events] Handler ${i} error for ${eventName}:`, err);
-        }
-        if (isFilesChanged) {
-          const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
-          logger.debug(`[events] memory:filesChanged handler ${i} done (heap=${heapMB}MB)`);
         }
       }
     } else {

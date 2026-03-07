@@ -35,8 +35,6 @@ const CORE_EVENT_TYPES = new Set([
   "config:change",
   "system:shutdown",
   "system:restartScheduled",
-  "memory:search",
-  "memory:filesChanged",
   "capability:providerHealthChange",
   "capability:providerRegistered",
   "capability:providerUnregistered",
