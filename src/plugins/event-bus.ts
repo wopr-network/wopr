@@ -71,7 +71,7 @@ export function createPluginEventBus(pluginName: string): WOPREventBus {
       return eventBus.listenerCount(event);
     },
 
-    registerEventType(name: string, options?: { schema?: unknown; description?: string }): void {
+    registerEventType(name: string, options?: { schema?: unknown; description?: string; sequential?: boolean }): void {
       getEventTypeRegistry().registerEventType(name, options ?? {}, pluginName);
     },
 

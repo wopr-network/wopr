@@ -362,7 +362,8 @@ class WOPREventBusImpl implements WOPREventBus {
     const meta = { timestamp: Date.now(), source };
     const eventName = event as string;
     const listeners = this.emitter.listeners(eventName);
-    const sequential = WOPREventBusImpl.SEQUENTIAL_EVENTS.has(eventName);
+    const sequential =
+      WOPREventBusImpl.SEQUENTIAL_EVENTS.has(eventName) || getEventTypeRegistry().isSequential(eventName);
 
     if (sequential) {
       // Sequential: await each handler before starting the next so payload

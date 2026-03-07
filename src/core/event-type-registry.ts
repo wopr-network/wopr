@@ -9,6 +9,13 @@
 export interface EventTypeRegistration {
   schema?: unknown;
   description?: string;
+  /**
+   * When true, handlers for this event run sequentially (one at a time) so that
+   * payload mutations made by one handler are visible to the next. Use this for
+   * events where handler order and mutation visibility matter (e.g. file-index
+   * rebuild events). Defaults to false (concurrent execution).
+   */
+  sequential?: boolean;
 }
 
 interface PluginEventType {
@@ -76,6 +83,10 @@ export class EventTypeRegistry {
 
   isRegistered(name: string): boolean {
     return CORE_EVENT_TYPES.has(name) || this.pluginEventTypes.has(name);
+  }
+
+  isSequential(name: string): boolean {
+    return this.pluginEventTypes.get(name)?.registration.sequential === true;
   }
 
   getRegistration(name: string): EventTypeRegistration | undefined {

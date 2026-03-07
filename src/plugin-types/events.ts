@@ -165,7 +165,7 @@ export interface WOPREventBus {
   emitCustom(event: string, payload: unknown): Promise<void>;
   listenerCount(event: string): number;
   /** Register a plugin event type for dynamic discovery and emit validation */
-  registerEventType(name: string, options?: { schema?: unknown; description?: string }): void;
+  registerEventType(name: string, options?: { schema?: unknown; description?: string; sequential?: boolean }): void;
   /** Unregister a previously registered plugin event type */
   unregisterEventType(name: string): void;
 }
