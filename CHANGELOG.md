@@ -63,6 +63,66 @@ documentation and configuration options.
 
 ---
 
+## [2.0.0](https://github.com/wopr-network/wopr/compare/wopr-v1.6.0...wopr-v2.0.0) (2026-03-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* CronJob, CronScript, CronScriptResult, CronHistoryEntry types removed from public API. cronScriptsEnabled config field removed. WoprClient.getCrons/addCron/removeCron removed. createCronContext removed. cron.manage permission, cron injection source, and cron_* tool capabilities removed from core seeds. Cron plugin must register its own types, permissions, and security metadata via WOPRPluginContext.
+
+### Features
+
+* dynamic permission, source, and tool-mapping registration (WOP-1770) ([#2146](https://github.com/wopr-network/wopr/issues/2146)) ([bbdbe4d](https://github.com/wopr-network/wopr/commit/bbdbe4d76eafd7f2e89a2b186c0e1352f79aaeef))
+
+
+### Bug Fixes
+
+* clear timer leak in withIdleTimeout (WOP-1713) ([#2135](https://github.com/wopr-network/wopr/issues/2135)) ([bec3b2c](https://github.com/wopr-network/wopr/commit/bec3b2ccd9882c6a7bd923a203f7b9114d1ac408))
+* make capability catalog URL configurable via env var (WOP-1603) ([#1947](https://github.com/wopr-network/wopr/issues/1947)) ([2baf158](https://github.com/wopr-network/wopr/commit/2baf158cff9036c30b5b6a6f966a2974edec174a))
+* make OAuth authorize URL configurable via WOPR_OAUTH_AUTH_URL (WOP-1571) ([#2032](https://github.com/wopr-network/wopr/issues/2032)) ([48fdb88](https://github.com/wopr-network/wopr/commit/48fdb88deca2263a8fd56780b13646a4c0fabefb))
+
+
+### Code Refactoring
+
+* dynamic event type registration via EventTypeRegistry (WOP-1776) ([#2153](https://github.com/wopr-network/wopr/issues/2153)) ([e98ae80](https://github.com/wopr-network/wopr/commit/e98ae80bed66b05ce5fe7c8bd59017b9c3e9aea4))
+* extract http_fetch and exec_command from core — network and shell are plugins (WOP-2144) ([#2147](https://github.com/wopr-network/wopr/issues/2147)) ([c318e09](https://github.com/wopr-network/wopr/commit/c318e096884070ecd616f1191b6c07dc10b339be))
+* extract http_fetch and exec_command from core (WOP-1777) ([#2149](https://github.com/wopr-network/wopr/issues/2149)) ([0034a0b](https://github.com/wopr-network/wopr/commit/0034a0b8a42f85f985fb3ee070ac2c2a51436897))
+* remove all cron code from wopr core (WOP-1771) ([#2150](https://github.com/wopr-network/wopr/issues/2150)) ([24efef1](https://github.com/wopr-network/wopr/commit/24efef19cab15d06ec0fab9e50a38cd149ac921e))
+* remove all memory code from wopr core — memory is a plugin (WOP-1773) ([#2151](https://github.com/wopr-network/wopr/issues/2151)) ([4bbfb60](https://github.com/wopr-network/wopr/commit/4bbfb60ddbd1ab41823c63f00fd3fe3e349c6f57))
+* remove all memory functionality from wopr core (WOP-1726) ([#2290](https://github.com/wopr-network/wopr/issues/2290)) ([0e9fbcb](https://github.com/wopr-network/wopr/commit/0e9fbcb3a95011fed74ad96782ff52d3d4dff54c))
+* remove all skills code from wopr core (WOP-1775) ([#2152](https://github.com/wopr-network/wopr/issues/2152)) ([8f22e8a](https://github.com/wopr-network/wopr/commit/8f22e8ab8392834a407c2a4a39ae89f21b414cd6))
+
+
+### Security
+
+* add requireAdmin() to mutating plugin routes (WOP-1710) ([#2090](https://github.com/wopr-network/wopr/issues/2090)) ([2ee4faf](https://github.com/wopr-network/wopr/commit/2ee4faf2a4560a6b27e9a746435bd7521c2d97d0))
+* add requireAuth() to plugin-mounted routes (WOP-1546) ([#1945](https://github.com/wopr-network/wopr/issues/1945)) ([0a87b20](https://github.com/wopr-network/wopr/commit/0a87b20ca37b0190e9a1f56c8c78b1bfd6c5fb24))
+* add requireWriteScope() middleware for all mutating routes (WOP-1711) ([#2123](https://github.com/wopr-network/wopr/issues/2123)) ([967863c](https://github.com/wopr-network/wopr/commit/967863c79cb54e906f332041ff1349a5cb0f6dee))
+* add write-scope guard to config PUT/DELETE routes (WOP-1709) ([#2088](https://github.com/wopr-network/wopr/issues/2088)) ([ccf69f9](https://github.com/wopr-network/wopr/commit/ccf69f95ed508339aad9169ae805dd12c1ebf778))
+* enforce API key scope on WebSocket topic subscriptions (WOP-1712) ([#2136](https://github.com/wopr-network/wopr/issues/2136)) ([757261a](https://github.com/wopr-network/wopr/commit/757261adeef588a0d983ca7ceb98d6e7dbc1afc2))
+* gate /openapi.json and /healthz/history behind auth (WOP-1550) ([#2039](https://github.com/wopr-network/wopr/issues/2039)) ([0e151ff](https://github.com/wopr-network/wopr/commit/0e151ff0e3fb81dd4859e02b7dde1dd8171f9d9f))
+* guard setValue/getValue and config routes against prototype pollution (WOP-1539) ([#1942](https://github.com/wopr-network/wopr/issues/1942)) ([58b06a9](https://github.com/wopr-network/wopr/commit/58b06a9a696e7eaf1d338dc80d44f997c21ed02f))
+* validate docker image names to prevent registry injection (WOP-1545) ([#1943](https://github.com/wopr-network/wopr/issues/1943)) ([4fdd1e4](https://github.com/wopr-network/wopr/commit/4fdd1e48e36ed7320b305f17891b2200dc9a6f59))
+
+
+### Tests
+
+* add afterEach restoreAllMocks to 4 test files (WOP-1586) ([#2030](https://github.com/wopr-network/wopr/issues/2030)) ([8c9eef5](https://github.com/wopr-network/wopr/commit/8c9eef54c19eb993810ce077623ad30de902478f))
+* add comprehensive tests for RateLimitTracker (WOP-1573) ([#2010](https://github.com/wopr-network/wopr/issues/2010)) ([3314fab](https://github.com/wopr-network/wopr/commit/3314fabc91142969066181b37625e440195e7072))
+* add daemon auth middleware tests (WOP-1572) ([#2011](https://github.com/wopr-network/wopr/issues/2011)) ([4ad32f4](https://github.com/wopr-network/wopr/commit/4ad32f46056bbd453faa004a7fa4aa1dd4f5697a))
+* add onboarding step test coverage for 8 steps (WOP-1584) ([#2034](https://github.com/wopr-network/wopr/issues/2034)) ([23a2f2f](https://github.com/wopr-network/wopr/commit/23a2f2f8219b7bde370ede7205ecf80de9000576))
+* add session-schema validation tests (WOP-1596) ([#2038](https://github.com/wopr-network/wopr/issues/2038)) ([78576f3](https://github.com/wopr-network/wopr/commit/78576f35cc17b93d52f126373a52b9961d63b002))
+* add unit tests for tryPluginCommand (WOP-1595) ([#2036](https://github.com/wopr-network/wopr/issues/2036)) ([ae60a38](https://github.com/wopr-network/wopr/commit/ae60a38632c7787a73ff10566ecc8e125e5503a7))
+* prevent start/stop interval tests from hanging due to background cleanup race ([#2008](https://github.com/wopr-network/wopr/issues/2008)) ([b7b1a0c](https://github.com/wopr-network/wopr/commit/b7b1a0c1fbc521ffd5e86753bb9ea4e4326d5032))
+* replace toBeDefined() with exact value assertions in temporal filter tests (WOP-1597) ([#2040](https://github.com/wopr-network/wopr/issues/2040)) ([ce26c5d](https://github.com/wopr-network/wopr/commit/ce26c5d35348725f7068ff38fb4612b7d5a8d731))
+* **security:** strengthen weak assertions with specific value checks (WOP-1587) ([#2031](https://github.com/wopr-network/wopr/issues/2031)) ([41cdc9f](https://github.com/wopr-network/wopr/commit/41cdc9f9b598981ad94c186303cb816debcdece5))
+
+
+### Miscellaneous
+
+* **deps:** bump @hono/node-server from 1.19.9 to 1.19.10 ([#2042](https://github.com/wopr-network/wopr/issues/2042)) ([3946510](https://github.com/wopr-network/wopr/commit/3946510f116c1b47b104a8371baf4723208e026f))
+* **deps:** bump hono from 4.12.3 to 4.12.4 ([#2043](https://github.com/wopr-network/wopr/issues/2043)) ([5ddc14f](https://github.com/wopr-network/wopr/commit/5ddc14fabfa83cb68ac2da5cfe39e089c173ffba))
+
 ## [1.6.0](https://github.com/wopr-network/wopr/compare/wopr-v1.5.0...wopr-v1.6.0) (2026-03-04)
 
 
