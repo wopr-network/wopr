@@ -5,7 +5,6 @@ export default defineConfig({
     environment: "node",
     testTimeout: 10_000,
     coverage: {
-      enabled: true,
       provider: "v8",
       include: ["src/**"],
       exclude: ["src/cli.ts", "src/daemon/**", "src/commands/**"],
