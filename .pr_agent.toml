@@ -5,6 +5,5 @@ pr_commands = [
   "/improve",
 ]
 push_commands = [
-  "/review",
   "/improve",
 ]
