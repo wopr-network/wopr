@@ -136,18 +136,12 @@ const mockInjectors = {
  * the init call, so we can check the error message.
  */
 
-let loadPlugin: any;
-
-beforeEach(async () => {
-  vi.resetModules();
+beforeEach(() => {
   mockLoadedPlugins.clear();
   mockPluginManifests.clear();
   mockConfigSchemas.clear();
   mockPluginStates.clear();
   Object.keys(mockPluginConfigData).forEach((k) => delete mockPluginConfigData[k]);
-
-  const mod = await import("../../src/plugins/loading.js");
-  loadPlugin = mod.loadPlugin;
 });
 
 afterEach(() => {
