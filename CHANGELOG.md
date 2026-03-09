@@ -63,6 +63,25 @@ documentation and configuration options.
 
 ---
 
+## [2.0.1](https://github.com/wopr-network/wopr/compare/wopr-v2.0.0...wopr-v2.0.1) (2026-03-09)
+
+
+### Tests
+
+* fix flaky hook timeouts in capability-activation and plugin-config-validation tests ([#2406](https://github.com/wopr-network/wopr/issues/2406)) ([3ff0a4e](https://github.com/wopr-network/wopr/commit/3ff0a4e79e27b393cb0d0efcfbdc72e358593c68))
+
+
+### Miscellaneous
+
+* **ci:** bump docker/build-push-action from 6 to 7 ([#2395](https://github.com/wopr-network/wopr/issues/2395)) ([ad06247](https://github.com/wopr-network/wopr/commit/ad0624723c0b8373160f34bf391a91c117509789))
+* **ci:** bump docker/login-action from 3 to 4 ([#2394](https://github.com/wopr-network/wopr/issues/2394)) ([41e05ff](https://github.com/wopr-network/wopr/commit/41e05ff49071e429258665db18b46ec48decdd43))
+* **ci:** bump docker/setup-qemu-action from 3 to 4 ([#2396](https://github.com/wopr-network/wopr/issues/2396)) ([bc6e96b](https://github.com/wopr-network/wopr/commit/bc6e96b17c38d0bbccee0bd440275948d4b827b5))
+* **deps:** bump @anthropic-ai/claude-agent-sdk from 0.2.63 to 0.2.71 ([#2401](https://github.com/wopr-network/wopr/issues/2401)) ([4d30aab](https://github.com/wopr-network/wopr/commit/4d30aab7a78aac5036c5ed50e514e7e9acf6944e))
+* **deps:** bump @clack/prompts from 1.0.1 to 1.1.0 ([#2397](https://github.com/wopr-network/wopr/issues/2397)) ([5ae19e9](https://github.com/wopr-network/wopr/commit/5ae19e9a097124e829753922e21744d42baf4681))
+* **deps:** bump @hono/node-server from 1.19.10 to 1.19.11 ([#2399](https://github.com/wopr-network/wopr/issues/2399)) ([321dfea](https://github.com/wopr-network/wopr/commit/321dfea004476efb18ad08fac3851ce76e9eeed8))
+* **deps:** bump @types/node from 25.3.3 to 25.3.5 ([#2400](https://github.com/wopr-network/wopr/issues/2400)) ([5bc6b3c](https://github.com/wopr-network/wopr/commit/5bc6b3c0f055cc24029ede6081a2b5aff2bf37a1))
+* **deps:** bump hono from 4.12.4 to 4.12.5 ([#2398](https://github.com/wopr-network/wopr/issues/2398)) ([7a01a40](https://github.com/wopr-network/wopr/commit/7a01a40fc6af08b4929332b81f1bdd02b7cb7048))
+
 ## [2.0.0](https://github.com/wopr-network/wopr/compare/wopr-v1.6.0...wopr-v2.0.0) (2026-03-07)
 
 
