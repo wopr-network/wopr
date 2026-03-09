@@ -7,7 +7,7 @@
  * - POST /api/capabilities/deactivate — Deactivate a capability
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 
 // Mock rate limiter to bypass rate limiting in tests
@@ -125,8 +125,14 @@ vi.mock("../../src/core/capability-catalog.js", async (importOriginal) => {
 });
 
 let app: Hono;
+let capabilitiesRouter: any;
 
-beforeEach(async () => {
+beforeAll(async () => {
+  const mod = await import("../../src/daemon/routes/capabilities.js");
+  capabilitiesRouter = mod.capabilitiesRouter;
+});
+
+beforeEach(() => {
   vi.clearAllMocks();
 
   // Reset state
@@ -134,7 +140,6 @@ beforeEach(async () => {
   loadedPlugins = new Map();
   Object.keys(mockConfig).forEach((k) => delete mockConfig[k]);
 
-  const { capabilitiesRouter } = await import("../../src/daemon/routes/capabilities.js");
   app = new Hono();
   app.route("/api/capabilities", capabilitiesRouter);
 });
@@ -513,7 +518,7 @@ describe("POST /api/capabilities/deactivate — partial failure", () => {
 
     // First plugin (TTS) fails to unload, second (STT) succeeds
     let callCount = 0;
-    vi.mocked(unloadPlugin).mockImplementation(async (name: string) => {
+    vi.mocked(unloadPlugin).mockImplementation(async (_name: string) => {
       callCount++;
       if (callCount === 1) throw new Error("Unload timeout");
     });
