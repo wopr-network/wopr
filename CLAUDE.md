@@ -100,12 +100,13 @@ The `Stop` hook writes to this file automatically at session end. Only non-main 
 - **Rollback error handling**: When `removePlugin()` is called during dep-check failure, wrap it in try/catch. If removePlugin throws, log the error and return the original 422, not a generic 400 (WOP-1461).
 - **Test mocks must match production**: Mock `normalizeDependencyName()` exactly as production implements it. If production does NOT strip "plugin-" prefix, tests must not either — mismatches cause false test passes and real failures in production (WOP-1461).
 - **Plugin-types context must import canonical types**: `src/plugin-types/context.ts` is an internal copy. When provider methods use `ModelProvider`, import it from `types.ts` and use it (not `unknown`). Divergence breaks type safety for plugins (WOP-1465).
+
 ## Version Control: Prefer jj
 
 Use `jj` (Jujutsu) for all VCS operations instead of `git`:
 - `jj status`, `jj diff`, `jj log` for inspection
 - `jj new` to start a change, `jj describe` to set the message
-- `jj commit` to commit, `jj push` to push
+- `jj commit` to commit, `jj git push` to push
 - `jj squash`, `jj rebase`, `jj edit` for history manipulation
 
 Fall back to `git` only for operations not yet supported by `jj`.
