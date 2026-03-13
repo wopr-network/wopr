@@ -63,6 +63,15 @@ documentation and configuration options.
 
 ---
 
+## [2.0.3](https://github.com/wopr-network/wopr/compare/wopr-v2.0.2...wopr-v2.0.3) (2026-03-13)
+
+
+### Bug Fixes
+
+* inline dependabot auto-merge workflow ([#2604](https://github.com/wopr-network/wopr/issues/2604)) ([dcec423](https://github.com/wopr-network/wopr/commit/dcec423307529d3ab0515bd330b4988ca89dfc76))
+* major-version detection in dependabot auto-merge ([#2605](https://github.com/wopr-network/wopr/issues/2605)) ([2ea2674](https://github.com/wopr-network/wopr/commit/2ea2674300f626cd40bf103261eeb76925259be7))
+* use pull_request_target for dependabot auto-merge ([#2602](https://github.com/wopr-network/wopr/issues/2602)) ([0c082aa](https://github.com/wopr-network/wopr/commit/0c082aa559cc8b89e4310ad2c216ba6fa819fd36))
+
 ## [2.0.2](https://github.com/wopr-network/wopr/compare/wopr-v2.0.1...wopr-v2.0.2) (2026-03-11)
 
 
