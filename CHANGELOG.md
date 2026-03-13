@@ -63,6 +63,23 @@ documentation and configuration options.
 
 ---
 
+## [2.0.2](https://github.com/wopr-network/wopr/compare/wopr-v2.0.1...wopr-v2.0.2) (2026-03-11)
+
+
+### Tests
+
+* add ticket-based WebSocket auth tests (WOP-2095) ([#2548](https://github.com/wopr-network/wopr/issues/2548)) ([8d69cfc](https://github.com/wopr-network/wopr/commit/8d69cfc6aea3193be6f4ca27fc622c3a15a111df))
+
+
+### Documentation
+
+* prefer jj over git for VCS operations ([#2547](https://github.com/wopr-network/wopr/issues/2547)) ([4169a4a](https://github.com/wopr-network/wopr/commit/4169a4aef06534336599c5802530bd6de37fc97f))
+
+
+### Miscellaneous
+
+* **deps:** bump hono in the npm_and_yarn group across 1 directory ([#2545](https://github.com/wopr-network/wopr/issues/2545)) ([09f7840](https://github.com/wopr-network/wopr/commit/09f7840404d74356c7363179a7e7256a985b502f))
+
 ## [2.0.1](https://github.com/wopr-network/wopr/compare/wopr-v2.0.0...wopr-v2.0.1) (2026-03-09)
 
 
