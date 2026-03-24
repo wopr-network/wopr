@@ -12,8 +12,8 @@ importers:
   .:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.71
-        version: 0.2.71(zod@4.3.6)
+        specifier: ^0.2.81
+        version: 0.2.81(zod@4.3.6)
       '@clack/prompts':
         specifier: ^1.1.0
         version: 1.1.0
@@ -93,8 +93,8 @@ importers:
 
 packages:
 
-  '@anthropic-ai/claude-agent-sdk@0.2.71':
-    resolution: {integrity: sha512-pIsQJnM7Y+cJHL7aFY6SCCW3FIni218gVEpPqG8XGowfYxboFNBbNssWiUNRwthT8bp9jypcX7q5kx0Xsw14xg==}
+  '@anthropic-ai/claude-agent-sdk@0.2.81':
+    resolution: {integrity: sha512-CBeebgibBEN/DWOQGZN67vhuTG55RbI1hlsFSSoZ4uA/Io3lw04eHTE2ISCmdbqyJaefYTt6GKZei1nP0TQMNw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       zod: ^4.0.0
@@ -1514,7 +1514,7 @@ packages:
 
 snapshots:
 
-  '@anthropic-ai/claude-agent-sdk@0.2.71(zod@4.3.6)':
+  '@anthropic-ai/claude-agent-sdk@0.2.81(zod@4.3.6)':
     dependencies:
       zod: 4.3.6
     optionalDependencies:
